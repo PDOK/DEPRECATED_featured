@@ -21,7 +21,7 @@
   ([collection other-fields] (random-new-feature collection (random-word 10) other-fields))
   ([collection id other-fields]
    (let [validity (tf/unparse date-time-formatter (local-now))
-         base {:_type "new"
+         base {:_action "new"
               :_collection collection
               :_id id
               :_validity validity

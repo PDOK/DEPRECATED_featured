@@ -2,6 +2,6 @@
   (:require [clojure.string :as str])
   (:import []))
 
-(defmulti geometry (fn [obj] str/lower-case (:type obj)))
+(defmulti geometry (fn [obj] str/lower-case (get obj "type")))
 
-(defmethod geometry "gml" [obj] (:gml obj))
+(defmethod geometry "gml" [obj] (get obj "gml"))
