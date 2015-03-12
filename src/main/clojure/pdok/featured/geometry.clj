@@ -1,7 +1,20 @@
 (ns pdok.featured.geometry
+  (:refer-clojure :exclude [type])
   (:require [clojure.string :as str])
   (:import []))
 
-(defmulti geometry (fn [obj] str/lower-case (get obj "type")))
+(defprotocol Geometry
+  (src [_])
+  (type [_])
+  (as-gml [_]))
 
-(defmethod geometry "gml" [obj] (get obj "gml"))
+(defrecord GmlGeometry [src]
+  Geometry
+  (src [_] src)
+  (type [_] :gml)
+  (as-gml [_] src)
+    )
+
+(defmulti geometry-from-json (fn [obj] str/lower-case (get obj "type")))
+
+(defmethod geometry-from-json :default [obj] (GmlGeometry. (get obj "gml")))

@@ -1,8 +1,6 @@
 (ns pdok.featured.feature
-  (:require [pdok.featured.geometry :refer [geometry]]
-            [cheshire.core :as json]
-            [cheshire.factory :as jfac]
-            [cheshire.parse :as jparse]
+  (:require [pdok.featured.geometry :refer [geometry-from-json]]
+            [cheshire [core :as json] [factory :as jfac] [parse :as jparse]]
             [clj-time.format :as tf])
   (:import (com.fasterxml.jackson.core JsonFactory JsonFactory$Feature
                                        JsonParser$Feature JsonParser JsonToken)))
@@ -10,7 +8,12 @@
 (def pdok-fields ["_action" "_collection" "_id" "_validity" "_geometry"])
 
 (defrecord UpdatePackage [dataset metadata feature-count])
+
 (defrecord NewFeature [dataset collection id validity geometry free-fields])
+(defrecord ChangeFeature [dataset collection id validity current-validity geometry free-fields])
+(defrecord CloseFeature [dataset collection id validity current-validity geometry free-fields])
+(defrecord DeleteFeature [dataset collection id current-validity])
+
 
 (defmulti map-to-feature (fn [dataset obj] (get obj "_action")))
 
@@ -30,9 +33,9 @@
   (let [collection (get obj "_collection")
         id (get obj "_id")
         validity (parse-time (get obj "_validity"))
-        geom (geometry (get obj "_geometry"))
+        geom (geometry-from-json (get obj "_geometry"))
         free-fields (free-fields obj)]
-    (NewFeature. dataset collection id validity geom free-fields)))
+    (->NewFeature dataset collection id validity geom free-fields)))
 
 (defn parse-object [^JsonParser jp]
   (jparse/parse* jp identity nil nil))
@@ -54,7 +57,7 @@
     [])
   )
 
-(defn features-from-package-stream* [jp]
+(defn features-from-package-stream* [^JsonParser jp]
   (.nextToken jp)
   (when (= JsonToken/START_OBJECT (.getCurrentToken jp))
     (let [meta (read-meta-data jp)
@@ -78,4 +81,4 @@
 (defn file-stream [path]
   (clojure.java.io/reader path))
 
-;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (count (features-from-package-stream s))))
+;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))
