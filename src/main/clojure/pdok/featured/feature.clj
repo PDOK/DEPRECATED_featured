@@ -71,7 +71,7 @@
 
 
 (defn features-from-package-stream [input-stream]
-  "Parse until `features' for state. Returns sequence of features."
+  "Parses until 'features' for state. Then returns lazy sequence of features."
   (let [reader (clojure.java.io/reader input-stream)
         factory jfac/json-factory
         parser (.createParser factory reader)

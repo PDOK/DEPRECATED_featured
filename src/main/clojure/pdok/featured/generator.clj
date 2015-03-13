@@ -49,6 +49,6 @@
   pipe-in))
 
 (defn generate-test-files []
-  (doseq [c [10 100 1000 10000 100000 1000000]]
+  (doseq [c [10 100 1000 10000 100000]]
     (with-open [w (clojure.java.io/writer (str ".test-files/new-features-single-collection-" c ".json"))]
       (random-feature-package w "testset" "collection1" c))))

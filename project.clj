@@ -13,7 +13,7 @@
                  [org.clojure/java.jdbc "0.3.6"]
                  [postgresql "9.3-1102.jdbc41"]
                  [com.vividsolutions/jts "1.13" :exclusions [xerces/xercesImpl]]]
-  :main ^:skip-aot featured.core
+  :main ^:skip-aot pdok.featured.core
   :target-path "target/%s"
   :source-paths ["src/main/clojure"]
   :test-paths ["src/test/clojure"]
