@@ -1,17 +1,17 @@
 (ns pdok.featured.core
-  (:require [pdok.featured.feature :refer [features-from-package-stream file-stream]]
-            [pdok.featured.store :refer [make-feature-store process shutdown]])
+  (:require [pdok.featured.json-reader :refer [features-from-stream file-stream]]
+            [pdok.featured.processor :refer :all])
   (:gen-class))
 
 (defn -main
   "first parameter is json file"
   [& args]
-  (let [store (make-feature-store) ]
+  (let [processor (processor) ]
     (with-open [s (file-stream (first args))]
-      (time(doseq [feature (features-from-package-stream s)]
-             (process store feature))))
+      (time(doseq [feature (features-from-stream s)]
+             (process processor feature))))
     (println "flushing.")
-    (shutdown store))
+    (shutdown processor))
   (println "done.")
 )
 
