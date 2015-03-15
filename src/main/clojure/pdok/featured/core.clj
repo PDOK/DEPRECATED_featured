@@ -8,10 +8,10 @@
   [& args]
   (let [processor (processor) ]
     (with-open [s (file-stream (first args))]
-      (time(doseq [feature (features-from-stream s)]
-             (process processor feature))))
-    (println "flushing.")
-    (shutdown processor))
+      (time (do (doseq [feature (features-from-stream s)]
+                  (process processor feature))
+                (println "flushing.")
+                (shutdown processor)))))
   (println "done.")
 )
 

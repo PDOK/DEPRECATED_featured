@@ -1,7 +1,7 @@
 (ns pdok.featured.persistence
-  (:require [clojure.java.jdbc :as j]
-            [clj-time [coerce :as tc]]
-            [clojure.core.cache :as cache]))
+  (:require [pdok.featured.cache :refer :all]
+            [clojure.java.jdbc :as j]
+            [clj-time [coerce :as tc]]))
 
 ;; DROP TABLE IF EXISTS featured.feature;
 
@@ -25,70 +25,81 @@
 ;;   USING btree
 ;;   (dataset, collection, id);
 
-(defn- jdbc-flush [db batch]
-  ;(println "flushing")
-  (def records nil)
-  (dosync
-   (def records (map identity @batch))
-   (ref-set batch clojure.lang.PersistentQueue/EMPTY))
-  (when (not-empty records)
-    (j/with-db-connection [c db]
-      (apply
-       (partial j/insert! c :featured.feature [:dataset :collection :feature_id :validity])
-       records))))
 
-(defn- jdbc-insert [db cache batch max-batch-size dataset collection id validity]
-  (dosync
-   (alter cache #(cache/miss % [dataset collection id] validity))
-   (alter batch #(conj % [dataset collection id (-> validity tc/to-timestamp)])))
-  (if (<= max-batch-size (count @batch))
-    (jdbc-flush db batch)))
+(defn- jdbc-insert
+  ([db dataset collection id validity]
+   (jdbc-insert db (list [dataset collection id validity])))
+  ([db entries]
+   (j/with-db-connection [c db]
+     (letfn [( transform [entry]
+               (let [[dataset collection id validity] entry]
+                 [dataset collection id (tc/to-timestamp validity)]))]
+       (let [records (map transform entries)]
+         (apply
+          (partial j/insert! c :featured.feature [:dataset :collection :feature_id :validity])
+          records)
+         )))))
 
-(defn- cached-stream-validity [cache dataset collection id]
-  (cache/lookup @cache [dataset collection id]))
-
-(defn- jdbc-load-cache* [db cache dataset collection]
+(defn- jdbc-load-cache [db dataset collection]
   (let [results
         (j/with-db-connection [c db]
           (j/query c ["SELECT dataset, collection, feature_id, max(validity) as cur_val FROM featured.feature
 WHERE dataset = ? AND collection = ?
 GROUP BY dataset, collection, feature_id"
                       dataset collection]))]
-    (dosync
-     (doseq [f results]
-       (alter cache #(cache/miss % [(:dataset f) (:collection f) (:feature_id f)] (:cur_val f)))))
+    (map (fn [f] [[(:dataset f) (:collection f) (:feature_id f)] (:cur_val f)]) results)
     )
   )
 
-; sort of hacky? To prevent executing every time, memoize the function
-(def ^:private jdbc-load-cache (memoize jdbc-load-cache*))
-
-(defn- jdbc-stream-validity [db cache dataset collection id]
-  (let [cached (cached-stream-validity cache dataset collection id)]
-    (if cached
-      cached
-      (do (jdbc-load-cache db cache dataset collection)
-          (cached-stream-validity cache dataset collection id))
-      )))
-
-(defn- jdbc-stream-exists? [db cache dataset collection id]
-  (not (nil? (jdbc-stream-validity db cache dataset collection id)) ))
+(defn- jdbc-stream-validity [db dataset collection id]
+   (j/with-db-connection [c db]
+     (let [results
+           (j/query c ["SELECT max(validity) FROM featured.feature
+                        WHERE dataset = ? AND collection = ? AND feature_id = ?"
+                       dataset collection id])]
+       (-> results first :max))))
 
 (defn processor-jdbc-persistence
   ([config]
    (let [db (:db-config config)
-         max-batch-size (or (:cache-size config) 10000)
-         batch (ref (clojure.lang.PersistentQueue/EMPTY))
-         cache (ref (cache/basic-cache-factory {}))
          create-stream (fn [dataset collection id])
-         stream-exists? (partial jdbc-stream-exists? db cache)
          ; compose with nil, because insert returns record. Should fix this...
-         append-to-stream (comp (fn [_] nil) (partial jdbc-insert db cache batch max-batch-size))
-         current-validity (partial jdbc-stream-validity db cache)
-         shutdown (partial jdbc-flush db batch)]
+         append-to-stream (comp (fn [_] nil) (partial jdbc-insert db) )
+         current-validity (partial jdbc-stream-validity db)
+         stream-exists? (fn [dataset collection id] (not (nil? (current-validity dataset collection id))))]
      {:init #()
       :create-stream create-stream
       :stream-exists? stream-exists?
       :append-to-stream append-to-stream
       :current-validity current-validity
-      :shutdown shutdown })))
+      :shutdown #() })))
+
+(defn processor-cached-jdbc-persistence [config]
+  (let [db (:db-config config)
+        standard (processor-jdbc-persistence config)
+        key-fn #(take 3 %)
+        value-fn #(drop 3 %)]
+    (cached
+     (let [batched-append-to-stream (with-batch (:append-to-stream standard))
+           cached-append-to-stream (with-cache batched-append-to-stream key-fn value-fn)
+           ; sort of hacky? To prevent executing every time, memoize the function
+           memoized-load-cache (memoize jdbc-load-cache)
+           load-cache (fn [dataset collection id] (memoized-load-cache db dataset collection))
+           cached-current-validity (use-cache (:current-validity standard) key-fn load-cache)
+           stream-exists? (fn [dataset collection id] (not (nil? (cached-current-validity dataset collection id))))
+           shutdown (partial flush-batch (:append-to-stream standard))]
+       {:init #()
+        :create-stream (fn [dataset collection id])
+        :stream-exists? stream-exists?
+        :append-to-stream cached-append-to-stream
+        :current-validity cached-current-validity
+        :shutdown shutdown}))))
+
+;; (def ^:private pgdb {:subprotocol "postgresql"
+;;                      :subname "//localhost:5432/pdok"
+;;                      :user "postgres"
+;;                      :password "postgres"})
+
+;(def pers ( processor-jdbc-persistence {:db-config pgdb}))
+;((:append-to-stream pers) "set" "col" "1" (tl/local-now))
+;((:shutdown pers))

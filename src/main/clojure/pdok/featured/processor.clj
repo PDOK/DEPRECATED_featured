@@ -33,7 +33,7 @@
   ((:shutdown persistence)))
 
 (defn processor
-  ([] (let [jdbc-persistence (processor-jdbc-persistence {:db-config pgdb})]
+  ([] (let [jdbc-persistence (processor-cached-jdbc-persistence {:db-config pgdb})]
         (processor jdbc-persistence)))
   ([persistence]
    {:persistence persistence}))
@@ -41,5 +41,5 @@
 (defn performance-test [count]
   (let [store (processor)
         features (map (fn [i] ( ->NewFeature "test" "test" (str i) (tl/local-now) nil {})) (range count))]
-    (time (doseq [f features] (process store f)))
-    (shutdown store)))
+    (time (do (doseq [f features] (process store f))
+              (shutdown store)))))
