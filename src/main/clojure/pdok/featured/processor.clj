@@ -11,8 +11,8 @@
                      :password (or (env :database-password) "postgres")})
 
 (defn- process-new-feature [persistence {:keys [dataset collection id validity geometry attributes]}]
-  ;; (if (some nil? [dataset collection id validity])
-  ;;   "NewFeature requires: dataset collection id validity")
+  (if (some nil? [dataset collection id validity])
+    "NewFeature requires: dataset collection id validity")
   (let [exists? (:stream-exists? persistence)
         create  (:create-stream persistence)
         append  (:append-to-stream persistence)]
@@ -33,7 +33,7 @@
   ((:shutdown persistence)))
 
 (defn processor
-  ([] (let [jdbc-persistence (processor-cached-jdbc-persistence {:db-config pgdb})]
+  ([] (let [jdbc-persistence (processor-cached-jdbc-persistence {:db-config pgdb :batch-size 10000})]
         (processor jdbc-persistence)))
   ([persistence]
    {:persistence persistence}))

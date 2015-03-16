@@ -10,7 +10,7 @@
 
 (defn with-batch [batch batch-size batched-fn]
   (fn [& args]
-    (dosync
+     (dosync
      (alter batch #(conj % args)))
     (if (<= batch-size (count @batch))
       (flush-batch batch batched-fn))))
@@ -36,9 +36,9 @@
           (do (when cache-miss-fn (apply-cache-miss-fn-result cache (apply cache-miss-fn args)))
               (cache-lookup cache-key)))))))
 
-(defmacro cached [& body]
+(defmacro cached [{:keys [batch-size]} & body]
   `(let [cache# (ref (cache/basic-cache-factory {}))
-         batch-size# 100000
+         batch-size# (or ~batch-size 100000)
          batch# (ref (clojure.lang.PersistentQueue/EMPTY))
          ~'with-cache (partial with-cache cache#)
          ~'use-cache (partial use-cache cache#)

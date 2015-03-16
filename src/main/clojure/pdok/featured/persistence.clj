@@ -53,7 +53,7 @@
    (j/with-db-connection [c db]
      (let [records (map jdbc-transform-for-db entries)]
        (apply
-        (partial j/insert! c :featured.feature
+        (partial j/insert! c :featured.feature :transaction? false
                  [:type :dataset :collection :feature_id :validity :geometry :attributes])
         records)
        ))))
@@ -94,10 +94,11 @@ GROUP BY dataset, collection, feature_id"
 
 (defn processor-cached-jdbc-persistence [config]
   (let [db (:db-config config)
+        batch-size (:batch-size config)
         standard (processor-jdbc-persistence config)
         key-fn #(take 3 %)
         value-fn #(-> % (drop 3) (take 1) )]
-    (cached
+    (cached {:batch-size batch-size}
      (let [batched-append-to-stream (with-batch (:append-to-stream standard))
            cached-append-to-stream (with-cache batched-append-to-stream key-fn value-fn)
            ; sort of hacky? To prevent executing every time, memoize the function
