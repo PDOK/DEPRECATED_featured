@@ -10,7 +10,7 @@
                      :user (or (env :database-user) "postgres")
                      :password (or (env :database-password) "postgres")})
 
-(defn- process-new-feature [persistence {:keys [dataset collection id validity]}]
+(defn- process-new-feature [persistence {:keys [dataset collection id validity geometry attributes]}]
   ;; (if (some nil? [dataset collection id validity])
   ;;   "NewFeature requires: dataset collection id validity")
   (let [exists? (:stream-exists? persistence)
@@ -19,7 +19,7 @@
     (if (exists? dataset collection id)
       (str "Stream already exists: " dataset ", " collection ", " id)
       (do (create dataset collection id)
-          (append dataset collection id validity)))))
+          (append :new dataset collection id validity geometry attributes)))))
 
 (defn process [{:keys [persistence]} feature]
   "Processes feature event. Returns nil or error reason"

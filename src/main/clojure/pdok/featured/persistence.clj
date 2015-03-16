@@ -1,17 +1,22 @@
 (ns pdok.featured.persistence
   (:require [pdok.featured.cache :refer :all]
             [clojure.java.jdbc :as j]
-            [clj-time [coerce :as tc]]))
+            [clj-time [coerce :as tc]]
+            [cognitect.transit :as transit])
+  (:import [java.io ByteArrayOutputStream]))
 
 ;; DROP TABLE IF EXISTS featured.feature;
 
 ;; CREATE TABLE featured.feature
 ;; (
 ;;   id bigserial NOT NULL,
+;;   type character(6) NOT NULL,
 ;;   dataset character varying(100) NOT NULL,
 ;;   collection character varying(255) NOT NULL,
 ;;   feature_id character varying(50) NOT NULL,
 ;;   validity timestamp without time zone NOT NULL,
+;;   geometry text NULL,
+;;   attributes text NULL,
 ;;   CONSTRAINT feature_pkey PRIMARY KEY (id)
 ;; )
 ;; WITH (
@@ -25,20 +30,33 @@
 ;;   USING btree
 ;;   (dataset, collection, id);
 
+(defn to-json [obj]
+  (let [out (ByteArrayOutputStream. 1024)
+        writer (transit/writer out :json)]
+    (transit/write writer obj)
+    (.toString out))
+  )
+
+(defn jdbc-transform-for-db [entry]
+  (let [[type dataset collection id validity geometry attributes] entry
+        ]
+    [(name type) dataset collection id
+     (tc/to-timestamp validity)
+     (to-json geometry)
+     (to-json attributes)])
+  )
 
 (defn- jdbc-insert
-  ([db dataset collection id validity]
-   (jdbc-insert db (list [dataset collection id validity])))
+  ([db type dataset collection id validity geometry attributes]
+   (jdbc-insert db (list [type dataset collection id validity geometry attributes])))
   ([db entries]
    (j/with-db-connection [c db]
-     (letfn [( transform [entry]
-               (let [[dataset collection id validity] entry]
-                 [dataset collection id (tc/to-timestamp validity)]))]
-       (let [records (map transform entries)]
-         (apply
-          (partial j/insert! c :featured.feature [:dataset :collection :feature_id :validity])
-          records)
-         )))))
+     (let [records (map jdbc-transform-for-db entries)]
+       (apply
+        (partial j/insert! c :featured.feature
+                 [:type :dataset :collection :feature_id :validity :geometry :attributes])
+        records)
+       ))))
 
 (defn- jdbc-load-cache [db dataset collection]
   (let [results
@@ -78,7 +96,7 @@ GROUP BY dataset, collection, feature_id"
   (let [db (:db-config config)
         standard (processor-jdbc-persistence config)
         key-fn #(take 3 %)
-        value-fn #(drop 3 %)]
+        value-fn #(-> % (drop 3) (take 1) )]
     (cached
      (let [batched-append-to-stream (with-batch (:append-to-stream standard))
            cached-append-to-stream (with-cache batched-append-to-stream key-fn value-fn)

@@ -12,6 +12,7 @@
                  [org.clojure/core.cache "0.6.4"]
                  [org.clojure/java.jdbc "0.3.6"]
                  [postgresql "9.3-1102.jdbc41"]
+                 [com.cognitect/transit-clj "0.8.269"]
                  [com.vividsolutions/jts "1.13" :exclusions [xerces/xercesImpl]]]
   :main ^:skip-aot pdok.featured.core
   :target-path "target/%s"

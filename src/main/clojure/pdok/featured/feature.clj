@@ -1,19 +1,13 @@
 (ns pdok.featured.feature
-  (:refer-clojure :exclude [type]))
+  (:refer-clojure :exclude [type])
+  (:require [clojure.string :as str]))
 
-(defrecord NewFeature [dataset collection id validity geometry free-fields])
-(defrecord ChangeFeature [dataset collection id validity current-validity geometry free-fields])
-(defrecord CloseFeature [dataset collection id validity current-validity geometry free-fields])
+(defrecord NewFeature [dataset collection id validity geometry attributes])
+(defrecord ChangeFeature [dataset collection id validity current-validity geometry attributes])
+(defrecord CloseFeature [dataset collection id validity current-validity geometry attributes])
 (defrecord DeleteFeature [dataset collection id current-validity])
 
-(defprotocol Geometry
-  (src [_])
-  (type [_])
-  (as-gml [_]))
+(defmulti as-gml (fn [obj] str/lower-case (get obj "type")))
 
-(defrecord GmlGeometry [src]
-  Geometry
-  (src [_] src)
-  (type [_] :gml)
-  (as-gml [_] src)
-    )
+(defmethod as-gml "gml" [obj] (get obj "gml"))
+(defmethod as-gml nil [obj] nil)
