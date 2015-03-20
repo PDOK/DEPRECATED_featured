@@ -6,6 +6,7 @@
 (defn -main
   "first parameter is json file"
   [& args]
+  (println "start")
   (let [processor (processor) ]
     (with-open [s (file-stream (first args))]
       (time (do (doseq [feature (features-from-stream s)]

@@ -33,10 +33,10 @@
   (apply dissoc obj pdok-fields)
   )
 
-(defn parse-object [^JsonParser jp]
+(defn- parse-object [^JsonParser jp]
   (jparse/parse* jp identity nil nil))
 
-(defn read-meta-data [^JsonParser jp]
+(defn- read-meta-data [^JsonParser jp]
   (.nextToken jp)
   (loop [state {}
          currentName (-> jp .getCurrentName .toLowerCase)]
@@ -47,13 +47,13 @@
         (recur (merge state {currentName obj}) newName)))
     ))
 
-(defn read-features [^JsonParser jp]
+(defn- read-features [^JsonParser jp]
   (if (and (.nextToken jp) (not= (.getCurrentToken jp) JsonToken/END_ARRAY))
     (lazy-seq (cons (parse-object jp) (read-features jp)))
     [])
   )
 
-(defn features-from-stream* [^JsonParser jp]
+(defn- features-from-stream* [^JsonParser jp]
   (.nextToken jp)
   (when (= JsonToken/START_OBJECT (.getCurrentToken jp))
     (let [meta (read-meta-data jp)

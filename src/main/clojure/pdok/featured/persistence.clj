@@ -65,7 +65,7 @@
 WHERE dataset = ? AND collection = ?
 GROUP BY dataset, collection, feature_id"
                       dataset collection]))]
-    (map (fn [f] [[(:dataset f) (:collection f) (:feature_id f)] (:cur_val f)]) results)
+    ;(map (fn [f] [[(:dataset f) (:collection f) (:feature_id f)] (:cur_val f)]) results)
     )
   )
 

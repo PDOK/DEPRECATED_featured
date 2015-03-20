@@ -1,6 +1,8 @@
 (ns pdok.featured.processor
-  (:require [pdok.featured.feature :refer [->NewFeature]]
+  (:require [pdok.featured.feature :refer [->NewFeature] :as feature]
             [pdok.featured.persistence :refer :all]
+            [pdok.featured.generator :refer [random-json-feature-stream]]
+            [pdok.featured.json-reader :refer :all]
             [clj-time [local :as tl]]
             [environ.core :refer [env]])
   (:import  [pdok.featured.feature NewFeature ChangeFeature CloseFeature DeleteFeature]))
@@ -13,7 +15,7 @@
 (defn- process-new-feature [persistence {:keys [dataset collection id validity geometry attributes]}]
   (if (some nil? [dataset collection id validity])
     "NewFeature requires: dataset collection id validity")
-  (let [exists? (:stream-exists? persistence)
+   (let [exists? (:stream-exists? persistence)
         create  (:create-stream persistence)
         append  (:append-to-stream persistence)]
     (if (exists? dataset collection id)
@@ -39,7 +41,13 @@
    {:persistence persistence}))
 
 (defn performance-test [count]
-  (let [store (processor)
-        features (map (fn [i] ( ->NewFeature "test" "test" (str i) (tl/local-now) nil {})) (range count))]
-    (time (do (doseq [f features] (process store f))
-              (shutdown store)))))
+  (with-open [json (random-json-feature-stream "perftest" "col1" count)]
+    (let [processor (processor)
+          features (features-from-stream json)]
+      (time (do (doseq [f features] (process processor f))
+                (shutdown processor)
+                ))
+      )))
+
+
+; features-from-stream
