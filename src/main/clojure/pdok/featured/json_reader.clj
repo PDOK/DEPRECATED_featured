@@ -22,10 +22,10 @@
     (->NewFeature dataset collection id validity geom attributes)))
 
 ;; 2015-02-26T15:48:26.578Z
-(def ^{:private true} date-time-formatter (tf/formatters :date-time) )
+(def ^{:private true} date-time-formatter (tf/formatters :date-time-parser) )
 
 (defn- parse-time
-  "Parses a json date timestring: yyyy-MM-ddThh:mm:sss.mmmZ"
+  "Parses an ISO8601 date timestring to local date"
   [datetimestring]
   (tf/parse date-time-formatter datetimestring))
 
