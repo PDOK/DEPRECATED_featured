@@ -35,13 +35,3 @@
           cached
           (do (when cache-miss-fn (apply-cache-miss-fn-result cache (apply cache-miss-fn args)))
               (cache-lookup cache-key)))))))
-
-(defmacro cached [{:keys [batch-size]} & body]
-  `(let [cache# (ref (cache/basic-cache-factory {}))
-         batch-size# (or ~batch-size 100000)
-         batch# (ref (clojure.lang.PersistentQueue/EMPTY))
-         ~'with-cache (partial with-cache cache#)
-         ~'use-cache (partial use-cache cache#)
-         ~'with-batch (partial with-batch batch# batch-size#)
-         ~'flush-batch (partial flush-batch batch#)]
-     ~@body))

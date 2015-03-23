@@ -1,5 +1,7 @@
 (ns pdok.featured.persistence
-  (:require [pdok.featured.cache :refer :all]
+  (:require [pdok.featured.protocols :refer :all]
+            [pdok.featured.cache :refer :all]
+            [clojure.core.cache :as cache]
             [clojure.java.jdbc :as j]
             [clj-time [coerce :as tc]]
             [cognitect.transit :as transit])
@@ -29,6 +31,14 @@
 ;;   ON featured.feature
 ;;   USING btree
 ;;   (dataset, collection, id);
+
+(defprotocol ProcessorPersistence
+  (init [this])
+  (stream-exists? [this dataset collection id])
+  (create-stream [this dataset collection id])
+  (append-to-stream [this type dataset collection id validity geometry attributes])
+  (current-validity [this dataset collection id])
+  )
 
 
 (def joda-time-writer
@@ -73,7 +83,7 @@
 WHERE dataset = ? AND collection = ?
 GROUP BY dataset, collection, feature_id"
                       dataset collection]))]
-    ;(map (fn [f] [[(:dataset f) (:collection f) (:feature_id f)] (:cur_val f)]) results)
+    (map (fn [f] [[(:dataset f) (:collection f) (:feature_id f)] (:cur_val f)]) results)
     )
   )
 
@@ -85,42 +95,68 @@ GROUP BY dataset, collection, feature_id"
                        dataset collection id])]
        (-> results first :max))))
 
-(defn processor-jdbc-persistence
-  ([config]
-   (let [db (:db-config config)
-         create-stream (fn [dataset collection id])
-         ; compose with nil, because insert returns record. Should fix this...
-         append-to-stream (comp (fn [_] nil) (partial jdbc-insert db) )
-         current-validity (partial jdbc-stream-validity db)
-         stream-exists? (fn [dataset collection id] (not (nil? (current-validity dataset collection id))))]
-     {:init #()
-      :create-stream create-stream
-      :stream-exists? stream-exists?
-      :append-to-stream append-to-stream
-      :current-validity current-validity
-      :shutdown #() })))
+(deftype JdbcProcessorPersistence [db]
+  ProcessorPersistence
+  (init [_])
+  (stream-exists? [_ dataset collection id]
+    (let [current-validity (partial jdbc-stream-validity db)]
+      (not (nil? (current-validity dataset collection id)))))
+  (create-stream [_ dataset collection id])
+  (append-to-stream [_ type dataset collection id validity geometry attributes]
+    ; compose with nil, because insert returns record. Should fix this...
+    (jdbc-insert db type dataset collection id validity geometry attributes)
+    nil)
+  (current-validity [_ dataset collection id]
+    (jdbc-stream-validity db dataset collection id))
+  Closeable
+  (close [_])
+  )
 
-(defn processor-cached-jdbc-persistence [config]
+(deftype CachedJdbcProcessorPersistence [db batch batch-size cache load-cache?]
+  ProcessorPersistence
+  (init [_])
+  (stream-exists? [this dataset collection id]
+    (not (nil? (current-validity this dataset collection id))))
+  (create-stream [_ dataset collection id])
+  (append-to-stream [_ type dataset collection id validity geometry attributes]
+    (let [key-fn   #(->> % (drop 1) (take 3))
+          value-fn #(->> % (drop 4) (take 1))
+          batched (with-batch batch batch-size (partial jdbc-insert db))
+          cache-batched (with-cache cache batched key-fn value-fn)]
+      (cache-batched type dataset collection id validity geometry attributes)))
+  (current-validity [_ dataset collection id]
+    (let [key-fn #(->> % (take 3))
+          load-cache (fn [dataset collection id]
+                       (when (load-cache? dataset collection) (jdbc-load-cache db dataset collection)))
+          cached (use-cache cache (partial jdbc-stream-validity db) key-fn load-cache)]
+      (cached dataset collection id)))
+  Closeable
+  (close [_]
+    (flush-batch batch (partial jdbc-insert db)))
+  )
+
+(defn once-true-fn
+  "Returns a function which returns true once for an argument"
+  []
+  (let [mem (atom {})]
+    (fn [& args]
+      (if-let [e (find @mem args)]
+        false
+        (do
+          (swap! mem assoc args nil)
+          true)))))
+
+(defn jdbc-processor-persistence [config]
+  (let [db (:db-config config)]
+    (JdbcProcessorPersistence. db)))
+
+(defn cached-jdbc-processor-persistence [config]
   (let [db (:db-config config)
-        batch-size (:batch-size config)
-        standard (processor-jdbc-persistence config)
-        key-fn #(take 3 %)
-        value-fn #(-> % (drop 3) (take 1) )]
-    (cached {:batch-size batch-size}
-     (let [batched-append-to-stream (with-batch (:append-to-stream standard))
-           cached-append-to-stream (with-cache batched-append-to-stream key-fn value-fn)
-           ; sort of hacky? To prevent executing every time, memoize the function
-           memoized-load-cache (memoize jdbc-load-cache)
-           load-cache (fn [dataset collection id] (memoized-load-cache db dataset collection))
-           cached-current-validity (use-cache (:current-validity standard) key-fn load-cache)
-           stream-exists? (fn [dataset collection id] (not (nil? (cached-current-validity dataset collection id))))
-           shutdown (partial flush-batch (:append-to-stream standard))]
-       {:init #()
-        :create-stream (fn [dataset collection id])
-        :stream-exists? stream-exists?
-        :append-to-stream cached-append-to-stream
-        :current-validity cached-current-validity
-        :shutdown shutdown}))))
+        batch-size (or (:batch-size config) 100000)
+        batch (ref (clojure.lang.PersistentQueue/EMPTY))
+        cache (ref (cache/basic-cache-factory {}))
+        load-cache? (once-true-fn)]
+    (CachedJdbcProcessorPersistence. db batch batch-size cache load-cache?)))
 
 ;; (def ^:private pgdb {:subprotocol "postgresql"
 ;;                      :subname "//localhost:5432/pdok"
