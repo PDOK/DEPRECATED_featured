@@ -1,7 +1,8 @@
 (ns pdok.featured.json-reader
   (:require [pdok.featured.feature :refer [->NewFeature]]
             [cheshire [core :as json] [factory :as jfac] [parse :as jparse]]
-            [clj-time.format :as tf])
+            [clj-time.format :as tf]
+            [clojure.walk :refer [postwalk]])
   (:import (com.fasterxml.jackson.core JsonFactory JsonFactory$Feature
                                        JsonParser$Feature JsonParser JsonToken)))
 
@@ -10,6 +11,7 @@
 (declare parse-time)
 (declare attributes)
 (declare geometry-from-json)
+(declare parse-functions)
 
 (defmulti map-to-feature (fn [dataset obj] (get obj "_action")))
 
@@ -18,7 +20,7 @@
         id (get obj "_id")
         validity (parse-time (get obj "_validity"))
         geom (get obj "_geometry")
-        attributes (attributes obj)]
+        attributes (parse-functions (attributes obj))]
     (->NewFeature dataset collection id validity geom attributes)))
 
 ;; 2015-02-26T15:48:26.578Z
@@ -75,5 +77,26 @@
 
 (defn file-stream [path]
   (clojure.java.io/reader path))
+
+(defn- element-is-function? [element]
+  (and (vector? element)
+           (= 2 (count element))
+           (-> element first (.startsWith "~#"))))
+
+(defn- replacer [element]
+  (if (element-is-function? element)
+    (let [[function params] element]
+      (case function
+        "~#moment" (apply parse-time params)
+        "~#date"   (apply parse-time params)
+        element ; never fail just return element
+        ))
+    ;else just return element, replace nothing
+    element))
+
+(defn- parse-functions [attributes]
+  "Replaces functions with their parsed values"
+  (postwalk replacer attributes)
+  )
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))

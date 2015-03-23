@@ -30,9 +30,17 @@
 ;;   USING btree
 ;;   (dataset, collection, id);
 
+
+(def joda-time-writer
+  (transit/write-handler
+   (constantly "m")
+   (fn [v] (-> v tc/to-date .getTime))
+   (fn [v] (-> v tc/to-date .getTime .toString))))
+
 (defn to-json [obj]
   (let [out (ByteArrayOutputStream. 1024)
-        writer (transit/writer out :json)]
+        writer (transit/writer out :json
+                               {:handlers {org.joda.time.DateTime joda-time-writer}})]
     (transit/write writer obj)
     (.toString out))
   )
