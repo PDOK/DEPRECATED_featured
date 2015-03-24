@@ -37,11 +37,14 @@
               (cache-lookup cache-key)))))))
 
 (defmacro cached [cache f]
+  "Cached version of f. Needs atom as cache. If first param is :reload reloads"
   `(let [fn-name# (name '~f)]
-    (fn [& args#]
-      (let [cache-key# (apply conj [fn-name#] args#)]
-        (if-let [e# (find @~cache cache-key#)]
-          (val e#)
-          (let [ret# (apply ~f args#)]
-            (swap! ~cache assoc cache-key# ret#)
-            ret#))))))
+     (fn ([& args#]
+         (let [reload?# (= :reload (first args#))
+               fn-args# (if reload?# (rest args#) args#)
+               cache-key# (apply conj [fn-name#] fn-args#)]
+            (if-let [e# (and (not reload?#) (find @~cache cache-key#))]
+              (val e#)
+              (let [ret# (apply ~f fn-args#)]
+                (swap! ~cache assoc cache-key# ret#)
+                ret#)))))))

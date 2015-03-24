@@ -1,5 +1,5 @@
 (ns pdok.featured.projectors
-  (:require [pdok.featured.cache :refer [cached]]
+  (:require [pdok.featured.cache :as cache :refer [cached]]
             [pdok.featured.feature :refer [as-wkt]]
             [pdok.postgres :as pg]
             [clojure.java.jdbc :as j]
@@ -11,12 +11,14 @@
   (close [proj]))
 
 (defn- gs-dataset-exists? [db dataset]
+  ;(println "dataset exists?")
   (pg/schema-exists? db dataset))
 
 (defn- gs-create-dataset [db dataset]
   (pg/create-schema db dataset))
 
 (defn- gs-collection-exists? [db dataset collection]
+  ;(println "collection exists?")
   (pg/table-exists? db dataset collection))
 
 (defn- gs-create-collection [db dataset collection]
@@ -27,6 +29,7 @@
                 [:geometry "geometry"]))
 
 (defn- gs-collection-attributes [db dataset collection]
+  ;(println "attributes")
   (let [columns (pg/table-columns db dataset collection)
         no-defaults (filter #(not (some #{(:column_name %)} ["gid" "feature_id" "geometry"])) columns)
         attributes (map #(:column_name %) no-defaults)]
@@ -48,24 +51,33 @@
     (catch java.sql.SQLException e (j/print-sql-exception-chain e)))
   )
 
-(deftype GeoserverProjector [db]
+(deftype GeoserverProjector [db cache batch batch-size]
     Projector
     (new-feature [_ feature]
-      (let [{:keys [dataset collection geometry attributes]} feature]
-        (do (when (not (gs-dataset-exists? db dataset))
-              (gs-create-dataset db dataset))
-            (when (not (gs-collection-exists? db dataset collection))
-              (gs-create-collection db dataset collection))
-            (let [current-attributes (gs-collection-attributes db dataset collection)
+      (let [{:keys [dataset collection geometry attributes]} feature
+            cached-dataset-exists? (cached cache gs-dataset-exists?)
+            cached-collection-exists? (cached cache gs-collection-exists?)
+            cached-collection-attributes (cached cache gs-collection-attributes)]
+        (do (when (not (cached-dataset-exists? db dataset))
+              (gs-create-dataset db dataset)
+              (cached-dataset-exists? :reload db dataset))
+            (when (not (cached-collection-exists? db dataset collection))
+              (gs-create-collection db dataset collection)
+              (cached-collection-exists? :reload db dataset collection))
+            (let [current-attributes (cached-collection-attributes db dataset collection)
                   new-attributes (filter #(not (some #{(first %)} current-attributes)) attributes)]
               (doseq [a new-attributes]
-                (gs-add-attribute db dataset collection (first a) (-> a second type))))
+                (gs-add-attribute db dataset collection (first a) (-> a second type)))
+              (when (not-empty new-attributes) (cached-collection-attributes :reload db dataset collection)))
             (gs-add-feature db feature))))
     (close [_]))
 
 (defn geoserver-projector [config]
-  (let [db (:db-config config)]
-    (GeoserverProjector. db)))
+  (let [db (:db-config config)
+        cache (atom {})
+        batch-size (or (:batch-size config) 10000)
+        batch (ref (clojure.lang.PersistentQueue/EMPTY))]
+    (GeoserverProjector. db cache batch batch-size)))
 
 (def ^:private data-db {:subprotocol "postgresql"
                      :subname (or (env :projector-database-url) "//localhost:5432/pdok")
