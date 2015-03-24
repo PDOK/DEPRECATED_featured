@@ -1,6 +1,5 @@
 (ns pdok.featured.persistence
-  (:require [pdok.featured.protocols :refer :all]
-            [pdok.featured.cache :refer :all]
+  (:require [pdok.featured.cache :refer :all]
             [clojure.core.cache :as cache]
             [clojure.java.jdbc :as j]
             [clj-time [coerce :as tc]]
@@ -38,6 +37,7 @@
   (create-stream [this dataset collection id])
   (append-to-stream [this type dataset collection id validity geometry attributes])
   (current-validity [this dataset collection id])
+  (close [_])
   )
 
 
@@ -108,7 +108,6 @@ GROUP BY dataset, collection, feature_id"
     nil)
   (current-validity [_ dataset collection id]
     (jdbc-stream-validity db dataset collection id))
-  Closeable
   (close [_])
   )
 
@@ -130,7 +129,6 @@ GROUP BY dataset, collection, feature_id"
                        (when (load-cache? dataset collection) (jdbc-load-cache db dataset collection)))
           cached (use-cache cache (partial jdbc-stream-validity db) key-fn load-cache)]
       (cached dataset collection id)))
-  Closeable
   (close [_]
     (flush-batch batch (partial jdbc-insert db)))
   )
