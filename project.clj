@@ -17,6 +17,7 @@
                  [org.clojure/core.cache "0.6.4"]
                  [org.clojure/java.jdbc "0.3.6"]
                  [postgresql "9.3-1102.jdbc41"]
+                 [org.postgis/postgis-jdbc "1.3.3"]
                  [com.cognitect/transit-clj "0.8.269"]
                  [org.geotools/gt-xml "14-SNAPSHOT"]
                  [org.geotools/gt-epsg-extension "14-SNAPSHOT"]

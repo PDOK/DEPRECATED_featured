@@ -35,3 +35,13 @@
           cached
           (do (when cache-miss-fn (apply-cache-miss-fn-result cache (apply cache-miss-fn args)))
               (cache-lookup cache-key)))))))
+
+(defmacro cached [cache f]
+  `(let [fn-name# (name '~f)]
+    (fn [& args#]
+      (let [cache-key# (apply conj [fn-name#] args#)]
+        (if-let [e# (find @~cache cache-key#)]
+          (val e#)
+          (let [ret# (apply ~f args#)]
+            (swap! ~cache assoc cache-key# ret#)
+            ret#))))))

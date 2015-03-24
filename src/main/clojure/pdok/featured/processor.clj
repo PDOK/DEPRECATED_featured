@@ -10,14 +10,14 @@
             [pdok.featured.projectors GeoserverProjector]))
 
 (def ^:private processor-db {:subprotocol "postgresql"
-                     :subname (or (env :projector-database-url) "//localhost:5432/pdok")
-                     :user (or (env :projector-database-user) "postgres")
-                             :password (or (env :projector-database-password) "postgres")})
+                     :subname (or (env :processor-database-url) "//localhost:5432/pdok")
+                     :user (or (env :processor-database-user) "postgres")
+                     :password (or (env :processor-database-password) "postgres")})
 
 (def ^:private data-db {:subprotocol "postgresql"
-                     :subname (or (env :projector-database-url) "//localhost:5432/pdok")
-                     :user (or (env :projector-database-user) "postgres")
-                     :password (or (env :projector-database-password) "postgres")})
+                     :subname (or (env :data-database-url) "//localhost:5432/pdok")
+                     :user (or (env :data-database-user) "postgres")
+                     :password (or (env :data-database-password) "postgres")})
 
 (defn- process-new-feature [{:keys [persistence projectors]} feature]
   (let [{:keys [dataset collection id validity geometry attributes]} feature]
@@ -43,7 +43,7 @@
 
 (defn processor
   ([] (let [jdbc-persistence (pers/cached-jdbc-processor-persistence {:db-config processor-db :batch-size 10000})
-            projectors [(GeoserverProjector.)]]
+            projectors [(proj/geoserver-projector {:db-config data-db})]]
         (processor jdbc-persistence projectors)))
   ([persistence projectors]
    {:persistence persistence

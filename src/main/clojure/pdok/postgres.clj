@@ -2,6 +2,15 @@
   (:require [clojure.java.jdbc :as j]
             [clj-time [coerce :as tc]]))
 
+(extend-protocol j/ISQLValue
+  org.postgis.Geometry
+  (sql-value [v] v))
+
+(extend-protocol j/ISQLParameter
+  org.postgis.Geometry
+  (set-parameter [v ^java.sql.PreparedStatement s ^long i]
+    (.setObject s i v java.sql.Types/OTHER)))
+
 (def quoted (j/quoted \"))
 
 (defn schema-exists? [db schema]
@@ -40,9 +49,17 @@ FROM information_schema.columns
 
 (defn clj-to-db-type [type]
   "Returns type with transformation method"
-  (case type
+  (condp = type
     org.joda.time.DateTime ["timestamp without time zone" #(tc/to-timestamp %)]
     ["text" #(str %)]))
+
+(defn convert-clj-to-pg [value]
+  (let [[_ conversion-fn] (clj-to-db-type (type value))]
+    (conversion-fn value)))
+
+(defn get-clj-pg-type [value]
+  (let [[pg-type _] (clj-to-db-type (type value))]
+    pg-type))
 
 (defn add-column [db schema collection column-name column-type]
   (let [template "ALTER TABLE %s.%s ADD %s %s NULL;"
