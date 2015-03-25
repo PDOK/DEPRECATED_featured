@@ -50,6 +50,7 @@ FROM information_schema.columns
 (defn clj-to-db-type [type]
   "Returns type with transformation method"
   (condp = type
+    nil ["nil" identity]
     org.joda.time.DateTime ["timestamp without time zone" #(tc/to-timestamp %)]
     ["text" #(str %)]))
 
