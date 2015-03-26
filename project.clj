@@ -23,6 +23,7 @@
                  [org.geotools/gt-epsg-extension "14-SNAPSHOT"]
                  [org.codehaus.woodstox/woodstox-core-asl "4.4.1"]
                  ]
+  :plugins [[lein-environ "1.0.0"]]
   :main ^:skip-aot pdok.featured.core
   :target-path "target/%s"
   :source-paths ["src/main/clojure"]
