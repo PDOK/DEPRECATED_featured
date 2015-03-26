@@ -1,6 +1,5 @@
 (ns pdok.featured.json-reader
-  (:require [pdok.featured.feature :refer [->NewFeature]]
-            [cheshire [core :as json] [factory :as jfac] [parse :as jparse]]
+  (:require [cheshire [core :as json] [factory :as jfac] [parse :as jparse]]
             [clj-time.format :as tf]
             [clojure.walk :refer [postwalk]])
   (:import (com.fasterxml.jackson.core JsonFactory JsonFactory$Feature
@@ -13,15 +12,15 @@
 (declare geometry-from-json)
 (declare parse-functions)
 
-(defmulti map-to-feature (fn [dataset obj] (get obj "_action")))
-
-(defmethod map-to-feature "new" [dataset obj]
-  (let [collection (get obj "_collection")
-        id (get obj "_id")
-        validity (parse-time (get obj "_validity"))
-        geom (get obj "_geometry")
-        attributes (parse-functions (attributes obj))]
-    (->NewFeature dataset collection id validity geom attributes)))
+(defn map-to-feature "new" [dataset obj]
+  (let [feature {:dataset    dataset
+                 :collection (get obj "_collection")
+                 :action     (keyword (get obj "_action"))
+                 :id         (get obj "_id")
+                 :validity   (get obj "_validity")
+                 :geometry   (get obj "_geometry")
+                 :attributes (parse-functions (attributes obj))}]
+    feature))
 
 ;; 2015-02-26T15:48:26.578Z
 (def ^{:private true} date-time-formatter (tf/formatters :date-time-parser) )

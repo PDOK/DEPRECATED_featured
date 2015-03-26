@@ -21,11 +21,6 @@
 (defn strip-gml-ns [input]
   (str/replace input "gml:" ""))
 
-(defrecord NewFeature [dataset collection id validity geometry attributes])
-(defrecord ChangeFeature [dataset collection id validity current-validity geometry attributes])
-(defrecord CloseFeature [dataset collection id validity current-validity geometry attributes])
-(defrecord DeleteFeature [dataset collection id current-validity])
-
 (defmulti as-gml (fn [obj] str/lower-case (get obj "type")))
 
 (defmethod as-gml "gml" [obj] (get obj "gml"))

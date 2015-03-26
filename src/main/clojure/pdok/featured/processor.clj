@@ -1,13 +1,12 @@
 (ns pdok.featured.processor
-  (:require [pdok.featured.feature :refer [->NewFeature] :as feature]
+  (:require [pdok.featured.feature :as feature]
             [pdok.featured.persistence :as pers]
             [pdok.featured.generator :refer [random-json-feature-stream]]
             [pdok.featured.json-reader :refer :all]
             [pdok.featured.projectors :as proj]
             [clj-time [local :as tl]]
             [environ.core :refer [env]])
-  (:import  [pdok.featured.feature NewFeature ChangeFeature CloseFeature DeleteFeature]
-            [pdok.featured.projectors GeoserverProjector]))
+  (:import  [pdok.featured.projectors GeoserverProjector]))
 
 (def ^:private processor-db {:subprotocol "postgresql"
                      :subname (or (env :processor-database-url) "//localhost:5432/pdok")
@@ -31,8 +30,8 @@
 
 (defn process [processor feature]
   "Processes feature event. Returns nil or error reason"
-  (condp instance? feature
-    NewFeature (process-new-feature processor feature)
+  (condp :action feature
+    :new (process-new-feature processor feature)
     (str "Cannot process: " feature)))
 
 (defn shutdown [{:keys [persistence projectors]}]
