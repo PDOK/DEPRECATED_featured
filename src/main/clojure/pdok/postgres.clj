@@ -1,15 +1,32 @@
 (ns pdok.postgres
   (:require [clojure.java.jdbc :as j]
-            [clj-time [coerce :as tc]]))
+            [clj-time [coerce :as tc]])
+  (:import [com.vividsolutions.jts.geom Geometry]
+           [com.vividsolutions.jts.io WKTWriter]))
+
+(defprotocol IPostgresType
+  (clj-to-pg-type [v]))
+
+(def wkt-writer (WKTWriter.))
 
 (extend-protocol j/ISQLValue
-  org.postgis.Geometry
-  (sql-value [v] v))
+  org.joda.time.DateTime
+  (sql-value [v] (tc/to-timestamp v))
+  com.vividsolutions.jts.geom.Geometry
+  (sql-value [v] (.write wkt-writer v)))
 
 (extend-protocol j/ISQLParameter
-  org.postgis.Geometry
+  com.vividsolutions.jts.geom.Geometry
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
-    (.setObject s i v java.sql.Types/OTHER)))
+    (.setObject s i (j/sql-value v) java.sql.Types/OTHER)))
+
+(extend-protocol IPostgresType
+  Object
+  (clj-to-pg-type [_] "text")
+  nil
+  (clj-to-pg-type [_] nil)
+  org.joda.time.DateTime
+  (clj-to-pg-type  [_] "timestamp without time zone"))
 
 (def quoted (j/quoted \"))
 
@@ -47,23 +64,8 @@ FROM information_schema.columns
   AND table_name   = ?" schema table])]
       results)))
 
-(defn clj-to-db-type [type]
-  "Returns type with transformation method"
-  (condp = type
-    nil ["nil" identity]
-    org.joda.time.DateTime ["timestamp without time zone" #(tc/to-timestamp %)]
-    ["text" #(str %)]))
-
-(defn convert-clj-to-pg [value]
-  (let [[_ conversion-fn] (clj-to-db-type (type value))]
-    (conversion-fn value)))
-
-(defn get-clj-pg-type [value]
-  (let [[pg-type _] (clj-to-db-type (type value))]
-    pg-type))
-
 (defn add-column [db schema collection column-name column-type]
   (let [template "ALTER TABLE %s.%s ADD %s %s NULL;"
-        [clj-type _] (clj-to-db-type column-type)
+        clj-type (clj-to-pg-type column-type)
         cmd (format template (quoted schema) (quoted collection) (quoted column-name) clj-type)]
     (j/db-do-commands db cmd)))

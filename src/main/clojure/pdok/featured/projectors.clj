@@ -1,10 +1,9 @@
 (ns pdok.featured.projectors
   (:require [pdok.featured.cache :refer :all]
-            [pdok.featured.feature :refer [as-wkt]]
+            [pdok.featured.feature :refer [as-jts]]
             [pdok.postgres :as pg]
             [clojure.java.jdbc :as j]
-            [environ.core :refer [env]])
-  (:import [org.postgis PGgeometry]))
+            [environ.core :refer [env]]))
 
 (defprotocol Projector
   (new-feature [proj feature])
@@ -38,13 +37,9 @@
 (defn- gs-add-attribute [db dataset collection attribute-name attribute-type]
   (pg/add-column db dataset collection attribute-name attribute-type))
 
-(defn- as-PGgeometry [wkt]
-  (PGgeometry/geomFromString wkt))
-
 (defn- feature-to-record [{:keys [dataset collection id geometry attributes]} all-fields-constructor]
   (let [sparse-attributes (all-fields-constructor attributes)
-        record (concat [id (-> geometry as-wkt as-PGgeometry)]
-                       (map #(-> % pg/convert-clj-to-pg) sparse-attributes))]
+        record (concat [id (-> geometry as-jts)] sparse-attributes)]
     record))
 
 (defn- gs-add-feature
