@@ -12,7 +12,7 @@
 (declare geometry-from-json)
 (declare parse-functions)
 
-(defn map-to-feature "new" [dataset obj]
+(defn map-to-feature [dataset obj]
   (let [feature {:dataset    dataset
                  :collection (get obj "_collection")
                  :action     (keyword (get obj "_action"))
