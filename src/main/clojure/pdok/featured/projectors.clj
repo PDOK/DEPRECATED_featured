@@ -96,6 +96,9 @@
     (GeoserverProjector. db cache batch batch-size)))
 
 (def ^:private data-db {:subprotocol "postgresql"
-                     :subname (or (env :projector-database-url) "//localhost:5432/pdok")
-                     :user (or (env :projector-database-user) "postgres")
-                     :password (or (env :projector-database-password) "postgres")})
+                     :subname (or (env :data-database-url) "//localhost:5432/pdok")
+                     :user (or (env :data-database-user) "postgres")
+                     :password (or (env :data-database-password) "postgres")})
+
+(def projectors 
+  [(geoserver-projector {:db-config data-db})])

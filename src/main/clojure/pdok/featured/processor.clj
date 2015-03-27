@@ -13,11 +13,6 @@
                      :user (or (env :processor-database-user) "postgres")
                      :password (or (env :processor-database-password) "postgres")})
 
-(def ^:private data-db {:subprotocol "postgresql"
-                     :subname (or (env :data-database-url) "//localhost:5432/pdok")
-                     :user (or (env :data-database-user) "postgres")
-                     :password (or (env :data-database-password) "postgres")})
-
 (defn- process-new-feature [{:keys [persistence projectors]} feature]
   (let [{:keys [dataset collection id validity geometry attributes]} feature]
     (if (some nil? [dataset collection id validity])
@@ -41,16 +36,16 @@
   (doseq [p projectors] (proj/close p)))
 
 (defn processor
-  ([] (let [jdbc-persistence (pers/cached-jdbc-processor-persistence {:db-config processor-db :batch-size 10000})
-            projectors [(proj/geoserver-projector {:db-config data-db})]]
-        (processor jdbc-persistence projectors)))
+  ([projectors] 
+   (let [jdbc-persistence (pers/cached-jdbc-processor-persistence {:db-config processor-db :batch-size 10000})] 
+    (processor jdbc-persistence projectors)))
   ([persistence projectors]
    {:persistence persistence
     :projectors projectors}))
 
 (defn performance-test [count]
   (with-open [json (random-json-feature-stream "perftest" "col1" count)]
-    (let [processor (processor)
+    (let [processor (processor [])
           features (features-from-stream json)]
       (time (do (doseq [f features] (process processor f))
                 (shutdown processor)
