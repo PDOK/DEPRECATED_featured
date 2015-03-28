@@ -35,7 +35,9 @@
     attributes))
 
 (defn- gs-add-attribute [db dataset collection attribute-name attribute-type]
-  (pg/add-column db dataset collection attribute-name attribute-type))
+  (try
+    (pg/add-column db dataset collection attribute-name attribute-type)
+    (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
 
 (defn- feature-to-record [{:keys [dataset collection id geometry attributes]} all-fields-constructor]
   (let [sparse-attributes (all-fields-constructor attributes)
@@ -95,7 +97,7 @@
         batch (ref (clojure.lang.PersistentQueue/EMPTY))]
     (GeoserverProjector. db cache batch batch-size)))
 
-(def ^:private data-db {:subprotocol "postgresql"
+(def data-db {:subprotocol "postgresql"
                      :subname (or (env :data-database-url) "//localhost:5432/pdok")
                      :user (or (env :data-database-user) "postgres")
                      :password (or (env :data-database-password) "postgres")})

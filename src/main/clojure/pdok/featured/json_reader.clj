@@ -5,22 +5,28 @@
   (:import (com.fasterxml.jackson.core JsonFactory JsonFactory$Feature
                                        JsonParser$Feature JsonParser JsonToken)))
 
-(def ^:private pdok-fields ["_action" "_collection" "_id" "_validity" "_geometry"])
+(def ^:private pdok-fields ["_action" "_collection" "_id" "_validity" "_geometry" "_current_validity"])
 
 (declare parse-time)
 (declare attributes)
 (declare geometry-from-json)
 (declare parse-functions)
 
+(defn assoc-when-exists! [target target-key src src-key]
+  (if (contains? src src-key)
+    (assoc! target target-key (get src src-key))
+    target))
+
 (defn map-to-feature [dataset obj]
-  (let [feature {:dataset    dataset
-                 :collection (get obj "_collection")
-                 :action     (keyword (get obj "_action"))
-                 :id         (get obj "_id")
-                 :validity   (get obj "_validity")
-                 :geometry   (get obj "_geometry")
-                 :attributes (parse-functions (attributes obj))}]
-    feature))
+  (let [feature (transient {:dataset    dataset
+                            :collection (get obj "_collection")
+                            :action     (keyword (get obj "_action"))
+                            :id         (get obj "_id")
+                            :validity   (get obj "_validity")
+                            :attributes (parse-functions (attributes obj))})
+        feature (assoc-when-exists! feature :geometry obj "_geometry")
+        feature (assoc-when-exists! feature :current-validity obj "_current_validity")]
+    (persistent! feature)))
 
 ;; 2015-02-26T15:48:26.578Z
 (def ^{:private true} date-time-formatter (tf/formatters :date-time-parser) )

@@ -60,7 +60,7 @@
         ]
     [(name type) dataset collection id
      (tc/to-timestamp validity)
-     (to-json geometry)
+     (when geometry (to-json geometry))
      (to-json attributes)])
   )
 
@@ -119,7 +119,7 @@ GROUP BY dataset, collection, feature_id"
   (create-stream [_ dataset collection id])
   (append-to-stream [_ type dataset collection id validity geometry attributes]
     (let [key-fn   #(->> % (drop 1) (take 3))
-          value-fn #(->> % (drop 4) (take 1))
+          value-fn #(->> % (drop 4) (take 1) first)
           batched (with-batch batch batch-size (partial jdbc-insert db))
           cache-batched (with-cache cache batched key-fn value-fn)]
       (cache-batched type dataset collection id validity geometry attributes)))
@@ -127,7 +127,7 @@ GROUP BY dataset, collection, feature_id"
     (let [key-fn #(->> % (take 3))
           load-cache (fn [dataset collection id]
                        (when (load-cache? dataset collection) (jdbc-load-cache db dataset collection)))
-          cached (use-cache cache (partial jdbc-stream-validity db) key-fn load-cache)]
+          cached (use-cache cache key-fn load-cache)]
       (cached dataset collection id)))
   (close [_]
     (flush-batch batch (partial jdbc-insert db)))

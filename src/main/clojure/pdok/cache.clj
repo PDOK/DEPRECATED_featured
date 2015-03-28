@@ -28,7 +28,7 @@
    (doseq [kvp key-value-pairs]
      (alter cache #(cache/miss % (first kvp) (second kvp))))))
 
-(defn use-cache [cache cached-fn key-fn cache-miss-fn]
+(defn use-cache [cache key-fn cache-miss-fn]
   (fn [& args]
     (letfn [(cache-lookup [key] (cache/lookup @cache key))]
       (let [cache-key (key-fn args)

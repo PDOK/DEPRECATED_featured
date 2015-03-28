@@ -10,8 +10,8 @@
 (defn execute [jsonfile projectors-switch]
   (println "start")
   (let [processor (if (no-projectors? projectors-switch)
-                    (processor [] ) 
-                    (processor projectors)) ]   
+                    (processor [] )
+                    (processor projectors)) ]
     (with-open [s (file-stream jsonfile)]
       (time (do (doseq [feature (features-from-stream s)]
                   (process processor feature))
@@ -24,7 +24,5 @@
   "first parameter is json file, optional second parameter switch projectors"
   [& args]
   (execute (first args) (second args)))
-
-
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))
