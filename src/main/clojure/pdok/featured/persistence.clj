@@ -1,5 +1,5 @@
 (ns pdok.featured.persistence
-  (:require [pdok.featured.cache :refer :all]
+  (:require [pdok.cache :refer :all]
             [clojure.core.cache :as cache]
             [clojure.java.jdbc :as j]
             [clj-time [coerce :as tc]]

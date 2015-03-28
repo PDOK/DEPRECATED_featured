@@ -1,4 +1,4 @@
-(ns pdok.featured.cache
+(ns pdok.cache
   (:require [clojure.core.cache :as cache]))
 
 (defn flush-batch [batch batched-fn]

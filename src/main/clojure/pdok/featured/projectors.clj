@@ -1,5 +1,5 @@
 (ns pdok.featured.projectors
-  (:require [pdok.featured.cache :refer :all]
+  (:require [pdok.cache :refer :all]
             [pdok.featured.feature :refer [as-jts]]
             [pdok.postgres :as pg]
             [clojure.java.jdbc :as j]
@@ -100,5 +100,5 @@
                      :user (or (env :data-database-user) "postgres")
                      :password (or (env :data-database-password) "postgres")})
 
-(def projectors 
+(def projectors
   [(geoserver-projector {:db-config data-db})])
