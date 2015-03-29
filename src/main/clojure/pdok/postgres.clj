@@ -52,7 +52,12 @@
 
 (defn create-table [db schema table & fields]
   (j/db-do-commands db
-                   (apply j/create-table-ddl (str schema "." table) fields)))
+                    (apply j/create-table-ddl (str schema "." table) fields)))
+
+(defn create-index [db schema table column]
+  (j/db-do-commands db (str "CREATE INDEX " (quoted (str column "_idx"))
+                            " ON "  (quoted schema) "." (quoted table)
+                            "  USING btree (" (quoted column) ")" )))
 
 (defn table-columns [db schema table]
   "Get table columns"

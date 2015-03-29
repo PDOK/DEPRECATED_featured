@@ -27,7 +27,7 @@
 (defmethod as-gml nil [obj] nil)
 
 (defmulti as-jts (fn [obj] str/lower-case (get obj "type")))
-
+(defmethod as-jts nil [_] nil)
 (defmethod as-jts "gml" [obj]
   (let [gml (-> obj (get "gml") strip-gml-ns (.getBytes "UTF-8"))
         in (io/input-stream gml)]

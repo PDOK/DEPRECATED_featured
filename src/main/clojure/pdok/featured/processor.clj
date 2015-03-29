@@ -36,7 +36,8 @@
               (if (not= current-validity stream-validity)
                 "When changing current-validity should match"
                 (do (pers/append-to-stream persistence :change dataset collection
-                                           id validity geometry (:attributes feature)))))))))))
+                                           id validity geometry (:attributes feature))
+                    (doseq [p projectors] (proj/change-feature p feature)))))))))))
 
 (defn process [processor feature]
   "Processes feature event. Returns nil or error reason"
