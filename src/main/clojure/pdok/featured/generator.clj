@@ -30,16 +30,16 @@
 (def attribute-generators [#(random-word 5) random-date random-moment])
 
 (defn random-new-feature
-  ([collection id validity attributes]
-   (let [base {:_action "new"
-              :_collection collection
-              :_id id
-              :_validity validity
-               :_geometry (random-geometry)}
+  ([collection id validity attributes & {:keys [geometry?] :or {geometry? true}}]
+   (let [feature (transient {:_action "new"
+                          :_collection collection
+                          :_id id
+                          :_validity validity})
+         feature (if geometry? (assoc! feature :_geometry (random-geometry)) feature)
          random-values (map (fn [[key gen]] (vector key (gen))) attributes)
-         feature (reduce (fn [acc val] ( apply assoc acc val)) base random-values)]
+         feature (reduce (fn [acc val] ( apply assoc! acc val)) feature random-values)]
 
-     feature)))
+     (persistent! feature))))
 
 (defn update-an-attribute [attributes update-fn exceptions]
   (let [valid-keys (keys (apply dissoc attributes exceptions))
@@ -91,11 +91,11 @@
       )))
 
 (defn random-json-features [out-stream dataset collection total & args]
-  (let [{:keys [:updates? :nested] :or {:updates? false :nested 0}} args
+  (let [{:keys [updates? nested] :or {updates? false nested 0}} args
         validity (tf/unparse date-time-formatter (local-now))
         attributes (create-attributes 3 nested)
         gens (transient [])
-        gens (conj! gens (fn [id] ( random-new-feature collection id validity attributes)))
+        gens (conj! gens (fn [id] (apply random-new-feature collection id validity attributes args)))
         gens (if updates? (conj! gens (fn [id] (random-change-feature collection id validity attributes))) gens)
         generator (apply juxt (persistent! gens))
         gen-fn #(generator (random-word 10))
@@ -134,3 +134,13 @@
   (doseq [c [3 33 333 3333 33333]]
     (with-open [w (clojure.java.io/writer (str ".test-files/new-features-nested-features-" c ".json"))]
       (random-json-features w "updateset" "collection1" c :nested 2))))
+
+(defn generate-test-files-with-nested-feature-no-top-geometry []
+  (doseq [c [5 50 500 5000 50000]]
+    (with-open [w (clojure.java.io/writer (str ".test-files/new-features-nested-feature-no-top-geometry-" c ".json"))]
+      (random-json-features w "updateset" "collection1" c :nested 1 :geometry? false))))
+
+(defn generate-test-files-with-nested-features-no-top-geometry []
+  (doseq [c [3 33 333 3333 33333]]
+    (with-open [w (clojure.java.io/writer (str ".test-files/new-features-nested-features-no-top-geometry-" c ".json"))]
+      (random-json-features w "updateset" "collection1" c :nested 2 :geometry? false))))
