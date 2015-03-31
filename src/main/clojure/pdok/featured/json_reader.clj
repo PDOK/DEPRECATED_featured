@@ -60,11 +60,11 @@
     [])
   )
 
-(defn- features-from-stream* [^JsonParser jp]
+(defn- features-from-stream* [^JsonParser jp & {:keys [dataset]}]
   (.nextToken jp)
   (when (= JsonToken/START_OBJECT (.getCurrentToken jp))
     (let [meta (read-meta-data jp)
-          dataset (get meta "dataset")]
+          dataset (or dataset (get meta "dataset"))]
       (if-not dataset
         (throw (Exception. "dataset needed"))
         ;; features should be array
@@ -72,12 +72,12 @@
           (map (partial map-to-feature dataset) (read-features jp)))
         ))))
 
-(defn features-from-stream [input-stream]
+(defn features-from-stream [input-stream & args]
   "Parses until 'features' for state. Then returns lazy sequence of features."
   (let [reader (clojure.java.io/reader input-stream)
         factory jfac/json-factory
         parser (.createParser factory reader)
-        features (features-from-stream* parser)]
+        features (apply features-from-stream* parser args)]
     features))
 
 (defn file-stream [path]

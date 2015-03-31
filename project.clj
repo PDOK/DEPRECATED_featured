@@ -11,6 +11,7 @@
                  [org.clojure/tools.trace "0.7.8"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [environ "1.0.0"]
+                 [org.clojure/tools.cli "0.3.1"]
                  [com.fasterxml.jackson.core/jackson-core "2.4.4"]
                  [clj-time "0.9.0"]
                  [cheshire "5.4.0"]
