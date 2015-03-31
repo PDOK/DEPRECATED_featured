@@ -72,14 +72,31 @@
 
      feature)))
 
-(defn random-json-features [out-stream dataset collection total with-update]
-  (let [id (random-word 10)
+(defn random-nested-feature [attributes]
+  (let [base {:_geometry (random-geometry)}
+        random-values (map (fn [[key gen]] (vector key (gen))) attributes)
+        feature (reduce (fn [acc val] ( apply assoc acc val)) base random-values)]
+     feature))
+
+(defn create-attributes [simple-attributes nested-features]
+  (let [attribute-names (repeatedly simple-attributes #(random-word 5))
+        generators (cycle attribute-generators)
+        attributes (map #(vector %1 %2) attribute-names generators)]
+    (case nested-features
+      0 attributes
+      1 (conj attributes [(random-word 5) #(random-nested-feature (create-attributes 3 0))])
+      (let [nested-attr (create-attributes 3 0)]
+        (conj attributes [ (random-word 5)
+                           #(into [] (repeatedly nested-features (fn [] (random-nested-feature nested-attr))))]))
+      )))
+
+(defn random-json-features [out-stream dataset collection total & args]
+  (let [{:keys [:updates? :nested] :or {:updates? false :nested 0}} args
         validity (tf/unparse date-time-formatter (local-now))
-        other-fields (repeatedly 3 #(random-word 5))
-        attributes (map #(vector %1 %2) other-fields attribute-generators)
+        attributes (create-attributes 3 nested)
         gens (transient [])
         gens (conj! gens (fn [id] ( random-new-feature collection id validity attributes)))
-        gens (if with-update (conj! gens (fn [id] (random-change-feature collection id validity attributes))) gens)
+        gens (if updates? (conj! gens (fn [id] (random-change-feature collection id validity attributes))) gens)
         generator (apply juxt (persistent! gens))
         gen-fn #(generator (random-word 10))
         package {:_meta {}
@@ -87,25 +104,33 @@
                  :features (mapcat identity (repeatedly total gen-fn))}]
     (json/generate-stream package out-stream)))
 
-(defn- random-json-feature-stream* [out-stream dataset collection total with-update]
+(defn- random-json-feature-stream* [out-stream dataset collection total & args]
   (with-open [writer (clojure.java.io/writer out-stream)]
-    (random-json-features writer dataset collection total with-update)))
+    (apply random-json-features writer dataset collection total args)))
 
 (defn random-json-feature-stream
-  ([dataset collection total]
-   (random-json-feature-stream dataset collection total false))
-  ([dataset collection total with-update]
+  ([dataset collection total & args]
    (let [pipe-in (PipedInputStream.)
          pipe-out (PipedOutputStream. pipe-in)]
-     (future (random-json-feature-stream* pipe-out dataset collection total with-update))
+     (future (apply random-json-feature-stream* pipe-out dataset collection total args))
      pipe-in)))
 
 (defn generate-test-files []
   (doseq [c [10 100 1000 10000 100000]]
     (with-open [w (clojure.java.io/writer (str ".test-files/new-features-single-collection-" c ".json"))]
-      (random-json-features w "newset" "collection1" c false))))
+      (random-json-features w "newset" "collection1" c))))
 
 (defn generate-test-files-with-updates []
   (doseq [c [5 50 500 5000 50000]]
     (with-open [w (clojure.java.io/writer (str ".test-files/update-features-single-collection-" c ".json"))]
-      (random-json-features w "updateset" "collection1" c true))))
+      (random-json-features w "updateset" "collection1" c :updates? true))))
+
+(defn generate-test-files-with-nested-feature []
+  (doseq [c [5 50 500 5000 50000]]
+    (with-open [w (clojure.java.io/writer (str ".test-files/new-features-nested-feature-" c ".json"))]
+      (random-json-features w "updateset" "collection1" c :nested 1))))
+
+(defn generate-test-files-with-nested-features []
+  (doseq [c [3 33 333 3333 33333]]
+    (with-open [w (clojure.java.io/writer (str ".test-files/new-features-nested-features-" c ".json"))]
+      (random-json-features w "updateset" "collection1" c :nested 2))))

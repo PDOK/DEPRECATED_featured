@@ -60,8 +60,8 @@
    {:persistence persistence
     :projectors projectors}))
 
-(defn performance-test [count with-update]
-  (with-open [json (random-json-feature-stream "perftest" "col1" count with-update)]
+(defn performance-test [count & args]
+  (with-open [json (apply random-json-feature-stream "perftest" "col1" count args)]
     (let [processor (processor [(proj/geoserver-projector {:db-config proj/data-db})])
           features (features-from-stream json)]
       (time (do (doseq [f features] (process processor f))
