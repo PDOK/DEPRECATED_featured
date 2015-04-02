@@ -5,28 +5,20 @@
   (:import (com.fasterxml.jackson.core JsonFactory JsonFactory$Feature
                                        JsonParser$Feature JsonParser JsonToken)))
 
-(def ^:private pdok-fields ["_action" "_collection" "_id" "_validity" "_geometry" "_current_validity"])
+(def ^:private pdok-field-replacements
+  {"_action" :action "_collection" :collection "_id" :id "_validity" :validity
+   "_geometry" :geometry "_current_validity" :current-validity})
 
 (declare parse-time)
-(declare attributes)
 (declare geometry-from-json)
-(declare parse-functions)
-
-(defn assoc-when-exists! [target target-key src src-key]
-  (if (contains? src src-key)
-    (assoc! target target-key (get src src-key))
-    target))
+(declare upgrade-data)
 
 (defn map-to-feature [dataset obj]
-  (let [feature (transient {:dataset    dataset
-                            :collection (get obj "_collection")
-                            :action     (keyword (get obj "_action"))
-                            :id         (get obj "_id")
-                            :validity   (get obj "_validity")
-                            :attributes (parse-functions (attributes obj))})
-        feature (assoc-when-exists! feature :geometry obj "_geometry")
-        feature (assoc-when-exists! feature :current-validity obj "_current_validity")]
-    (persistent! feature)))
+  (let [action (keyword (get obj "_action"))
+        feature (-> obj upgrade-data
+                    (assoc :dataset dataset)
+                    (assoc :action action))]
+    feature))
 
 ;; 2015-02-26T15:48:26.578Z
 (def ^{:private true} date-time-formatter (tf/formatters :date-time-parser) )
@@ -35,10 +27,6 @@
   "Parses an ISO8601 date timestring to local date"
   [datetimestring]
   (tf/parse date-time-formatter datetimestring))
-
-(defn- attributes [obj]
-  (apply dissoc obj pdok-fields)
-  )
 
 (defn- parse-object [^JsonParser jp]
   (jparse/parse* jp identity nil nil))
@@ -85,23 +73,35 @@
 
 (defn- element-is-function? [element]
   (and (vector? element)
-           (= 2 (count element))
-           (-> element first (.startsWith "~#"))))
+       (= 2 (count element))
+       (string? (first element))
+       (-> element first (.startsWith "~#"))))
 
-(defn- replacer [element]
-  (if (element-is-function? element)
-    (let [[function params] element]
+(defn- evaluate-f [element]
+  (let [[function params] element]
       (case function
         "~#moment" (apply parse-time params)
         "~#date"   (apply parse-time params)
         element ; never fail just return element
         ))
-    ;else just return element, replace nothing
+  )
+
+(defn- element-is-pdok-field? [element]
+  (contains? pdok-field-replacements element))
+
+(defn- pdok-field [element]
+  (get pdok-field-replacements element))
+
+(defn- replace-fn [element]
+  (condp #(%1 %2) element
+    element-is-function? (evaluate-f element)
+    element-is-pdok-field? (pdok-field element)
+    ;; else just return element, replace nothing
     element))
 
-(defn- parse-functions [attributes]
+(defn- upgrade-data [attributes]
   "Replaces functions with their parsed values"
-  (postwalk replacer attributes)
+  (postwalk replace-fn attributes)
   )
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))

@@ -78,14 +78,14 @@
         feature (reduce (fn [acc val] ( apply assoc acc val)) base random-values)]
      feature))
 
-(defn create-attributes [simple-attributes nested-features]
-  (let [attribute-names (repeatedly simple-attributes #(random-word 5))
+(defn create-attributes [simple-attributes nested-features & {:keys [names]}]
+  (let [attribute-names (or names (repeatedly simple-attributes #(random-word 5)))
         generators (cycle attribute-generators)
         attributes (map #(vector %1 %2) attribute-names generators)]
     (case nested-features
       0 attributes
-      1 (conj attributes [(random-word 5) #(random-nested-feature (create-attributes 3 0))])
-      (let [nested-attr (create-attributes 3 0)]
+      1 (conj attributes [(random-word 5) #(random-nested-feature (create-attributes 3 0 :names attribute-names))])
+      (let [nested-attr (create-attributes 3 0 :names attribute-names)]
         (conj attributes [ (random-word 5)
                            #(into [] (repeatedly nested-features (fn [] (random-nested-feature nested-attr))))]))
       )))
@@ -133,14 +133,14 @@
 (defn generate-test-files-with-nested-features []
   (doseq [c [3 33 333 3333 33333]]
     (with-open [w (clojure.java.io/writer (str ".test-files/new-features-nested-features-" c ".json"))]
-      (random-json-features w "updateset" "collection1" c :nested 2))))
+      (random-json-features w "newset" "collection1" c :nested 2))))
 
 (defn generate-test-files-with-nested-feature-no-top-geometry []
   (doseq [c [5 50 500 5000 50000]]
     (with-open [w (clojure.java.io/writer (str ".test-files/new-features-nested-feature-no-top-geometry-" c ".json"))]
-      (random-json-features w "updateset" "collection1" c :nested 1 :geometry? false))))
+      (random-json-features w "newset" "collection1" c :nested 1 :geometry? false))))
 
 (defn generate-test-files-with-nested-features-no-top-geometry []
   (doseq [c [3 33 333 3333 33333]]
     (with-open [w (clojure.java.io/writer (str ".test-files/new-features-nested-features-no-top-geometry-" c ".json"))]
-      (random-json-features w "updateset" "collection1" c :nested 2 :geometry? false))))
+      (random-json-features w "newset" "collection1" c :nested 2 :geometry? false))))
