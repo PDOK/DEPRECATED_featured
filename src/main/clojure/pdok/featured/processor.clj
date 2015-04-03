@@ -65,39 +65,46 @@
                   (assoc! :parent-id id))]
     (persistent! with-parent)))
 
-(defn- combine-attributes [new-prefix new-attributes target-attributes]
+(defn- prefixed-attributes [prefix attributes]
   (let [replacement-map (persistent! (reduce (fn [c [k v]] (assoc! c k v)) (transient {})
-                                             (map #(vector %1 (str new-prefix "$" (name %1)) ) (keys new-attributes))))
-        prefixed-new (clojure.set/rename-keys new-attributes replacement-map)
-        combined (persistent! (reduce (fn [c [k v]] (assoc! c k v)) (transient target-attributes) prefixed-new ))]))
+                                             (map #(vector %1 (str prefix "$" (name %1)) ) (keys attributes))))
+        prefixed (clojure.set/rename-keys attributes replacement-map)]
+    prefixed))
 
-(defn- enrich [[child-collection-key child] parent]
+(defn- enrich [[child-collection-key child] parent new-attributes]
   (let [{:keys [dataset collection action id validity]} parent
         child-id (str id "$" (java.util.UUID/randomUUID))
-        new-attributes (combine-attributes child-collection-key (:attributes parent) (:attributes child))
+        parent-attributes (prefixed-attributes child-collection-key new-attributes)
         enriched (-> (transient child)
                      (assoc! :dataset dataset)
                      (assoc! :collection (str collection "$" child-collection-key))
                      (assoc! :action action)
                      (assoc! :id child-id)
                      (assoc! :validity validity)
-                     (assoc! :attributes new-attributes))]
-    ))
+                     (assoc! :attributes (merge (:attributes child) parent-attributes)))]
+   (persistent! enriched) ))
 
 (defn- flatten-with-geometry [feature]
   (let [attributes (:attributes feature)
         nested (nested-features attributes)
         without-nested (apply dissoc attributes (map #(first %) nested))
         flat (assoc feature :attributes without-nested)
-        enriched-nested (map #(link-parent % feature) nested)]
-    (if (empty? enriched-nested)
+        linked-nested (map #(link-parent % feature) nested)]
+    (if (empty? linked-nested)
       flat
-      (cons flat enriched-nested))
+      (cons flat linked-nested))
     )
   )
 
 (defn- flatten-without-geometry [feature]
-;; collection van parent is prefix, en voeg parents toe aan childs
+  ;; collection van parent is prefix, en voeg parents toe aan childs
+  (let [attributes (:attributes feature)
+        nested (nested-features attributes)
+        attributes-without-nested (apply dissoc attributes (map #(first %) nested))
+        enriched-nested (map #(enrich % feature attributes-without-nested) nested)]
+    (if (empty? enriched-nested)
+      (assoc feature :action :drop)
+      enriched-nested))
   )
 
 (defn- flatten [feature]
@@ -123,7 +130,7 @@
   (let [flat-feature (flatten (collected-attributes feature))]
     (if (seq? flat-feature)
       (doseq [f flat-feature] (process processor f))
-      (do; (println "FLAT: " flat-feature)
+      (do ;(println "FLAT: " flat-feature)
           (condp = (:action feature)
             :new (process-new-feature processor flat-feature)
             :change (process-change-feature processor flat-feature)

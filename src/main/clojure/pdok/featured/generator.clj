@@ -136,11 +136,11 @@
       (random-json-features w "newset" "collection1" c :nested 2))))
 
 (defn generate-test-files-with-nested-feature-no-top-geometry []
-  (doseq [c [5 50 500 5000 50000]]
+  (doseq [c [10 100 1000 10000 100000]]
     (with-open [w (clojure.java.io/writer (str ".test-files/new-features-nested-feature-no-top-geometry-" c ".json"))]
       (random-json-features w "newset" "collection1" c :nested 1 :geometry? false))))
 
 (defn generate-test-files-with-nested-features-no-top-geometry []
-  (doseq [c [3 33 333 3333 33333]]
+  (doseq [c [5 50 500 5000 50000]]
     (with-open [w (clojure.java.io/writer (str ".test-files/new-features-nested-features-no-top-geometry-" c ".json"))]
       (random-json-features w "newset" "collection1" c :nested 2 :geometry? false))))
