@@ -59,7 +59,7 @@
                   (assoc! :dataset dataset)
                   (assoc! :parent-collection collection)
                   (assoc! :parent-id id)
-                  (assoc! :action action)
+                  (assoc! :action :new)
                   (assoc! :id child-id)
                   (assoc! :validity validity)
                   (assoc! :collection (str collection "$" (name child-collection-key))))]
@@ -79,22 +79,30 @@
                      (assoc! :dataset dataset)
                      (assoc! :parent-collection collection)
                      (assoc! :parent-id id)
-                     (assoc! :collection (str collection "$" child-collection-key))
-                     (assoc! :action action)
+                     (assoc! :collection (str collection "$" (name child-collection-key)))
+                     (assoc! :action :new)
                      (assoc! :id child-id)
                      (assoc! :validity validity)
                      (assoc! :attributes (merge (:attributes child) parent-attributes)))]
    (persistent! enriched) ))
+
+(defn- meta-close-all-features [features]
+  (let [grouped (group-by #(select-keys % [:dataset :collection :parent-id :validity]) features)]
+    (letfn [(meta [d col pid v] {:action :close-all, :dataset d, :collection col, :parent-id pid :end-time v})]
+      (map (fn [[{:keys [dataset collection parent-id validity]} _]]
+             (meta dataset collection parent-id validity)) grouped)
+      )))
 
 (defn- flatten-with-geometry [feature]
   (let [attributes (:attributes feature)
         nested (nested-features attributes)
         without-nested (apply dissoc attributes (map #(first %) nested))
         flat (assoc feature :attributes without-nested)
-        linked-nested (map #(link-parent % feature) nested)]
+        linked-nested (map #(link-parent % feature) nested)
+        close-all (meta-close-all-features linked-nested)]
     (if (empty? linked-nested)
       flat
-      (cons flat linked-nested))
+      (cons flat (concat close-all linked-nested)))
     )
   )
 
@@ -103,10 +111,11 @@
   (let [attributes (:attributes feature)
         nested (nested-features attributes)
         attributes-without-nested (apply dissoc attributes (map #(first %) nested))
-        enriched-nested (map #(enrich % feature attributes-without-nested) nested)]
+        enriched-nested (map #(enrich % feature attributes-without-nested) nested)
+        close-all (meta-close-all-features enriched-nested)]
     (if (empty? enriched-nested)
       (assoc feature :action :drop)
-      enriched-nested))
+      (concat close-all enriched-nested)))
   )
 
 (defn- flatten [feature]
@@ -124,9 +133,6 @@
         no-attributes (select-keys feature pdok-fields)]
     (assoc no-attributes :attributes collected)))
 
-;; TODO parent velden persisten
-;; TODO change flatten moet nested closen bij nested met geometry
-;; TODO alles wijzigen bij change bij nested zonder geometry
 (defn process [processor feature]
   "Processes feature event. Returns nil or error reason"
   (let [flat-feature (flatten (collected-attributes feature))]
@@ -136,6 +142,7 @@
           (condp = (:action feature)
             :new (process-new-feature processor flat-feature)
             :change (process-change-feature processor flat-feature)
+            :close-all nil
             (str "Cannot process: " flat-feature))))))
 
 (defn shutdown [{:keys [persistence projectors]}]
