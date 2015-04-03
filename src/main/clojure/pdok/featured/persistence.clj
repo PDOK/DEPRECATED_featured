@@ -31,10 +31,50 @@
 ;;   USING btree
 ;;   (dataset, collection, id);
 
+;; --DROP TABLE featured.feature_link;
+
+;; CREATE TABLE featured.feature_link
+;; (
+;;   id bigserial NOT NULL,
+;;   dataset character varying(100),
+;;   collection character varying(255),
+;;   feature_id character varying(50),
+;;   parent_collection character varying(255),
+;;   parent_id character varying(50),
+;;   CONSTRAINT feature_link_pkey PRIMARY KEY (id)
+;; )
+;; WITH (
+;;   OIDS=FALSE
+;; );
+;; ALTER TABLE featured.feature_link
+;;   OWNER TO postgres;
+
+;; -- Index: featured.link_child_index
+
+;; -- DROP INDEX featured.link_child_index;
+
+;; CREATE INDEX link_child_index
+;;   ON featured.feature_link
+;;   USING btree
+;;   (dataset COLLATE pg_catalog."default", collection COLLATE pg_catalog."default", feature_id COLLATE pg_catalog."default");
+
+;; -- Index: featured.link_parent_index
+
+;; -- DROP INDEX featured.link_parent_index;
+
+;; CREATE INDEX link_parent_index
+;;   ON featured.feature_link
+;;   USING btree
+;;   (dataset COLLATE pg_catalog."default", parent_collection COLLATE pg_catalog."default", parent_id COLLATE pg_catalog."default");
+
+
+
 (defprotocol ProcessorPersistence
   (init [this])
   (stream-exists? [this dataset collection id])
-  (create-stream [this dataset collection id])
+  (create-stream
+    [this dataset collection id]
+    [this dataset collection id parent-collection parent-id])
   (append-to-stream [this type dataset collection id validity geometry attributes])
   (current-validity [this dataset collection id])
   (close [_])
@@ -55,7 +95,17 @@
     (.toString out))
   )
 
-(defn jdbc-transform-for-db [entry]
+(defn- jdbc-create-stream
+  ([db dataset collection id parent-collection parent-id]
+   (jdbc-create-stream db (list [dataset collection id parent-collection parent-id])))
+  ([db entries]
+   (j/with-db-connection [c db]
+     (apply ( partial j/insert! c :featured.feature_link :transaction? false?
+                      [:dataset :collection :feature_id :parent_collection :parent_id])
+            entries))))
+
+
+(defn- jdbc-transform-for-db [entry]
   (let [[type dataset collection id validity geometry attributes] entry
         ]
     [(name type) dataset collection id
@@ -101,7 +151,10 @@ GROUP BY dataset, collection, feature_id"
   (stream-exists? [_ dataset collection id]
     (let [current-validity (partial jdbc-stream-validity db)]
       (not (nil? (current-validity dataset collection id)))))
-  (create-stream [_ dataset collection id])
+  (create-stream [this dataset collection id]
+    (create-stream this dataset collection id nil nil))
+  (create-stream [_ dataset collection id parent-collection parent-id]
+    (jdbc-create-stream db dataset collection id parent-collection parent-id))
   (append-to-stream [_ type dataset collection id validity geometry attributes]
     ; compose with nil, because insert returns record. Should fix this...
     (jdbc-insert db type dataset collection id validity geometry attributes)
@@ -111,26 +164,32 @@ GROUP BY dataset, collection, feature_id"
   (close [_])
   )
 
-(deftype CachedJdbcProcessorPersistence [db batch batch-size cache load-cache?]
+(deftype CachedJdbcProcessorPersistence [db stream-batch stream-batch-size stream-cache stream-load-cache?
+                                         link-batch link-batch-size]
   ProcessorPersistence
   (init [_])
   (stream-exists? [this dataset collection id]
     (not (nil? (current-validity this dataset collection id))))
-  (create-stream [_ dataset collection id])
+  (create-stream [this dataset collection id]
+    (create-stream this dataset collection id nil nil))
+  (create-stream [_ dataset collection id parent-collection parent-id]
+    (let [batched (with-batch link-batch link-batch-size (partial jdbc-create-stream db))]
+      (batched dataset collection id parent-collection parent-id)))
   (append-to-stream [_ type dataset collection id validity geometry attributes]
     (let [key-fn   #(->> % (drop 1) (take 3))
           value-fn #(->> % (drop 4) (take 1) first)
-          batched (with-batch batch batch-size (partial jdbc-insert db))
-          cache-batched (with-cache cache batched key-fn value-fn)]
+          batched (with-batch stream-batch stream-batch-size (partial jdbc-insert db))
+          cache-batched (with-cache stream-cache batched key-fn value-fn)]
       (cache-batched type dataset collection id validity geometry attributes)))
   (current-validity [_ dataset collection id]
     (let [key-fn #(->> % (take 3))
           load-cache (fn [dataset collection id]
-                       (when (load-cache? dataset collection) (jdbc-load-cache db dataset collection)))
-          cached (use-cache cache key-fn load-cache)]
+                       (when (stream-load-cache? dataset collection) (jdbc-load-cache db dataset collection)))
+          cached (use-cache stream-cache key-fn load-cache)]
       (cached dataset collection id)))
   (close [_]
-    (flush-batch batch (partial jdbc-insert db)))
+    (flush-batch stream-batch (partial jdbc-insert db))
+    (flush-batch link-batch (partial jdbc-create-stream db)))
   )
 
 (defn once-true-fn
@@ -150,11 +209,14 @@ GROUP BY dataset, collection, feature_id"
 
 (defn cached-jdbc-processor-persistence [config]
   (let [db (:db-config config)
-        batch-size (or (:batch-size config) 100000)
-        batch (ref (clojure.lang.PersistentQueue/EMPTY))
-        cache (ref (cache/basic-cache-factory {}))
-        load-cache? (once-true-fn)]
-    (CachedJdbcProcessorPersistence. db batch batch-size cache load-cache?)))
+        stream-batch-size (or (:stream-batch-size config) (:batch-size config) 100000)
+        stream-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+        stream-cache (ref (cache/basic-cache-factory {}))
+        stream-load-cache? (once-true-fn)
+        link-batch-size (or (:link-batch-size config) (:batch-size config) 10000)
+        link-batch (ref (clojure.lang.PersistentQueue/EMPTY))]
+    (CachedJdbcProcessorPersistence. db stream-batch stream-batch-size stream-cache stream-load-cache?
+                                     link-batch link-batch-size)))
 
 ;; (def ^:private pgdb {:subprotocol "postgresql"
 ;;                      :subname "//localhost:5432/pdok"

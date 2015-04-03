@@ -24,7 +24,7 @@
       "New feature requires: dataset collection id validity geometry"
       (if (pers/stream-exists? persistence dataset collection id)
         (str "Stream already exists: " dataset ", " collection ", " id)
-        (do (pers/create-stream persistence dataset collection id)
+        (do (pers/create-stream persistence dataset collection id (:parent-collection feature) (:parent-id feature))
             (pers/append-to-stream persistence :new dataset collection id validity geometry attributes)
             (doseq [p projectors] (proj/new-feature p feature)))))))
 
@@ -58,11 +58,11 @@
         with-parent (-> (transient child)
                   (assoc! :dataset dataset)
                   (assoc! :parent-collection collection)
+                  (assoc! :parent-id id)
                   (assoc! :action action)
                   (assoc! :id child-id)
                   (assoc! :validity validity)
-                  (assoc! :collection (str collection "$" (name child-collection-key)))
-                  (assoc! :parent-id id))]
+                  (assoc! :collection (str collection "$" (name child-collection-key))))]
     (persistent! with-parent)))
 
 (defn- prefixed-attributes [prefix attributes]
@@ -73,10 +73,12 @@
 
 (defn- enrich [[child-collection-key child] parent new-attributes]
   (let [{:keys [dataset collection action id validity]} parent
-        child-id (str id "$" (java.util.UUID/randomUUID))
+        child-id (str (java.util.UUID/randomUUID))
         parent-attributes (prefixed-attributes child-collection-key new-attributes)
         enriched (-> (transient child)
                      (assoc! :dataset dataset)
+                     (assoc! :parent-collection collection)
+                     (assoc! :parent-id id)
                      (assoc! :collection (str collection "$" child-collection-key))
                      (assoc! :action action)
                      (assoc! :id child-id)
