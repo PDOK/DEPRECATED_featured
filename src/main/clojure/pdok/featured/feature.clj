@@ -33,6 +33,9 @@
         in (io/input-stream gml)]
     (.parse gml3-parser in)))
 
+(defmethod as-jts "jts" [obj]
+  (get obj "jts"))
+
 (defmulti as-wkt (fn [obj] str/lower-case (get obj "type")))
 
 (def wkt-writer (WKTWriter.))

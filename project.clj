@@ -21,6 +21,7 @@
                  [com.cognitect/transit-clj "0.8.269"]
                  [org.geotools/gt-xml "14-SNAPSHOT"]
                  [org.geotools/gt-epsg-extension "14-SNAPSHOT"]
+                 [org.geotools/gt-shapefile "14-SNAPSHOT"]
                  [org.codehaus.woodstox/woodstox-core-asl "4.4.1"]]
   :plugins [[lein-environ "1.0.0"]]
   :main ^:skip-aot pdok.featured.core
