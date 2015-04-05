@@ -17,34 +17,72 @@
                      :user (or (env :processor-database-user) "postgres")
                      :password (or (env :processor-database-password) "postgres")})
 
-(defn- process-new-feature [{:keys [persistence projectors]} feature]
-  ;;(println "hiero: " feature)
+(declare pre-process)
+
+(defn- make-invalid [feature reason]
+  (let [current-reasons (or (:invalid-reasons feature) [])
+        new-reasons (conj current-reasons reason)]
+    (-> feature (assoc :invalid true) (assoc :invalid-reasons new-reasons))))
+
+(defn- apply-all-features-validation [_ feature]
   (let [{:keys [dataset collection id validity geometry attributes]} feature]
-    (if (some nil? [dataset collection id validity geometry])
-      "New feature requires: dataset collection id validity geometry"
-      (if (pers/stream-exists? persistence dataset collection id)
-        (str "Stream already exists: " dataset ", " collection ", " id)
-        (do (pers/create-stream persistence dataset collection id (:parent-collection feature) (:parent-id feature))
-            (pers/append-to-stream persistence :new dataset collection id validity geometry attributes)
-            (doseq [p projectors] (proj/new-feature p feature)))))))
+    (if (some nil? [dataset collection id validity])
+      (make-invalid feature "All feature require: dataset collection id validity")
+      feature)))
+
+(defn- apply-new-feature-requires-geometry-validation [_ feature]
+  (if (nil? (:geometry feature))
+    (make-invalid feature "New feature requires: geometry")
+    feature))
+
+(defn- apply-new-feature-requires-non-existing-stream-validation [persistence feature]
+  (let [{:keys [dataset collection id]} feature]
+    (if (and (not (:invalid feature)) (pers/stream-exists? persistence dataset collection id))
+      (make-invalid feature (str "Stream already exists: " dataset ", " collection ", " id))
+      feature))
+  )
+
+(defn- apply-non-new-feature-requires-existing-stream-validation [persistence feature]
+  (let [{:keys [dataset collection id]} feature]
+    (if-not (or (:invalid feature) (pers/stream-exists? persistence dataset collection id))
+      (make-invalid feature (str "Stream does not exist yet: " dataset ", " collection ", " id))
+      feature)))
+
+(defn- apply-non-new-feature-requires-matching-current-validity-validation [persistence feature]
+  (let [{:keys [dataset collection id validity current-validity]} feature]
+    (if-not current-validity
+      (make-invalid feature "Non new feature requires: current-validity")
+      (let [stream-validity (pers/current-validity persistence dataset collection id)]
+        (if (not= current-validity stream-validity)
+          (make-invalid feature "When updating current-validity should match")
+          feature)))))
+
+(defn- apply-change-feature-cannot-have-nil-geometry-validation [_ feature]
+  (let [geometry (:geometry feature)]
+    (if (and (contains? feature :geometry) (nil? geometry))
+      (make-invalid feature "Change feature cannot have nil geometry (also remove the key)")
+      feature)))
+
+(defn- process-new-feature [{:keys [persistence projectors]} feature]
+  (let [validated (->> feature
+                       (apply-all-features-validation persistence)
+                       (apply-new-feature-requires-geometry-validation persistence)
+                       (apply-new-feature-requires-non-existing-stream-validation persistence))]
+    (when-not (:invalid validated)
+      (let [{:keys [dataset collection id validity geometry attributes]} validated]
+        (pers/create-stream persistence dataset collection id (:parent-collection feature) (:parent-id feature))
+        (doseq [p projectors] (proj/new-feature p validated))))
+    feature))
 
 (defn- process-change-feature [{:keys [persistence projectors]} feature]
-  (let [{:keys [dataset collection id current-validity validity]} feature]
-    (if (some nil? [dataset collection id current-validity validity])
-      "Change feature requires dataset collection id current-validity validity"
-      (let [geometry (:geometry feature)]
-        (if (and (contains? feature :geometry) (nil? geometry))
-          "Change feature cannot have nil geometry (also remove the key)"
-          (if (not (pers/stream-exists? persistence dataset collection id))
-            "Create feature stream first with :new"
-            (let [stream-validity (pers/current-validity persistence dataset collection id)]
-              (if (not= current-validity stream-validity)
-                "When changing current-validity should match"
-                (do (pers/append-to-stream persistence :change dataset collection
-                                           id validity geometry (:attributes feature))
-                    (doseq [p projectors] (proj/change-feature p feature)))))))))))
-
-
+  (let [validated (->> feature
+                       (apply-all-features-validation persistence)
+                       (apply-change-feature-cannot-have-nil-geometry-validation persistence)
+                       (apply-non-new-feature-requires-existing-stream-validation persistence)
+                       (apply-non-new-feature-requires-matching-current-validity-validation persistence))]
+    (when-not (:invalid validated)
+      (let [{:keys [dataset collection id current-validity validity geometry attributes]} validated]
+        (doseq [p projectors] (proj/change-feature p validated))))))
 
 (defn- nested-features [attributes]
   (letfn [( flat-multi [[key values]] (map #(vector key %) values))]
@@ -87,6 +125,7 @@
    (persistent! enriched) ))
 
 (defn- meta-close-all-features [features]
+  "{:action :close-all :dataset _ :collection _ :parent-id _ :end-time _"
   (let [grouped (group-by #(select-keys % [:dataset :collection :parent-id :validity]) features)]
     (letfn [(meta [d col pid v] {:action :close-all, :dataset d, :collection col, :parent-id pid :end-time v})]
       (map (fn [[{:keys [dataset collection parent-id validity]} _]]
@@ -101,21 +140,22 @@
         linked-nested (map #(link-parent % feature) nested)
         close-all (meta-close-all-features linked-nested)]
     (if (empty? linked-nested)
-      flat
-      (cons flat (concat close-all linked-nested)))
+      (list  flat)
+      (cons flat (concat close-all (mapcat pre-process linked-nested))))
     )
   )
 
 (defn- flatten-without-geometry [feature]
   ;; collection van parent is prefix, en voeg parents toe aan childs
-  (let [attributes (:attributes feature)
+  (let [dropped-parent (assoc feature :action :drop)
+        attributes (:attributes feature)
         nested (nested-features attributes)
         attributes-without-nested (apply dissoc attributes (map #(first %) nested))
         enriched-nested (map #(enrich % feature attributes-without-nested) nested)
         close-all (meta-close-all-features enriched-nested)]
     (if (empty? enriched-nested)
-      (assoc feature :action :drop)
-      (concat close-all enriched-nested)))
+      (list dropped-parent)
+      (cons dropped-parent (concat close-all (mapcat pre-process enriched-nested)))))
   )
 
 (defn- flatten [feature]
@@ -127,23 +167,37 @@
   (apply dissoc obj pdok-fields)
   )
 
-(defn- collected-attributes [feature]
+(defn- collect-attributes [feature]
   "Returns a feature where the attributes are collected in :attributes"
   (let [collected (merge (:attributes feature) (attributes feature))
-        no-attributes (select-keys feature pdok-fields)]
-    (assoc no-attributes :attributes collected)))
+        no-attributes (select-keys feature pdok-fields)
+        collected (assoc no-attributes :attributes collected)]
+    collected))
 
 (defn process [processor feature]
-  "Processes feature event. Returns nil or error reason"
-  (let [flat-feature (flatten (collected-attributes feature))]
-    (if (seq? flat-feature)
-      (doseq [f flat-feature] (process processor f))
-      (do ;(println "FLAT: " flat-feature)
-          (condp = (:action feature)
-            :new (process-new-feature processor flat-feature)
-            :change (process-change-feature processor flat-feature)
-            :close-all nil
-            (str "Cannot process: " flat-feature))))))
+  "Processes feature event. Should return the feature, possibly with added data"
+  ;;(println "FLAT: " flat-feature)
+  (condp = (:action feature)
+    :new (process-new-feature processor feature)
+    :change (process-change-feature processor feature)
+    :close-all nil ;; should save this too... So we can backtrack actions. Right?
+    :drop nil ;; Not sure if we need the drop at all?
+    (make-invalid feature "Unknown action")))
+
+(defn pre-process [feature]
+  (flatten (collect-attributes feature)))
+
+(defmulti consume (fn [_ features] (type features)))
+
+(defmethod consume clojure.lang.IPersistentMap [processor feature]
+  (consume processor (list feature)))
+
+(defmethod consume clojure.lang.ISeq [processor features]
+  (let [pre-processed (mapcat pre-process features)]
+    (doseq [f pre-processed]
+      (when-let [result (process processor f)]
+        (let [{:keys [action dataset collection id validity geometry attributes]} result]
+          (pers/append-to-stream (:persistence processor) action dataset collection id validity geometry attributes))))))
 
 (defn shutdown [{:keys [persistence projectors]}]
   "Shutdown feature store. Make sure all data is processed and persisted"
@@ -163,7 +217,7 @@
   (with-open [json (apply random-json-feature-stream "perftest" "col1" count args)]
     (let [processor (processor [(proj/geoserver-projector {:db-config proj/data-db})])
           features (features-from-stream json)]
-      (time (do (doseq [f features] (process processor f))
+      (time (do (consume processor features)
                 (shutdown processor)
                 ))
       )))

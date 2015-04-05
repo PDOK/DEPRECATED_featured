@@ -12,13 +12,11 @@
                        dataset-name
                        no-projectors]}]
   (println (str "start" (when dataset-name " dataset: " dataset-name) (when no-projectors " without projectors")))
-  (let [processor (if (nil? no-projectors)
-                    (processor [(proj/geoserver-projector {:db-config proj/data-db})])
-                    (processor [] ))
-        dataset dataset-name]
+  (let [processor (if no-projectors
+                    (processor [])
+                    (processor [(proj/geoserver-projector {:db-config proj/data-db})]))]
     (with-open [s (file-stream json-file)]
-      (time (do (doseq [feature (features-from-stream s :dataset dataset)]
-                  (process processor feature))
+      (time (do (consume processor (features-from-stream s :dataset dataset-name))
                 (println "flushing.")
                 (shutdown processor)))))
   (println "done.")
@@ -26,7 +24,7 @@
 
 (defn -main [& args]
   (let [parameters (parse-opts args cli-options)]
-    (execute (parameters :options))))
+    (execute (:options parameters))))
 
 (def cli-options
   [["-f" "--json-file FILE" "JSON-file with features"]
