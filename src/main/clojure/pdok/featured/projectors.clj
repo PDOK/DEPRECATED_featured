@@ -102,9 +102,10 @@
         ;; group per key collection so we can batch every group
         (let [keyed (group-by feature-keys collection-features)]
           (doseq [[columns vals] keyed]
-            (let [sql (gs-update-sql dataset collection (map name columns))
-                  update-vals (map feature-to-update-record vals)]
-              (j/execute! db (cons sql update-vals) :multi? true :transaction? false))))
+            (when (< 0 (count columns))
+              (let [sql (gs-update-sql dataset collection (map name columns))
+                    update-vals (map feature-to-update-record vals)]
+                (j/execute! db (cons sql update-vals) :multi? true :transaction? false)))))
         ))
     ;; (catch java.sql.SQLException e (j/print-sql-exception-chain e))
     ))
