@@ -42,6 +42,12 @@
       (assoc :_current_validity (:_validity feature))
       (assoc :_validity (tf/unparse date-time-formatter (local-now)))))
 
+(defn transform-to-close [feature]
+  (-> feature
+      (assoc :_action "close")
+      (assoc :_current_validity (:_validity feature))
+      (assoc :_validity (tf/unparse date-time-formatter (local-now)))))
+
 (defn transform-to-nested [feature]
   (apply dissoc feature [:_action :_collection :_id :_validity :_current_validity]))
 
@@ -68,13 +74,12 @@
          feature (reduce (fn [acc [attr generator]] (add-attribute acc attr generator)) feature attributes)]
       feature)))
 
-(defn selective-change-feature
+(defn selective-feature
   ([feature]
-   (let [change (transform-to-change feature)
-         feature (-> change
+   (let [result (-> feature
                      remove-an-attribute
                      nillify-an-attribute)]
-     feature)))
+     result)))
 
 (defn combine-to-nested-feature [[base & rest-features] attr top-geometry?]
   (let [base (if top-geometry? base (dissoc base :_geometry))
@@ -84,9 +89,17 @@
       1 (assoc base attr (first nested-features))
       (assoc base attr (into [] nested-features)))))
 
-(defn followed-by-change [feature]
-  (let [changed (selective-change-feature feature)]
-    (list feature changed)))
+(defn followed-by [feature change? close?]
+  (let [change (fn [f] (selective-feature (transform-to-change f)))
+        close  (fn [f] (selective-feature (transform-to-close f)))
+        result [feature]
+        result (if change?
+                 (conj result (change feature))
+                 result)
+        result (if close?
+                 (conj result (close feature))
+                 result)]
+    result))
 
 (defn create-attributes [simple-attributes & {:keys [names]}]
   (let [attribute-names (or names (repeatedly simple-attributes #(random-word 5)))
@@ -95,15 +108,15 @@
     attributes))
 
 (defn random-json-features [out-stream dataset collection total & args]
-  (let [{:keys [updates? nested geometry?] :or {updates? false nested 0 geometry? true}} args
+  (let [{:keys [change? close? nested geometry?] :or {change? false close? false nested 0 geometry? true}} args
         validity (tf/unparse date-time-formatter (local-now))
         attributes (create-attributes 3)
         new-features (repeatedly #(random-new-feature collection attributes))
         with-nested (map #(combine-to-nested-feature % "nested" geometry?) (partition (+ 1 nested) new-features))
-        with-changed (if updates? (mapcat followed-by-change with-nested) with-nested)
+        with-extra (mapcat #(followed-by % change? close?) with-nested)
         package {:_meta {}
                  :dataset dataset
-                 :features (take total with-changed)}]
+                 :features (take total with-extra)}]
     (json/generate-stream package out-stream)))
 
 (defn- random-json-feature-stream* [out-stream dataset collection total & args]
@@ -122,27 +135,32 @@
     (with-open [w (clojure.java.io/writer (str ".test-files/new-features-single-collection-" c ".json"))]
       (random-json-features w "newset" "collection1" c))))
 
-(defn generate-test-files-with-updates []
+(defn generate-test-files-with-changes []
   (doseq [c [10 100 1000 10000 100000]]
-    (with-open [w (clojure.java.io/writer (str ".test-files/update-features-single-collection-" c ".json"))]
-      (random-json-features w "updateset" "collection1" c :updates? true))))
+    (with-open [w (clojure.java.io/writer (str ".test-files/change-features-single-collection-" c ".json"))]
+      (random-json-features w "changeset" "collection1" c :change? true))))
+
+(defn generate-test-files-with-closes []
+  (doseq [c [10 100 1000 10000 100000]]
+    (with-open [w (clojure.java.io/writer (str ".test-files/close-features-single-collection-" c ".json"))]
+      (random-json-features w "closeset" "collection1" c :close? true))))
 
 (defn generate-test-files-with-nested-feature []
   (doseq [c [5 50 500 5000 50000]]
     (with-open [w (clojure.java.io/writer (str ".test-files/new-features-nested-feature-" c ".json"))]
-      (random-json-features w "updateset" "collection1" c :nested 1))))
+      (random-json-features w "nestedset" "collection1" c :nested 1))))
 
 (defn generate-test-files-with-nested-features []
   (doseq [c [3 33 333 3333 33333]]
     (with-open [w (clojure.java.io/writer (str ".test-files/new-features-nested-features-" c ".json"))]
-      (random-json-features w "newset" "collection1" c :nested 2))))
+      (random-json-features w "nestedset" "collection1" c :nested 2))))
 
 (defn generate-test-files-with-nested-feature-no-top-geometry []
   (doseq [c [10 100 1000 10000 100000]]
     (with-open [w (clojure.java.io/writer (str ".test-files/new-features-nested-feature-no-top-geometry-" c ".json"))]
-      (random-json-features w "newset" "collection1" c :nested 1 :geometry? false))))
+      (random-json-features w "nestedset" "collection1" c :nested 1 :geometry? false))))
 
 (defn generate-test-files-with-nested-features-no-top-geometry []
   (doseq [c [5 50 500 5000 50000]]
     (with-open [w (clojure.java.io/writer (str ".test-files/new-features-nested-features-no-top-geometry-" c ".json"))]
-      (random-json-features w "newset" "collection1" c :nested 2 :geometry? false))))
+      (random-json-features w "nestedset" "collection1" c :nested 2 :geometry? false))))
