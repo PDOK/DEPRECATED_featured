@@ -29,79 +29,81 @@
 
 (def attribute-generators [#(random-word 5) random-date random-moment])
 
-(defn random-new-feature
-  ([collection id validity attributes & {:keys [geometry?] :or {geometry? true}}]
-   (let [feature (transient {:_action "new"
-                          :_collection collection
-                          :_id id
-                          :_validity validity})
-         feature (if geometry? (assoc! feature :_geometry (random-geometry)) feature)
-         random-values (map (fn [[key gen]] (vector key (gen))) attributes)
-         feature (reduce (fn [acc val] ( apply assoc! acc val)) feature random-values)]
+(defn new-feature [collection id]
+   {:_action "new"
+      :_collection collection
+      :_id id
+      :_validity (tf/unparse date-time-formatter (local-now))
+      :_geometry (random-geometry)})
 
-     (persistent! feature))))
+(defn transform-to-change [feature]
+  (-> feature
+      (assoc :_action "change")
+      (assoc :_current_validity (:_validity feature))
+      (assoc :_validity (tf/unparse date-time-formatter (local-now)))))
 
-(defn update-an-attribute [attributes update-fn exceptions]
-  (let [valid-keys (keys (apply dissoc attributes exceptions))
+(defn transform-to-nested [feature]
+  (apply dissoc feature [:_action :_collection :_id :_validity :_current_validity]))
+
+(defn add-attribute [feature key generator]
+  (assoc feature key (generator)))
+
+(defn update-an-attribute [feature update-fn exceptions]
+  (let [valid-keys (keys (apply dissoc feature exceptions))
         key (rand-nth valid-keys)]
-    (update-fn attributes key)))
+    (update-fn feature key)))
 
-(defn remove-an-attribute [attributes]
-  (update-an-attribute attributes #(dissoc %1 %2)
+(defn remove-an-attribute [feature]
+  (update-an-attribute feature #(dissoc %1 %2)
                        [:_action :_collection :_id :_validity :_current_validity]))
 
-(defn nillify-an-attribute [attributes]
-  (update-an-attribute attributes #(assoc %1 %2 nil)
+(defn nillify-an-attribute [feature]
+  (update-an-attribute feature #(assoc %1 %2 nil)
                        [:_action :_collection :_id :_validity :_current_validity :_geometry]))
 
-(defn random-change-feature
-  ([collection id current-validity attributes]
-   (let [validity (tf/unparse date-time-formatter (local-now))
-         base {:_action "change"
-               :_collection collection
-               :_id id
-               :_current_validity current-validity
-               :_validity validity
-               :_geometry (random-geometry)}
-         random-values (map (fn [[key gen]] (vector key (gen))) attributes)
-         feature (-> (reduce (fn [acc val] ( apply assoc acc val)) base random-values)
-                     remove-an-attribute
-                     nillify-an-attribute
-                     )
-         ]
+(defn random-new-feature
+  ([collection attributes]
+   (let [id (random-word 10)
+         feature (new-feature collection id)
+         feature (reduce (fn [acc [attr generator]] (add-attribute acc attr generator)) feature attributes)]
+      feature)))
 
+(defn selective-change-feature
+  ([feature]
+   (let [change (transform-to-change feature)
+         feature (-> change
+                     remove-an-attribute
+                     nillify-an-attribute)]
      feature)))
 
-(defn random-nested-feature [attributes]
-  (let [base {:_geometry (random-geometry)}
-        random-values (map (fn [[key gen]] (vector key (gen))) attributes)
-        feature (reduce (fn [acc val] ( apply assoc acc val)) base random-values)]
-     feature))
+(defn combine-to-nested-feature [[base & rest-features] attr top-geometry?]
+  (let [base (if top-geometry? base (dissoc base :_geometry))
+        nested-features (map transform-to-nested rest-features)]
+    (case (count nested-features)
+      0 base
+      1 (assoc base attr (first nested-features))
+      (assoc base attr (into [] nested-features)))))
 
-(defn create-attributes [simple-attributes nested-features & {:keys [names]}]
+(defn followed-by-change [feature]
+  (let [changed (selective-change-feature feature)]
+    (list feature changed)))
+
+(defn create-attributes [simple-attributes & {:keys [names]}]
   (let [attribute-names (or names (repeatedly simple-attributes #(random-word 5)))
         generators (cycle attribute-generators)
         attributes (map #(vector %1 %2) attribute-names generators)]
-    (case nested-features
-      0 attributes
-      1 (conj attributes [(random-word 5) #(random-nested-feature (create-attributes 3 0 :names attribute-names))])
-      (let [nested-attr (create-attributes 3 0 :names attribute-names)]
-        (conj attributes [ (random-word 5)
-                           #(into [] (repeatedly nested-features (fn [] (random-nested-feature nested-attr))))]))
-      )))
+    attributes))
 
 (defn random-json-features [out-stream dataset collection total & args]
-  (let [{:keys [updates? nested] :or {updates? false nested 0}} args
+  (let [{:keys [updates? nested geometry?] :or {updates? false nested 0 geometry? true}} args
         validity (tf/unparse date-time-formatter (local-now))
-        attributes (create-attributes 3 nested)
-        gens (transient [])
-        gens (conj! gens (fn [id] (apply random-new-feature collection id validity attributes args)))
-        gens (if updates? (conj! gens (fn [id] (random-change-feature collection id validity attributes))) gens)
-        generator (apply juxt (persistent! gens))
-        gen-fn #(generator (random-word 10))
+        attributes (create-attributes 3)
+        new-features (repeatedly #(random-new-feature collection attributes))
+        with-nested (map #(combine-to-nested-feature % "nested" geometry?) (partition (+ 1 nested) new-features))
+        with-changed (if updates? (mapcat followed-by-change with-nested) with-nested)
         package {:_meta {}
                  :dataset dataset
-                 :features (mapcat identity (repeatedly total gen-fn))}]
+                 :features (take total with-changed)}]
     (json/generate-stream package out-stream)))
 
 (defn- random-json-feature-stream* [out-stream dataset collection total & args]
@@ -121,7 +123,7 @@
       (random-json-features w "newset" "collection1" c))))
 
 (defn generate-test-files-with-updates []
-  (doseq [c [5 50 500 5000 50000]]
+  (doseq [c [10 100 1000 10000 100000]]
     (with-open [w (clojure.java.io/writer (str ".test-files/update-features-single-collection-" c ".json"))]
       (random-json-features w "updateset" "collection1" c :updates? true))))
 
