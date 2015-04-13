@@ -4,9 +4,7 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :repositories [["osgeo" {:url "http://download.osgeo.org/webdav/geotools/"
-                           :snapshots false}]
-                 ["boundless" {:url "http://repo.boundlessgeo.com/main"
-                              :snapshots true}]]
+                           :snapshots false}]]
   :dependencies [[org.clojure/clojure "1.7.0-alpha5"]
                  [org.clojure/tools.trace "0.7.8"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
@@ -19,9 +17,9 @@
                  [org.clojure/java.jdbc "0.3.6"]
                  [postgresql "9.3-1102.jdbc41"]
                  [com.cognitect/transit-clj "0.8.269"]
-                 [org.geotools/gt-xml "14-SNAPSHOT"]
-                 [org.geotools/gt-epsg-extension "14-SNAPSHOT"]
-                 [org.geotools/gt-shapefile "14-SNAPSHOT"]
+                 [org.geotools/gt-xml "13.0"]
+                 [org.geotools/gt-epsg-extension "13.0"]
+                 [org.geotools/gt-shapefile "13.0"]
                  [org.codehaus.woodstox/woodstox-core-asl "4.4.1"]]
   :plugins [[lein-environ "1.0.0"]]
   :main ^:skip-aot pdok.featured.core
