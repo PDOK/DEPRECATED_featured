@@ -82,6 +82,9 @@
         (doseq [p projectors] (proj/new-feature p validated))))
     validated))
 
+(defn- process-nested-new-feature [processor feature]
+  (process-new-feature processor (assoc feature :action :new)))
+
 (defn- process-change-feature [{:keys [persistence projectors]} feature]
   (let [validated (->> feature
                        (apply-all-features-validation persistence)
@@ -94,6 +97,9 @@
         (doseq [p projectors] (proj/change-feature p validated))))
     validated))
 
+(defn- process-nested-change-feature [processor feature]
+  (process-change-feature processor (assoc feature :action :change)))
+
 (defn- process-close-feature [{:keys [persistence projectors]} feature]
   (let [validated (->> feature
                        (apply-all-features-validation persistence)
@@ -105,6 +111,18 @@
       (let [{:keys [dataset collection id current-validity validity geometry attributes]} validated]
         (doseq [p projectors] (proj/close-feature p validated))))
     validated))
+
+(defn- process-nested-close-feature [processor feature]
+  (let [nw (process-new-feature processor (assoc feature :action :new))
+        {:keys [action dataset collection id validity geometry attributes]} nw
+        no-update-nw (-> nw
+                         (assoc :action :close)
+                         (dissoc :geometry)
+                         (assoc :attributes [])
+                         (assoc :current-validity validity))]
+    ;; niet echt mooi om hier append to stream te doen. Maar voor nu maar even wel.
+    (pers/append-to-stream (:persistence processor) action dataset collection id validity geometry attributes)
+    (process-close-feature processor no-update-nw)))
 
 (defn- nested-features [attributes]
   (letfn [( flat-multi [[key values]] (map #(vector key %) values))]
@@ -119,7 +137,7 @@
                   (assoc! :dataset dataset)
                   (assoc! :parent-collection collection)
                   (assoc! :parent-id id)
-                  (assoc! :action :new)
+                  (assoc! :action  (keyword (str "nested-" (name (:action parent)))))
                   (assoc! :id child-id)
                   (assoc! :validity validity)
                   (assoc! :collection (str collection "$" (name child-collection-key))))]
@@ -140,7 +158,7 @@
                      (assoc! :parent-collection collection)
                      (assoc! :parent-id id)
                      (assoc! :collection (str collection "$" (name child-collection-key)))
-                     (assoc! :action :new)
+                     (assoc! :action (keyword (str "nested-" (name (:action parent)))))
                      (assoc! :id child-id)
                      (assoc! :validity validity)
                      (assoc! :attributes (merge (:attributes child) parent-attributes)))]
@@ -202,6 +220,9 @@
     :new (process-new-feature processor feature)
     :change (process-change-feature processor feature)
     :close (process-close-feature processor feature)
+    :nested-new (process-nested-new-feature processor feature)
+    :nested-change (process-nested-new-feature processor feature)
+    :nested-close  (process-nested-close-feature processor feature)
     :close-all nil ;; should save this too... So we can backtrack actions. Right?
     :drop nil ;; Not sure if we need the drop at all?
     (make-invalid feature "Unknown action")))

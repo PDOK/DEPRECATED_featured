@@ -24,7 +24,7 @@
   Object
   (clj-to-pg-type [_] "text")
   nil
-  (clj-to-pg-type [_] nil)
+  (clj-to-pg-type [_] "text")
   org.joda.time.DateTime
   (clj-to-pg-type  [_] "timestamp without time zone"))
 

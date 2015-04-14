@@ -11,7 +11,7 @@
 ;; CREATE TABLE featured.feature
 ;; (
 ;;   id bigserial NOT NULL,
-;;   action character(6) NOT NULL,
+;;   action character(12) NOT NULL,
 ;;   dataset character varying(100) NOT NULL,
 ;;   collection character varying(255) NOT NULL,
 ;;   feature_id character varying(50) NOT NULL,
@@ -119,13 +119,14 @@
   ([db action dataset collection id validity geometry attributes]
    (jdbc-insert db (list [action dataset collection id validity geometry attributes])))
   ([db entries]
-   (j/with-db-connection [c db]
-     (let [records (map jdbc-transform-for-db entries)]
-       (apply
-        (partial j/insert! c :featured.feature :transaction? false
-                 [:action :dataset :collection :feature_id :validity :geometry :attributes])
-        records)
-       ))))
+   (try (j/with-db-connection [c db]
+          (let [records (map jdbc-transform-for-db entries)]
+            (apply
+             (partial j/insert! c :featured.feature :transaction? false
+                      [:action :dataset :collection :feature_id :validity :geometry :attributes])
+             records)
+            ))
+        (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
 
 (defn- jdbc-load-cache [db dataset collection]
   (let [results

@@ -113,7 +113,7 @@
 
 (defn- gs-delete-sql [schema table]
   (str "DELETE FROM " (pg/quoted schema) "." (pg/quoted table)
-       "WHERE \"_id\" = ?"))
+       " WHERE \"_id\" = ?"))
 
 (defn- gs-delete-feature [db features]
   (try
