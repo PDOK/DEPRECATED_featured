@@ -63,6 +63,14 @@
       (make-invalid feature "Change feature cannot have nil geometry (also remove the key)")
       feature)))
 
+(defn- apply-closed-feature-cannot-be-changed-validation [persistence feature]
+  (let [{:keys [dataset collection id]} feature
+        last-action (pers/last-action persistence dataset collection id)]
+    (if (= :close last-action)
+      (make-invalid feature "Closed features cannot be altered")
+      feature))
+  )
+
 (defn- process-new-feature [{:keys [persistence projectors]} feature]
   (let [validated (->> feature
                        (apply-all-features-validation persistence)
@@ -72,17 +80,31 @@
       (let [{:keys [dataset collection id validity geometry attributes]} validated]
         (pers/create-stream persistence dataset collection id (:parent-collection feature) (:parent-id feature))
         (doseq [p projectors] (proj/new-feature p validated))))
-    feature))
+    validated))
 
 (defn- process-change-feature [{:keys [persistence projectors]} feature]
   (let [validated (->> feature
                        (apply-all-features-validation persistence)
                        (apply-change-feature-cannot-have-nil-geometry-validation persistence)
                        (apply-non-new-feature-requires-existing-stream-validation persistence)
+                       (apply-closed-feature-cannot-be-changed-validation persistence)
                        (apply-non-new-feature-requires-matching-current-validity-validation persistence))]
     (when-not (:invalid validated)
       (let [{:keys [dataset collection id current-validity validity geometry attributes]} validated]
-        (doseq [p projectors] (proj/change-feature p validated))))))
+        (doseq [p projectors] (proj/change-feature p validated))))
+    validated))
+
+(defn- process-close-feature [{:keys [persistence projectors]} feature]
+  (let [validated (->> feature
+                       (apply-all-features-validation persistence)
+                       (apply-closed-feature-cannot-be-changed-validation persistence)
+                       (apply-change-feature-cannot-have-nil-geometry-validation persistence)
+                       (apply-non-new-feature-requires-existing-stream-validation persistence)
+                       (apply-non-new-feature-requires-matching-current-validity-validation persistence))]
+    (when-not (:invalid validated)
+      (let [{:keys [dataset collection id current-validity validity geometry attributes]} validated]
+        (doseq [p projectors] (proj/close-feature p validated))))
+    validated))
 
 (defn- nested-features [attributes]
   (letfn [( flat-multi [[key values]] (map #(vector key %) values))]
@@ -154,7 +176,7 @@
         enriched-nested (map #(enrich % feature attributes-without-nested) nested)
         close-all (meta-close-all-features enriched-nested)]
     (if (empty? enriched-nested)
-      (list dropped-parent)
+      (list (if (= (:action feature) :new) dropped-parent feature))
       (cons dropped-parent (concat close-all (mapcat pre-process enriched-nested)))))
   )
 
@@ -176,10 +198,10 @@
 
 (defn process [processor feature]
   "Processes feature event. Should return the feature, possibly with added data"
-  ;;(println "FLAT: " flat-feature)
   (condp = (:action feature)
     :new (process-new-feature processor feature)
     :change (process-change-feature processor feature)
+    :close (process-close-feature processor feature)
     :close-all nil ;; should save this too... So we can backtrack actions. Right?
     :drop nil ;; Not sure if we need the drop at all?
     (make-invalid feature "Unknown action")))

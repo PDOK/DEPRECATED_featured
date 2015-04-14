@@ -75,8 +75,9 @@
   (create-stream
     [this dataset collection id]
     [this dataset collection id parent-collection parent-id])
-  (append-to-stream [this type dataset collection id validity geometry attributes])
+  (append-to-stream [this action dataset collection id validity geometry attributes])
   (current-validity [this dataset collection id])
+  (last-action [this dataset collection id])
   (close [_])
   )
 
@@ -129,38 +130,47 @@
 (defn- jdbc-load-cache [db dataset collection]
   (let [results
         (j/with-db-connection [c db]
-          (j/query c ["SELECT dataset, collection, feature_id, max(validity) as cur_val FROM featured.feature
-WHERE dataset = ? AND collection = ?
-GROUP BY dataset, collection, feature_id"
-                      dataset collection]))]
-    (map (fn [f] [[(:dataset f) (:collection f) (:feature_id f)] (:cur_val f)]) results)
+          (j/query c ["SELECT dataset, collection, feature_id, validity as cur_val, action as last_action FROM (
+ SELECT dataset, collection, feature_id, action, validity,
+ row_number() OVER (PARTITION BY dataset, collection, feature_id ORDER BY id DESC) AS rn
+ FROM featured.feature
+ WHERE dataset = ? AND collection = ?) a
+WHERE rn = 1"
+                      dataset collection] :as-arrays? true))]
+    (map (fn [f] (split-at 3 f)) results)
     )
   )
 
-(defn- jdbc-stream-validity [db dataset collection id]
+(defn- jdbc-last-stream-validity-and-action [db dataset collection id]
    (j/with-db-connection [c db]
      (let [results
-           (j/query c ["SELECT max(validity) FROM featured.feature
-                        WHERE dataset = ? AND collection = ? AND feature_id = ?"
-                       dataset collection id])]
-       (-> results first :max))))
+           (j/query c ["SELECT action, validity FROM (
+ SELECT action, validity,
+ row_number() OVER (PARTITION BY dataset, collection, feature_id ORDER BY id DESC) AS rn
+ FROM featured.feature
+ WHERE dataset = ? AND collection = ? AND feature_id = ?) a
+WHERE rn = 1"
+                       dataset collection id] :as-arrays? true)]
+       (-> results first))))
 
 (deftype JdbcProcessorPersistence [db]
   ProcessorPersistence
   (init [_])
   (stream-exists? [_ dataset collection id]
-    (let [current-validity (partial jdbc-stream-validity db)]
+    (let [current-validity (partial jdbc-last-stream-validity-and-action db)]
       (not (nil? (current-validity dataset collection id)))))
   (create-stream [this dataset collection id]
     (create-stream this dataset collection id nil nil))
   (create-stream [_ dataset collection id parent-collection parent-id]
     (jdbc-create-stream db dataset collection id parent-collection parent-id))
-  (append-to-stream [_ type dataset collection id validity geometry attributes]
+  (append-to-stream [_ action dataset collection id validity geometry attributes]
     ; compose with nil, because insert returns record. Should fix this...
-    (jdbc-insert db type dataset collection id validity geometry attributes)
+    (jdbc-insert db action dataset collection id validity geometry attributes)
     nil)
   (current-validity [_ dataset collection id]
-    (jdbc-stream-validity db dataset collection id))
+    (-> (jdbc-last-stream-validity-and-action db dataset collection id) first))
+  (last-action [_ dataset collection id]
+    (-> (jdbc-last-stream-validity-and-action db dataset collection id) second))
   (close [_])
   )
 
@@ -175,18 +185,24 @@ GROUP BY dataset, collection, feature_id"
   (create-stream [_ dataset collection id parent-collection parent-id]
     (let [batched (with-batch link-batch link-batch-size (partial jdbc-create-stream db))]
       (batched dataset collection id parent-collection parent-id)))
-  (append-to-stream [_ type dataset collection id validity geometry attributes]
+  (append-to-stream [_ action dataset collection id validity geometry attributes]
     (let [key-fn   #(->> % (drop 1) (take 3))
-          value-fn #(->> % (drop 4) (take 1) first)
+          value-fn (fn [params] [(nth params 4) (nth params 0)])
           batched (with-batch stream-batch stream-batch-size (partial jdbc-insert db))
           cache-batched (with-cache stream-cache batched key-fn value-fn)]
-      (cache-batched type dataset collection id validity geometry attributes)))
+      (cache-batched action dataset collection id validity geometry attributes)))
   (current-validity [_ dataset collection id]
     (let [key-fn #(->> % (take 3))
           load-cache (fn [dataset collection id]
                        (when (stream-load-cache? dataset collection) (jdbc-load-cache db dataset collection)))
           cached (use-cache stream-cache key-fn load-cache)]
-      (cached dataset collection id)))
+      (first (cached dataset collection id))))
+  (last-action [_ dataset collection id]
+    (let [key-fn #(->> % (take 3))
+          load-cache (fn [dataset collection id]
+                       (when (stream-load-cache? dataset collection) (jdbc-load-cache db dataset collection)))
+          cached (use-cache stream-cache key-fn load-cache)]
+      (second (cached dataset collection id))))
   (close [_]
     (flush-batch stream-batch (partial jdbc-insert db))
     (flush-batch link-batch (partial jdbc-create-stream db)))

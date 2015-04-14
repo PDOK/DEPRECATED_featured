@@ -9,6 +9,7 @@
 (defprotocol Projector
   (new-feature [proj feature])
   (change-feature [proj feature])
+  (close-feature [proj feature])
   (close [proj]))
 
 (defn- gs-dataset-exists? [db dataset]
@@ -110,7 +111,21 @@
     ;; (catch java.sql.SQLException e (j/print-sql-exception-chain e))
     ))
 
-(deftype GeoserverProjector [db cache insert-batch insert-batch-size update-batch update-batch-size]
+(defn- gs-delete-sql [schema table]
+  (str "DELETE FROM " (pg/quoted schema) "." (pg/quoted table)
+       "WHERE \"_id\" = ?"))
+
+(defn- gs-delete-feature [db features]
+  (try
+    (let [per-dataset-collection
+          (group-by #(select-keys % [:dataset :collection]) features)]
+      (doseq [[{:keys [dataset collection]} collection-features] per-dataset-collection]
+        (let [sql (gs-delete-sql dataset collection)
+              ids (map #(vector (:id %)) collection-features)]
+          (j/execute! db (cons sql ids) :multi? true :transaction? false))))))
+
+(deftype GeoserverProjector [db cache insert-batch insert-batch-size
+                             update-batch update-batch-size delete-batch delete-batch-size]
     Projector
     (new-feature [_ feature]
       (let [{:keys [dataset collection attributes]} feature
@@ -142,10 +157,16 @@
                 (gs-add-attribute db dataset collection (first a) (-> a second type)))
               (when (not-empty new-attributes) (cached-collection-attributes :reload dataset collection)))
         (batched-update-feature feature)))
+    (close-feature [_ feature]
+      (let [{:keys [dataset collection]} feature
+            batched-delete-feature (with-batch delete-batch delete-batch-size
+                                     (partial gs-delete-feature db))]
+        (batched-delete-feature feature)))
     (close [_]
       (let [cached-collection-attributes (cached cache gs-collection-attributes db)]
         (flush-batch insert-batch (partial gs-add-feature db cached-collection-attributes))
-        (flush-batch update-batch (partial gs-update-feature db)))))
+        (flush-batch update-batch (partial gs-update-feature db))
+        (flush-batch delete-batch (partial gs-delete-feature db)))))
 
 (defn geoserver-projector [config]
   (let [db (:db-config config)
@@ -153,8 +174,11 @@
         insert-batch-size (or (:insert-batch-size config) (:batch-size config) 10000)
         insert-batch (ref (clojure.lang.PersistentQueue/EMPTY))
         update-batch-size (or (:update-batch-size config) (:batch-size config) 10000)
-        update-batch (ref (clojure.lang.PersistentQueue/EMPTY))]
-    (GeoserverProjector. db cache insert-batch insert-batch-size update-batch update-batch-size)))
+        update-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+        delete-batch-size (or (:delete-batch-size config) (:batch-size config) 10000)
+        delete-batch (ref (clojure.lang.PersistentQueue/EMPTY))]
+    (GeoserverProjector. db cache insert-batch insert-batch-size
+                         update-batch update-batch-size delete-batch delete-batch-size)))
 
 (def data-db {:subprotocol "postgresql"
                      :subname (or (env :data-database-url) "//localhost:5432/pdok")
