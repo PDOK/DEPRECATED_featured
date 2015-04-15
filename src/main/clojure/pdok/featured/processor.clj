@@ -17,7 +17,7 @@
                      :user (or (env :processor-database-user) "postgres")
                      :password (or (env :processor-database-password) "postgres")})
 
-(declare pre-process)
+(declare consume process pre-process)
 
 (defn- make-invalid [feature reason]
   (let [current-reasons (or (:invalid-reasons feature) [])
@@ -165,11 +165,17 @@
    (persistent! enriched) ))
 
 (defn- meta-close-all-features [features]
-  "{:action :close-all :dataset _ :collection _ :parent-id _ :end-time _"
-  (let [grouped (group-by #(select-keys % [:dataset :collection :parent-id :validity]) features)]
-    (letfn [(meta [d col pid v] {:action :close-all, :dataset d, :collection col, :parent-id pid :end-time v})]
-      (map (fn [[{:keys [dataset collection parent-id validity]} _]]
-             (meta dataset collection parent-id validity)) grouped)
+  "{:action :close-all :dataset _ :collection _ :parent-collection _ :parent-id _ :end-time _"
+  (let [grouped (group-by #(select-keys % [:dataset :collection :parent-collection :parent-id :validity]) features)]
+    (letfn [(meta [dataset collection parent-collection parent-id validity]
+              {:action :close-all
+               :dataset dataset
+               :collection collection
+               :parent-collection parent-collection
+               :parent-id parent-id
+               :end-time validity})]
+      (map (fn [[{:keys [dataset collection parent-collection parent-id validity]} _]]
+             (meta dataset collection parent-collection parent-id validity)) grouped)
       )))
 
 (defn- flatten-with-geometry [feature]
@@ -214,6 +220,22 @@
         collected (assoc no-attributes :attributes collected)]
     collected))
 
+(defn- close-all [processor meta-record]
+  (let [{:keys [dataset collection parent-collection parent-id end-time]} meta-record
+        persistence (:persistence processor)
+        ids (pers/childs persistence dataset parent-collection parent-id collection )]
+    (doseq [id ids]
+      (let [validity (pers/current-validity persistence dataset collection id)
+            state (pers/last-action persistence dataset collection id)]
+        (when-not (= state :close)
+          (consume processor {
+                              :action :close
+                              :dataset dataset
+                              :collection collection
+                              :id id
+                              :current-validity validity
+                              :validity end-time}))))))
+
 (defn process [processor feature]
   "Processes feature event. Should return the feature, possibly with added data"
   (condp = (:action feature)
@@ -223,7 +245,7 @@
     :nested-new (process-nested-new-feature processor feature)
     :nested-change (process-nested-new-feature processor feature)
     :nested-close  (process-nested-close-feature processor feature)
-    :close-all nil ;; should save this too... So we can backtrack actions. Right?
+    :close-all (close-all processor feature);; should save this too... So we can backtrack actions. Right?
     :drop nil ;; Not sure if we need the drop at all?
     (make-invalid feature "Unknown action")))
 

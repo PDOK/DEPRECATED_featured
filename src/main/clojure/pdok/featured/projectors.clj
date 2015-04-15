@@ -148,7 +148,7 @@
             (batched-add-feature feature))))
     (change-feature [_ feature]
       (let [{:keys [dataset collection attributes]} feature
-            cached-collection-attributes (cached cache gs-collection-attributes)
+            cached-collection-attributes (cached cache gs-collection-attributes db)
             batched-update-feature (with-batch update-batch update-batch-size
                                      (partial gs-update-feature db))]
         (let [current-attributes (cached-collection-attributes dataset collection)
