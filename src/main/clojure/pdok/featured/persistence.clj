@@ -1,73 +1,11 @@
 (ns pdok.featured.persistence
   (:require [pdok.cache :refer :all]
+            [pdok.postgres :as pg]
             [clojure.core.cache :as cache]
             [clojure.java.jdbc :as j]
             [clj-time [coerce :as tc]]
             [cognitect.transit :as transit])
   (:import [java.io ByteArrayOutputStream]))
-
-;; DROP TABLE IF EXISTS featured.feature;
-
-;; CREATE TABLE featured.feature
-;; (
-;;   id bigserial NOT NULL,
-;;   action character(12) NOT NULL,
-;;   dataset character varying(100) NOT NULL,
-;;   collection character varying(255) NOT NULL,
-;;   feature_id character varying(50) NOT NULL,
-;;   validity timestamp without time zone NOT NULL,
-;;   geometry text NULL,
-;;   attributes text NULL,
-;;   CONSTRAINT feature_pkey PRIMARY KEY (id)
-;; )
-;; WITH (
-;;   OIDS=FALSE
-;; );
-;; ALTER TABLE featured.feature
-;;   OWNER TO postgres;
-
-;; CREATE INDEX feature_index
-;;   ON featured.feature
-;;   USING btree
-;;   (dataset, collection, id);
-
-;; --DROP TABLE featured.feature_link;
-
-;; CREATE TABLE featured.feature_stream
-;; (
-;;   id bigserial NOT NULL,
-;;   dataset character varying(100),
-;;   collection character varying(255),
-;;   feature_id character varying(50),
-;;   parent_collection character varying(255),
-;;   parent_id character varying(50),
-;;   CONSTRAINT feature_link_pkey PRIMARY KEY (id)
-;; )
-;; WITH (
-;;   OIDS=FALSE
-;; );
-;; ALTER TABLE featured.feature_link
-;;   OWNER TO postgres;
-
-;; -- Index: featured.link_child_index
-
-;; -- DROP INDEX featured.link_child_index;
-
-;; CREATE INDEX link_child_index
-;;   ON featured.feature_link
-;;   USING btree
-;;   (dataset COLLATE pg_catalog."default", collection COLLATE pg_catalog."default", feature_id COLLATE pg_catalog."default");
-
-;; -- Index: featured.link_parent_index
-
-;; -- DROP INDEX featured.link_parent_index;
-
-;; CREATE INDEX link_parent_index
-;;   ON featured.feature_link
-;;   USING btree
-;;   (dataset COLLATE pg_catalog."default", parent_collection COLLATE pg_catalog."default", parent_id COLLATE pg_catalog."default");
-
-
 
 (defprotocol ProcessorPersistence
   (init [this])
@@ -97,12 +35,48 @@
     (.toString out))
   )
 
+(def ^:dynamic *jdbc-schema* :featured)
+(def ^:dynamic *jdbc-features* :feature)
+(def ^:dynamic *jdbc-feature-stream* :feature_stream)
+
+(defn- qualified-features []
+  (str  (name *jdbc-schema*) "." (name *jdbc-features*)))
+
+(defn- qualified-feature-stream []
+  (str  (name *jdbc-schema*) "." (name *jdbc-feature-stream*)))
+
+(defn- jdbc-init [db]
+  (when-not (pg/schema-exists? db *jdbc-schema*)
+    (pg/create-schema db *jdbc-schema*))
+  (when-not (pg/table-exists? db *jdbc-schema* *jdbc-features*)
+    (pg/create-table db *jdbc-schema* *jdbc-features*
+                     [:id "bigserial" :primary :key]
+                     [:dataset "varchar(100)"]
+                     [:collection "varchar(100)"]
+                     [:feature_id "varchar(50)"]
+                     [:parent_collection "varchar(255)"]
+                     [:parent_id "varchar(50)"]
+                     [:closed "boolean" "default false"])
+    (pg/create-index db *jdbc-schema* *jdbc-features* :dataset :collection :feature_id)
+    (pg/create-index db *jdbc-schema* *jdbc-features* :dataset :parent_collection :parent_id))
+  (when-not (pg/table-exists? db *jdbc-schema* *jdbc-feature-stream*)
+    (pg/create-table db *jdbc-schema* *jdbc-feature-stream*
+                     [:id "bigserial" :primary :key]
+                     [:action "character(12)"]
+                     [:dataset "varchar(100)"]
+                     [:collection "varchar(255)"]
+                     [:feature_id "varchar(50)"]
+                     [:validity "timestamp without time zone"]
+                     [:geometry "text"]
+                     [:attributes "text"])
+    (pg/create-index db *jdbc-schema* *jdbc-feature-stream* :dataset :collection :feature_id)))
+
 (defn- jdbc-create-stream
   ([db dataset collection id parent-collection parent-id]
    (jdbc-create-stream db (list [dataset collection id parent-collection parent-id])))
   ([db entries]
    (j/with-db-connection [c db]
-     (apply ( partial j/insert! c :featured.feature_stream :transaction? false?
+     (apply ( partial j/insert! c (qualified-features) :transaction? false?
                       [:dataset :collection :feature_id :parent_collection :parent_id])
             entries))))
 
@@ -110,15 +84,15 @@
   ([db dataset collection id]
    (jdbc-create-stream db (list [dataset collection id])))
   ([db entries]
-   (let [sql "UPDATE featured.feature_stream SET closed = true
-WHERE dataset = ? AND collection = ?  AND feature_id = ?"]
+   (let [sql (str "UPDATE " (qualified-features) " SET closed = true
+WHERE dataset = ? AND collection = ?  AND feature_id = ?")]
      (j/execute! db (cons sql entries) :multi? true :transaction? false))))
 
 (defn- jdbc-load-childs-cache [db dataset parent-collection child-collection]
   (j/with-db-connection [c db]
     (let [results
-          (j/query c ["SELECT parent_id, feature_id FROM featured.feature_stream
-WHERE dataset = ?  AND parent_collection = ? AND collection = ? AND closed = false "
+          (j/query c [(str "SELECT parent_id, feature_id FROM " (qualified-features)
+" WHERE dataset = ?  AND parent_collection = ? AND collection = ? AND closed = false ")
                       dataset parent-collection child-collection])
           per-id (group-by :parent_id results)
           for-cache (map (fn [[parent-id values]]
@@ -129,8 +103,8 @@ WHERE dataset = ?  AND parent_collection = ? AND collection = ? AND closed = fal
 (defn- jdbc-get-childs [db dataset parent-collection parent-id child-collection]
   (j/with-db-connection [c db]
     (let [results
-          (j/query c ["SELECT feature_id FROM featured.feature_stream
-WHERE dataset = ? AND parent_collection = ?  AND parent_id = ? AND collection = ?  AND closed = false"
+          (j/query c [(str "SELECT feature_id FROM " (qualified-features)
+" WHERE dataset = ? AND parent_collection = ?  AND parent_id = ? AND collection = ?  AND closed = false")
                       dataset parent-collection parent-id child-collection] :as-arrays? true)]
       results)))
 
@@ -150,7 +124,7 @@ WHERE dataset = ? AND parent_collection = ?  AND parent_id = ? AND collection = 
    (try (j/with-db-connection [c db]
           (let [records (map jdbc-transform-for-db entries)]
             (apply
-             (partial j/insert! c :featured.feature :transaction? false
+             (partial j/insert! c (qualified-feature-stream) :transaction? false
                       [:action :dataset :collection :feature_id :validity :geometry :attributes])
              records)
             ))
@@ -159,12 +133,12 @@ WHERE dataset = ? AND parent_collection = ?  AND parent_id = ? AND collection = 
 (defn- jdbc-load-cache [db dataset collection]
   (let [results
         (j/with-db-connection [c db]
-          (j/query c ["SELECT dataset, collection, feature_id, validity as cur_val, action as last_action FROM (
+          (j/query c [(str "SELECT dataset, collection, feature_id, validity as cur_val, action as last_action FROM (
  SELECT dataset, collection, feature_id, action, validity,
  row_number() OVER (PARTITION BY dataset, collection, feature_id ORDER BY id DESC) AS rn
- FROM featured.feature
- WHERE dataset = ? AND collection = ?) a
-WHERE rn = 1"
+ FROM " (qualified-feature-stream)
+" WHERE dataset = ? AND collection = ?) a
+WHERE rn = 1")
                       dataset collection] :as-arrays? true))]
     (map (fn [f] (split-at 3 f)) results)
     )
@@ -176,15 +150,15 @@ WHERE rn = 1"
            (j/query c ["SELECT action, validity FROM (
  SELECT action, validity,
  row_number() OVER (PARTITION BY dataset, collection, feature_id ORDER BY id DESC) AS rn
- FROM featured.feature
- WHERE dataset = ? AND collection = ? AND feature_id = ?) a
+ FROM " (qualified-feature-stream)
+" WHERE dataset = ? AND collection = ? AND feature_id = ?) a
 WHERE rn = 1"
                        dataset collection id] :as-arrays? true)]
        (-> results first))))
 
 (deftype JdbcProcessorPersistence [db]
   ProcessorPersistence
-  (init [_])
+  (init [_] (jdbc-init db))
   (stream-exists? [_ dataset collection id]
     (let [current-validity (partial jdbc-last-stream-validity-and-action db)]
       (not (nil? (current-validity dataset collection id)))))
@@ -212,7 +186,7 @@ WHERE rn = 1"
 (deftype CachedJdbcProcessorPersistence [db stream-batch stream-batch-size stream-cache stream-load-cache?
                                          link-batch link-batch-size childs-cache childs-load-cache?]
   ProcessorPersistence
-  (init [_])
+  (init [_] (jdbc-init db))
   (stream-exists? [this dataset collection id]
     (not (nil? (current-validity this dataset collection id))))
   (create-stream [this dataset collection id]

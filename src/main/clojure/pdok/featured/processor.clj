@@ -275,6 +275,7 @@
    (let [jdbc-persistence (pers/cached-jdbc-processor-persistence {:db-config processor-db :batch-size 10000})]
     (processor jdbc-persistence projectors)))
   ([persistence projectors]
+   (pers/init persistence)
    {:persistence persistence
     :projectors projectors}))
 
