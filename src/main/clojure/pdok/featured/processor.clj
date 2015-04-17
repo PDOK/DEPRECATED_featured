@@ -2,7 +2,6 @@
   (:refer-clojure :exclude [flatten])
   (:require [pdok.featured.feature :as feature]
             [pdok.featured.persistence :as pers]
-            [pdok.featured.generator :refer [random-json-feature-stream]]
             [pdok.featured.json-reader :refer :all]
             [pdok.featured.projectors :as proj]
             [clj-time [local :as tl]]
@@ -278,15 +277,5 @@
    (pers/init persistence)
    {:persistence persistence
     :projectors projectors}))
-
-(defn performance-test [count & args]
-  (with-open [json (apply random-json-feature-stream "perftest" "col1" count args)]
-    (let [processor (processor [(proj/geoserver-projector {:db-config proj/data-db})])
-          features (features-from-stream json)]
-      (time (do (consume processor features)
-                (shutdown processor)
-                ))
-      )))
-
 
 ; features-from-stream

@@ -179,11 +179,3 @@
         delete-batch (ref (clojure.lang.PersistentQueue/EMPTY))]
     (GeoserverProjector. db cache insert-batch insert-batch-size
                          update-batch update-batch-size delete-batch delete-batch-size)))
-
-(def data-db {:subprotocol "postgresql"
-                     :subname (or (env :data-database-url) "//localhost:5432/pdok")
-                     :user (or (env :data-database-user) "postgres")
-                     :password (or (env :data-database-password) "postgres")})
-
-(def projectors
-  [(geoserver-projector {:db-config data-db})])
