@@ -20,7 +20,10 @@
 (defn with-cache [cache cached-fn key-fn value-fn]
   (fn [& args]
     (dosync
-     (alter cache #(cache/miss % (key-fn args) (value-fn args))))
+     (when-let [key (apply key-fn args)]
+       (when (some (complement nil?) key)
+         (let [current-value (cache/lookup @cache key)]
+           (alter cache #(cache/miss % key (apply value-fn current-value args)))))))
     (apply cached-fn args)))
 
 (defn apply-cache-miss-fn-result [cache key-value-pairs]
@@ -31,7 +34,7 @@
 (defn use-cache [cache key-fn cache-miss-fn]
   (fn [& args]
     (letfn [(cache-lookup [key] (cache/lookup @cache key))]
-      (let [cache-key (key-fn args)
+      (let [cache-key (apply key-fn args)
             cached (cache-lookup cache-key)]
         (if cached
           cached

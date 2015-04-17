@@ -13,7 +13,9 @@
   org.joda.time.DateTime
   (sql-value [v] (tc/to-timestamp v))
   com.vividsolutions.jts.geom.Geometry
-  (sql-value [v] (.write wkt-writer v)))
+  (sql-value [v] (.write wkt-writer v))
+  clojure.lang.Keyword
+  (sql-value [v] (name v)))
 
 (extend-protocol j/ISQLParameter
   com.vividsolutions.jts.geom.Geometry
@@ -24,7 +26,9 @@
   Object
   (clj-to-pg-type [_] "text")
   nil
-  (clj-to-pg-type [_] nil)
+  (clj-to-pg-type [_] "text")
+  clojure.lang.Keyword
+  (clj-to-pg-type [_] "text")
   org.joda.time.DateTime
   (clj-to-pg-type  [_] "timestamp without time zone"))
 
@@ -39,7 +43,7 @@
 
 (defn create-schema [db schema]
   "Create schema"
-  (j/db-do-commands db (str "CREATE SCHEMA " (quoted schema))))
+  (j/db-do-commands db (str "CREATE SCHEMA " (-> schema name quoted))))
 
 
 (defn table-exists? [db schema table]
@@ -52,14 +56,17 @@
 
 (defn create-table [db schema table & fields]
   (j/db-do-commands db
-                    (apply j/create-table-ddl (str schema "." table) fields)))
+                    (apply j/create-table-ddl (str (name schema) "." (name table)) fields)))
 
-(defn create-index [db schema table column]
-  (try
-    (j/db-do-commands db (str "CREATE INDEX " (quoted (str table column "_idx"))
-                              " ON "  (quoted schema) "." (quoted table)
-                              "  USING btree (" (quoted column) ")" ))
-    (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
+(defn create-index [db schema table & columns]
+  (let [column-names (map name columns)
+        index-name (str (name table) (clojure.string/join "" column-names) "_idx")
+        quoted-columns (clojure.string/join "," (map quoted column-names))]
+    (try
+      (j/db-do-commands db (str "CREATE INDEX " (quoted index-name)
+                                " ON "  (-> schema name quoted) "." (-> table name quoted)
+                                "  USING btree (" quoted-columns ")" ))
+      (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
 
 (defn table-columns [db schema table]
   "Get table columns"
@@ -74,5 +81,5 @@ FROM information_schema.columns
 (defn add-column [db schema collection column-name column-type]
   (let [template "ALTER TABLE %s.%s ADD %s %s NULL;"
         clj-type (clj-to-pg-type column-type)
-        cmd (format template (quoted schema) (quoted collection) (quoted column-name) clj-type)]
+        cmd (format template (-> schema name quoted) (-> collection name quoted) (-> column-name name quoted) clj-type)]
     (j/db-do-commands db cmd)))
