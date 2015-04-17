@@ -20,7 +20,8 @@
   (println (str "start" (when dataset-name " dataset: " dataset-name) (when no-projectors " without projectors")))
   (let [processor (if no-projectors
                     (processor [])
-                    (processor [(proj/geoserver-projector {:db-config data-db})]))]
+                    (processor [(proj/geoserver-projector {:db-config data-db})
+                                (proj/parent-child-projector {:db-config data-db})]))]
     (with-open [s (file-stream json-file)]
       (time (do (consume processor (features-from-stream s :dataset dataset-name))
                 (println "flushing.")
@@ -39,7 +40,8 @@
 
 (defn performance-test [count & args]
   (with-open [json (apply random-json-feature-stream "perftest" "col1" count args)]
-    (let [processor (processor [(proj/geoserver-projector {:db-config data-db})])
+    (let [processor (processor [(proj/geoserver-projector {:db-config data-db})
+                                (proj/parent-child-projector {:db-config data-db})])
           features (features-from-stream json)]
       (time (do (consume processor features)
                 (shutdown processor)

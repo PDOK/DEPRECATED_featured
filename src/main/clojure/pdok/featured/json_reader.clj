@@ -15,9 +15,11 @@
 
 (defn map-to-feature [dataset obj]
   (let [action (keyword (get obj "_action"))
+        validity (parse-time (obj "_validity"))
         feature (-> obj upgrade-data
                     (assoc :dataset dataset)
-                    (assoc :action action))]
+                    (assoc :action action)
+                    (assoc :validity validity))]
     feature))
 
 ;; 2015-02-26T15:48:26.578Z
