@@ -22,9 +22,16 @@
              (let [key-in-feature (keyword (clojure.string/replace k #"\{\{|\}\}" ""))]
       				(if (= :_geometry.gml key-in-feature)
             			;TODO split key and resolve function based on key
-                    	(as-gml (:geometry feature))
-                 		(or (.valAt (:attributes feature) key-in-feature)
+                    (as-gml (:_geometry feature))
+                   ; ((ns-resolve *ns* (symbol "pdok.featured.feature/as-gml")) (:_geometry feature))
+
+                 		(or (.valAt feature key-in-feature)
           				"")))))
 
+(defn replace-features-in-template [template features]
+  (let [ template (read-template template)
+         _ (println template)]
+         (for [feature (into [] features)]  
+           (replace-template template (->MapProxy feature)))))
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))

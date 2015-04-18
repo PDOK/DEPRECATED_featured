@@ -41,24 +41,42 @@
     :plus-fysiek-voorkomen-wegdeel "tegels"})
 
 (def example-feature-bgt-wegdeel 
-                  {:_action "new"
-                   :geometry example-geometry-bgt-wegdeel
-                   :attributes example-attributes-bgt-wegdeel})
+                  (merge
+                    {:_action "new"}
+                    {:_geometry example-geometry-bgt-wegdeel}
+                    example-attributes-bgt-wegdeel))
+
+(def another-example-feature-bgt-wegdeel 
+                  (merge
+                    {:_action "new"}
+                    {:_geometry example-geometry-bgt-wegdeel}
+                    example-attributes-bgt-wegdeel))
+
+(def example-features (list example-feature-bgt-wegdeel example-feature-bgt-wegdeel another-example-feature-bgt-wegdeel))
 
 (deftest replace-template-with-different-templates-and-mappings
-  (is (= resultTemplateMapping (replace-template testTemplate (->MapProxy {:attributes testMapping}))))
-  (is (= resultTemplate2Mapping2 (replace-template testTemplate2 (->MapProxy {:attributes testMapping2}))))
-  (is (= resultTemplate2Mapping (replace-template testTemplate2 (->MapProxy {:attributes testMapping})))))
+  (is (= resultTemplateMapping (replace-template testTemplate (->MapProxy testMapping))))
+  (is (= resultTemplate2Mapping2 (replace-template testTemplate2 (->MapProxy testMapping2))))
+  (is (= resultTemplate2Mapping (replace-template testTemplate2 (->MapProxy testMapping)))))
 
 
 (deftest bgt-wegdeel-template-to-pattern
    (println (template-to-pattern (read-template "pdok/featured/templates/bgt-wegdeel.template")))
   )
+  
+ (defn geo-test [] 
+   (replace-features-in-template 
+     "pdok/featured/templates/bgt-wegdeel.template" 
+     example-features))
+ 
+  (deftest replace-bgt geo-test)
+  
+  
+  
 
- (deftest bgt-replace
-  (let [ template (read-template "pdok/featured/templates/bgt-wegdeel.template")
-         _ (println template)
-         template-replaced (replace-template template (->MapProxy example-feature-bgt-wegdeel))]
-    (println template template-replaced)))
+         
+ 
+ 
+ 
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))
