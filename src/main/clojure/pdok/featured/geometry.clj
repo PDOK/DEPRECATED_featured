@@ -16,16 +16,19 @@
 (defn replace-template [template f-key-value]
   (clojure.string/replace template (template-to-pattern template) f-key-value))
 
+(defn on-attribute [function-as-string]
+  (ns-resolve *ns* (symbol (str "pdok.featured.feature/as-" function-as-string))))
+
 (deftype MapProxy [feature]
     clojure.lang.IFn
     	(invoke [_ k]
              (let [key-in-feature (keyword (clojure.string/replace k #"\{\{|\}\}" ""))]
       				(if (= :_geometry.gml key-in-feature)
-            			;TODO split key and resolve function based on key
-                    (as-gml (:_geometry feature))
-                   ; ((ns-resolve *ns* (symbol "pdok.featured.feature/as-gml")) (:_geometry feature))
+                  (let [function-on-attribute (str key-in-feature)
+                        function-on-attribute (last (clojure.string/split function-on-attribute #"\."))]
+                    ((on-attribute function-on-attribute) (:_geometry feature)))
 
-                 		(or (.valAt feature key-in-feature)
+                 	(or (.valAt feature key-in-feature)
           				"")))))
 
 (defn replace-features-in-template [template features]
