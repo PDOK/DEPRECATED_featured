@@ -1,13 +1,29 @@
 (ns pdok.postgres
   (:require [clojure.java.jdbc :as j]
-            [clj-time [coerce :as tc]])
+            [clj-time [coerce :as tc]]
+            [cognitect.transit :as transit])
   (:import [com.vividsolutions.jts.geom Geometry]
-           [com.vividsolutions.jts.io WKTWriter]))
+           [com.vividsolutions.jts.io WKTWriter]
+           [java.io ByteArrayOutputStream]))
 
 (defprotocol IPostgresType
   (clj-to-pg-type [v]))
 
 (def wkt-writer (WKTWriter.))
+
+(def joda-time-writer
+  (transit/write-handler
+   (constantly "m")
+   (fn [v] (-> v tc/to-date .getTime))
+   (fn [v] (-> v tc/to-date .getTime .toString))))
+
+(defn to-json [obj]
+  (let [out (ByteArrayOutputStream. 1024)
+        writer (transit/writer out :json
+                               {:handlers {org.joda.time.DateTime joda-time-writer}})]
+    (transit/write writer obj)
+    (.toString out))
+  )
 
 (extend-protocol j/ISQLValue
   org.joda.time.DateTime
@@ -15,12 +31,17 @@
   com.vividsolutions.jts.geom.Geometry
   (sql-value [v] (.write wkt-writer v))
   clojure.lang.Keyword
-  (sql-value [v] (name v)))
+  (sql-value [v] (name v))
+  clojure.lang.IPersistentMap
+  (sql-value [v] (to-json v)))
 
 (extend-protocol j/ISQLParameter
   com.vividsolutions.jts.geom.Geometry
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
-    (.setObject s i (j/sql-value v) java.sql.Types/OTHER)))
+    (.setObject s i (j/sql-value v) java.sql.Types/OTHER))
+  clojure.lang.IPersistentMap
+  (set-parameter [v ^java.sql.PreparedStatement s ^long i]
+    (.setObject s i (j/sql-value v) java.sql.Types/VARCHAR)))
 
 (extend-protocol IPostgresType
   Object
@@ -28,6 +49,8 @@
   nil
   (clj-to-pg-type [_] "text")
   clojure.lang.Keyword
+  (clj-to-pg-type [_] "text")
+  clojure.lang.IPersistentMap
   (clj-to-pg-type [_] "text")
   org.joda.time.DateTime
   (clj-to-pg-type  [_] "timestamp without time zone"))

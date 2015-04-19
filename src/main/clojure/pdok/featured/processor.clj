@@ -2,10 +2,9 @@
   (:refer-clojure :exclude [flatten])
   (:require [pdok.featured.feature :as feature]
             [pdok.featured.persistence :as pers]
-            [pdok.featured.generator :refer [random-json-feature-stream]]
             [pdok.featured.json-reader :refer :all]
             [pdok.featured.projectors :as proj]
-            [clj-time [local :as tl]]
+            [clj-time [local :as tl] [coerce :as tc]]
             [environ.core :refer [env]])
   (:import  [pdok.featured.projectors GeoserverProjector]))
 
@@ -53,7 +52,7 @@
     (if-not current-validity
       (make-invalid feature "Non new feature requires: current-validity")
       (let [stream-validity (pers/current-validity persistence dataset collection id)]
-        (if (not= current-validity stream-validity)
+        (if  (not= (tc/to-date current-validity) (tc/to-date stream-validity))
           (make-invalid feature "When updating current-validity should match")
           feature)))))
 
@@ -276,17 +275,9 @@
     (processor jdbc-persistence projectors)))
   ([persistence projectors]
    (pers/init persistence)
+   (doseq [p projectors]
+     (proj/init p))
    {:persistence persistence
     :projectors projectors}))
-
-(defn performance-test [count & args]
-  (with-open [json (apply random-json-feature-stream "perftest" "col1" count args)]
-    (let [processor (processor [(proj/geoserver-projector {:db-config proj/data-db})])
-          features (features-from-stream json)]
-      (time (do (consume processor features)
-                (shutdown processor)
-                ))
-      )))
-
 
 ; features-from-stream
