@@ -28,8 +28,7 @@
                         function-on-attribute (last (clojure.string/split function-on-attribute #"\."))]
                     ((on-attribute function-on-attribute) (:_geometry feature)))
 
-                 	(or (.valAt feature key-in-feature)
-          				"")))))
+                 	(or (.valAt feature key-in-feature) "")))))
 
 (defn replace-features-in-template [template features]
   (let [ template (read-template template)

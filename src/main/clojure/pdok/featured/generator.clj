@@ -54,6 +54,7 @@
 (defn add-attribute [feature key generator]
   (assoc feature key (generator)))
 
+
 (defn update-an-attribute [feature update-fn exceptions]
   (let [valid-keys (keys (apply dissoc feature exceptions))
         key (rand-nth valid-keys)]
@@ -110,7 +111,7 @@
 (defn random-json-features [out-stream dataset collection total & args]
   (let [{:keys [change? close? nested geometry?] :or {change? false close? false nested 0 geometry? true}} args
         validity (tf/unparse date-time-formatter (local-now))
-        attributes (create-attributes 3)
+        attributes (create-attributes 0 :names [":bronhouder" ":in-onderzoek" ":publicatie-datum"])
         new-features (repeatedly #(random-new-feature collection attributes))
         with-nested (map #(combine-to-nested-feature % "nested" geometry?) (partition (+ 1 nested) new-features))
         with-extra (mapcat #(followed-by % change? close?) with-nested)
