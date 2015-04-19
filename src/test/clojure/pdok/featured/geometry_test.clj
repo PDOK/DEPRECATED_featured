@@ -1,6 +1,7 @@
 (ns pdok.featured.geometry-test
    (:require [clojure.java.io :as io]
              [clojure.test :refer :all]
+             [cheshire.core :as json]
              [pdok.featured.geometry :refer :all]))
 
 (def testMapping {:begin "eerste stap", :eind "tweede stap"})
@@ -54,6 +55,9 @@
 
 (def example-features (list example-feature-bgt-wegdeel example-feature-bgt-wegdeel another-example-feature-bgt-wegdeel))
 
+
+(defn example-features [n] (repeat n example-feature-bgt-wegdeel))
+
 (deftest replace-template-with-different-templates-and-mappings
   (is (= resultTemplateMapping (replace-template testTemplate (->MapProxy testMapping))))
   (is (= resultTemplate2Mapping2 (replace-template testTemplate2 (->MapProxy testMapping2))))
@@ -64,16 +68,17 @@
    (println (template-to-pattern (read-template "pdok/featured/templates/bgt-wegdeel.template")))
   )
   
- (defn geo-test [] 
+ (defn geo-test [n] 
    (replace-features-in-template 
      "pdok/featured/templates/bgt-wegdeel.template" 
-     example-features))
+     (example-features n)))
  
-  (deftest replace-bgt geo-test)
-  
-  
-  
-
+  (deftest replace-bgt (geo-test (example-features 4)))
+ 
+  (defn write-gml-files []
+    (time (with-open [w (clojure.java.io/writer "target/features.gml.json")
+                ]
+       (json/generate-stream {:features (geo-test 100000)} w))))
          
  
  
