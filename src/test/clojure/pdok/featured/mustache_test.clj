@@ -17,9 +17,9 @@
 (def resultTemplate2Mapping "Eerst iets anders eerste stap en op het einde tweede stap")
 
 (deftest replace-template-with-different-templates-and-mappings
-  (is (= resultTemplateMapping (render-template-one-feature testTemplate (->MapProxy testMapping))))
-  (is (= resultTemplate2Mapping2 (render-template-one-feature testTemplate2 (->MapProxy testMapping2))))
-  (is (= resultTemplate2Mapping (render-template-one-feature testTemplate2 (->MapProxy testMapping)))))
+  (is (= resultTemplateMapping (render-template testTemplate (->MapProxy testMapping))))
+  (is (= resultTemplate2Mapping2 (render-template testTemplate2 (->MapProxy testMapping2))))
+  (is (= resultTemplate2Mapping (render-template testTemplate2 (->MapProxy testMapping)))))
 
 
 (def example-gml-bgt-wegdeel
