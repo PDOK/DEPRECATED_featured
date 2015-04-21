@@ -23,9 +23,10 @@
                     (processor [(proj/geoserver-projector {:db-config data-db})
                                 (proj/parent-child-projector {:db-config data-db})]))]
     (with-open [s (file-stream json-file)]
-      (time (do (consume processor (features-from-stream s :dataset dataset-name))
-                (println "flushing.")
-                (shutdown processor)))))
+      (let [consumed (consume processor (features-from-stream s :dataset dataset-name))]
+        (time (do (println "EVENTS PROCESSED: " (count consumed))
+                  (println "flushing.")
+                  (shutdown processor))))))
   (println "done.")
 )
 
@@ -38,12 +39,13 @@
    ["-d" "--dataset-name DATASET" "dataset"]
    ["-n" "--no-projectors"]])
 
-(defn performance-test [count & args]
-  (with-open [json (apply random-json-feature-stream "perftest" "col1" count args)]
+(defn performance-test [n & args]
+  (with-open [json (apply random-json-feature-stream "perftest" "col1" n args)]
     (let [processor (processor [(proj/geoserver-projector {:db-config data-db})
                                 (proj/parent-child-projector {:db-config data-db})])
-          features (features-from-stream json)]
-      (time (do (consume processor features)
+          features (features-from-stream json)
+          consumed (consume processor features)]
+      (time (do (println "EVENTS PROCESSED: " (count consumed))
                 (shutdown processor)
                 ))
       )))

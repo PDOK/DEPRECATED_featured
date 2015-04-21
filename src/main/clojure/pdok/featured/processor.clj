@@ -21,7 +21,7 @@
 (defn- make-invalid [feature reason]
   (let [current-reasons (or (:invalid-reasons feature) [])
         new-reasons (conj current-reasons reason)]
-    (-> feature (assoc :invalid true) (assoc :invalid-reasons new-reasons))))
+    (-> feature (assoc :invalid? true) (assoc :invalid-reasons new-reasons))))
 
 (defn- apply-all-features-validation [_ feature]
   (let [{:keys [dataset collection id validity geometry attributes]} feature]
@@ -36,14 +36,14 @@
 
 (defn- apply-new-feature-requires-non-existing-stream-validation [persistence feature]
   (let [{:keys [dataset collection id]} feature]
-    (if (and (not (:invalid feature)) (pers/stream-exists? persistence dataset collection id))
+    (if (and (not (:invalid? feature)) (pers/stream-exists? persistence dataset collection id))
       (make-invalid feature (str "Stream already exists: " dataset ", " collection ", " id))
       feature))
   )
 
 (defn- apply-non-new-feature-requires-existing-stream-validation [persistence feature]
   (let [{:keys [dataset collection id]} feature]
-    (if-not (or (:invalid feature) (pers/stream-exists? persistence dataset collection id))
+    (if-not (or (:invalid? feature) (pers/stream-exists? persistence dataset collection id))
       (make-invalid feature (str "Stream does not exist yet: " dataset ", " collection ", " id))
       feature)))
 
@@ -75,7 +75,7 @@
                        (apply-all-features-validation persistence)
                        (apply-new-feature-requires-geometry-validation persistence)
                        (apply-new-feature-requires-non-existing-stream-validation persistence))]
-    (when-not (:invalid validated)
+    (when-not (:invalid? validated)
       (let [{:keys [dataset collection id validity geometry attributes]} validated]
         (pers/create-stream persistence dataset collection id (:parent-collection feature) (:parent-id feature))
         (doseq [p projectors] (proj/new-feature p validated))))
@@ -91,7 +91,7 @@
                        (apply-non-new-feature-requires-existing-stream-validation persistence)
                        (apply-closed-feature-cannot-be-changed-validation persistence)
                        (apply-non-new-feature-requires-matching-current-validity-validation persistence))]
-    (when-not (:invalid validated)
+    (when-not (:invalid? validated)
       (let [{:keys [dataset collection id current-validity validity geometry attributes]} validated]
         (doseq [p projectors] (proj/change-feature p validated))))
     validated))
@@ -106,7 +106,7 @@
                        (apply-change-feature-cannot-have-nil-geometry-validation persistence)
                        (apply-non-new-feature-requires-existing-stream-validation persistence)
                        (apply-non-new-feature-requires-matching-current-validity-validation persistence))]
-    (when-not (:invalid validated)
+    (when-not (:invalid? validated)
       (let [{:keys [dataset collection id current-validity validity geometry attributes]} validated]
         (doseq [p projectors] (proj/close-feature p validated))))
     validated))
@@ -253,31 +253,37 @@
 
 (defmulti consume (fn [_ features] (type features)))
 
+(defn- feature-appender [{persistence :persistence} feature]
+  (let [{:keys [action dataset collection id validity geometry attributes]} feature]
+    (pers/append-to-stream persistence action dataset collection id validity geometry attributes)
+    feature))
+
 (defmethod consume clojure.lang.IPersistentMap [processor feature]
-  (consume processor (list feature)))
+  (let [pre-processed (pre-process feature)
+        consumed (filter (complement nil?) (map #(process processor %) pre-processed))
+        logged (map #(feature-appender processor %) consumed)]
+    logged))
 
 (defmethod consume clojure.lang.ISeq [processor features]
-  (let [pre-processed (mapcat pre-process features)]
-    (doseq [f pre-processed]
-      (when-let [result (process processor f)]
-        (let [{:keys [action dataset collection id validity geometry attributes]} result]
-          (pers/append-to-stream (:persistence processor) action dataset collection id validity geometry attributes))))))
+  (mapcat #(consume processor %) features))
 
 (defn shutdown [{:keys [persistence projectors]}]
   "Shutdown feature store. Make sure all data is processed and persisted"
-  (if-not persistence "persistence needed")
-  (pers/close persistence)
-  (doseq [p projectors] (proj/close p)))
+  (let [closed-persistence (pers/close persistence)
+        closed-projectors (doall (map proj/close projectors))]
+    {:persistence closed-persistence
+     :projectors closed-projectors}))
 
 (defn processor
   ([projectors]
    (let [jdbc-persistence (pers/cached-jdbc-processor-persistence {:db-config processor-db :batch-size 10000})]
     (processor jdbc-persistence projectors)))
   ([persistence projectors]
-   (pers/init persistence)
-   (doseq [p projectors]
-     (proj/init p))
-   {:persistence persistence
-    :projectors projectors}))
+   (let [initialized-persistence (pers/init persistence)
+         initialized-projectors (doall (map proj/init projectors))]
+     (doseq [p projectors]
+       (proj/init p))
+     {:persistence initialized-persistence
+      :projectors initialized-projectors})))
 
 ; features-from-stream

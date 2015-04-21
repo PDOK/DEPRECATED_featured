@@ -158,7 +158,7 @@ WHERE rn = 1"
 
 (deftype JdbcProcessorPersistence [db]
   ProcessorPersistence
-  (init [_] (jdbc-init db))
+  (init [this] (jdbc-init db) this)
   (stream-exists? [_ dataset collection id]
     (let [current-validity (partial jdbc-last-stream-validity-and-action db)]
       (not (nil? (current-validity dataset collection id)))))
@@ -176,7 +176,7 @@ WHERE rn = 1"
     (-> (jdbc-last-stream-validity-and-action db dataset collection id) second))
   (childs [_ dataset parent-collection parent-id child-collection]
     (jdbc-get-childs db dataset parent-collection parent-id child-collection))
-  (close [_])
+  (close [this] this)
   )
 
 (defn- append-cached-child [acc _ _ id _ _]
@@ -186,7 +186,7 @@ WHERE rn = 1"
 (deftype CachedJdbcProcessorPersistence [db stream-batch stream-batch-size stream-cache stream-load-cache?
                                          link-batch link-batch-size childs-cache childs-load-cache?]
   ProcessorPersistence
-  (init [_] (jdbc-init db))
+  (init [this] (jdbc-init db) this)
   (stream-exists? [this dataset collection id]
     (not (nil? (current-validity this dataset collection id))))
   (create-stream [this dataset collection id]
@@ -223,9 +223,10 @@ WHERE rn = 1"
                          (jdbc-load-childs-cache db dataset parent-collection child-collection)))
           cached (use-cache childs-cache key-fn load-cache)]
       (cached dataset parent-collection parent-id child-collection)))
-  (close [_]
+  (close [this]
     (flush-batch stream-batch (partial jdbc-insert db))
-    (flush-batch link-batch (partial jdbc-create-stream db)))
+    (flush-batch link-batch (partial jdbc-create-stream db))
+    this)
   )
 
 (defn once-true-fn

@@ -132,7 +132,7 @@
 (deftype GeoserverProjector [db cache insert-batch insert-batch-size
                              update-batch update-batch-size delete-batch delete-batch-size]
   Projector
-  (init [_])
+  (init [this] this)
   (new-feature [_ feature]
     (let [{:keys [dataset collection attributes]} feature
           cached-dataset-exists? (cached cache gs-dataset-exists? db)
@@ -168,11 +168,12 @@
           batched-delete-feature (with-batch delete-batch delete-batch-size
                                    (partial gs-delete-feature db))]
       (batched-delete-feature feature)))
-  (close [_]
+  (close [this]
     (let [cached-collection-attributes (cached cache gs-collection-attributes db)]
       (flush-batch insert-batch (partial gs-add-feature db cached-collection-attributes))
       (flush-batch update-batch (partial gs-update-feature db))
-      (flush-batch delete-batch (partial gs-delete-feature db)))))
+      (flush-batch delete-batch (partial gs-delete-feature db)))
+    this))
 
 (comment Een simpele tabel met een alle relevante (parent + childs) events in een array. Een trigger zorgt ervoor dat de huidige wordt dichtgezet en naar een history tabel wordt gezet.)
 
@@ -266,8 +267,8 @@ WHERE dataset = ? AND collection = ? AND  feature_id = ?"))
 (deftype ParentChildProjector [db stream-cache load-cache?-fn insert-batch insert-batch-size
                                update-batch update-batch-size]
   Projector
-  (init [_]
-    (pc-init db))
+  (init [this]
+    (pc-init db) this)
   (new-feature [_ feature]
     (let [cache-add-key-fn (fn [f] [(:dataset f) (pc-collection f) (pc-id f)])
           cache-add-value-fn (fn [_ f] true)
@@ -286,9 +287,10 @@ WHERE dataset = ? AND collection = ? AND  feature_id = ?"))
     (new-feature _ feature))
   (close-feature [_ feature]
     (new-feature _ feature))
-  (close [_]
+  (close [this]
     (flush-batch insert-batch (partial pc-new-stream db))
-    (flush-batch update-batch (partial pc-append-to-stream db)))
+    (flush-batch update-batch (partial pc-append-to-stream db))
+    this)
   )
 
 (defn geoserver-projector [config]
