@@ -1,8 +1,8 @@
-(ns pdok.featured.geometry-test
+(ns pdok.featured.mustache-test
    (:require [clojure.java.io :as io]
              [clojure.test :refer :all]
              [cheshire.core :as json]
-             [pdok.featured.geometry :refer :all]))
+             [pdok.featured.mustache :refer :all]))
 
 (def testMapping {:begin "eerste stap", :eind "tweede stap"})
 (def testTemplate "Dit is een {{begin}} en later nog een {{eind}}")
@@ -15,6 +15,11 @@
 (def resultTemplate2Mapping2 "Eerst iets anders aaa en op het einde bbb")
 
 (def resultTemplate2Mapping "Eerst iets anders eerste stap en op het einde tweede stap")
+
+(deftest replace-template-with-different-templates-and-mappings
+  (is (= resultTemplateMapping (render-template-one-feature testTemplate (->MapProxy testMapping))))
+  (is (= resultTemplate2Mapping2 (render-template-one-feature testTemplate2 (->MapProxy testMapping2))))
+  (is (= resultTemplate2Mapping (render-template-one-feature testTemplate2 (->MapProxy testMapping)))))
 
 
 (def example-gml-bgt-wegdeel
@@ -47,41 +52,26 @@
                     {:_geometry example-geometry-bgt-wegdeel}
                     example-attributes-bgt-wegdeel))
 
-(def another-example-feature-bgt-wegdeel 
-                  (merge
-                    {:_action "new"}
-                    {:_geometry example-geometry-bgt-wegdeel}
-                    example-attributes-bgt-wegdeel))
-
-(def example-features (list example-feature-bgt-wegdeel example-feature-bgt-wegdeel another-example-feature-bgt-wegdeel))
-
-
 (defn example-features [n] (repeat n example-feature-bgt-wegdeel))
 
-(deftest replace-template-with-different-templates-and-mappings
-  (is (= resultTemplateMapping (replace-template testTemplate (->MapProxy testMapping))))
-  (is (= resultTemplate2Mapping2 (replace-template testTemplate2 (->MapProxy testMapping2))))
-  (is (= resultTemplate2Mapping (replace-template testTemplate2 (->MapProxy testMapping)))))
 
-
-(deftest bgt-wegdeel-template-to-pattern
-   (println (template-to-pattern (read-template "pdok/featured/templates/bgt-wegdeel.template")))
-  )
-  
- (defn geo-test [n] 
-   (replace-features-in-template 
+ (defn render-wegdeel-with-example [n] 
+   (render-template 
      "pdok/featured/templates/bgt-wegdeel.template" 
      (example-features n)))
- 
-  (deftest replace-bgt (geo-test (example-features 4)))
- 
-  (defn write-gml-files []
-    (time (with-open [w (clojure.java.io/writer "target/features.gml.json")
-                ]
-       (json/generate-stream {:features (geo-test 100000)} w))))
-         
- 
- 
- 
+  
+ (deftest test-features-mapping
+   (is (= 5 (count(filter #(re-find #"G0303.0979f33001fd319ae05332a1e90a5e0b" %) (render-wegdeel-with-example 5))))))
 
-;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))
+ (deftest test-features-gml-mapping
+   (is (= 5 (count(filter #(re-find #"<gml:posList" %) (render-wegdeel-with-example 5))))))
+ 
+ (deftest test-5-features-5
+   (is (= 0 (count (filter #(re-find #"not be found" %) (render-wegdeel-with-example 5))))))
+
+ (defn write-gml-files [n]
+    (time (with-open [w (clojure.java.io/writer "target/features.gml.json")]
+       (json/generate-stream {:features (render-wegdeel-with-example n)} w))))
+         
+
+;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s)))))
