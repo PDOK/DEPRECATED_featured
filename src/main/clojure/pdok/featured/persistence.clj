@@ -20,21 +20,6 @@
   (close [_])
   )
 
-
-(def joda-time-writer
-  (transit/write-handler
-   (constantly "m")
-   (fn [v] (-> v tc/to-date .getTime))
-   (fn [v] (-> v tc/to-date .getTime .toString))))
-
-(defn to-json [obj]
-  (let [out (ByteArrayOutputStream. 1024)
-        writer (transit/writer out :json
-                               {:handlers {org.joda.time.DateTime joda-time-writer}})]
-    (transit/write writer obj)
-    (.toString out))
-  )
-
 (def ^:dynamic *jdbc-schema* :featured)
 (def ^:dynamic *jdbc-features* :feature)
 (def ^:dynamic *jdbc-feature-stream* :feature_stream)
@@ -108,26 +93,16 @@ WHERE dataset = ? AND collection = ?  AND feature_id = ?")]
                       dataset parent-collection parent-id child-collection] :as-arrays? true)]
       results)))
 
-(defn- jdbc-transform-for-db [entry]
-  (let [[type dataset collection id validity geometry attributes] entry
-        ]
-    [(name type) dataset collection id
-     (tc/to-timestamp validity)
-     (when geometry (to-json geometry))
-     (to-json attributes)])
-  )
-
 (defn- jdbc-insert
   ([db action dataset collection id validity geometry attributes]
    (jdbc-insert db (list [action dataset collection id validity geometry attributes])))
   ([db entries]
    (try (j/with-db-connection [c db]
-          (let [records (map jdbc-transform-for-db entries)]
-            (apply
-             (partial j/insert! c (qualified-feature-stream) :transaction? false
-                      [:action :dataset :collection :feature_id :validity :geometry :attributes])
-             records)
-            ))
+          (apply
+           (partial j/insert! c (qualified-feature-stream) :transaction? false
+                    [:action :dataset :collection :feature_id :validity :geometry :attributes])
+           entries)
+            )
         (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
 
 (defn- jdbc-load-cache [db dataset collection]

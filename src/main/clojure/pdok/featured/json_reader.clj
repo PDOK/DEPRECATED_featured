@@ -1,5 +1,6 @@
 (ns pdok.featured.json-reader
-  (:require [cheshire [core :as json] [factory :as jfac] [parse :as jparse]]
+  (:require [pdok.featured.feature :refer [nilled]]
+   [cheshire [core :as json] [factory :as jfac] [parse :as jparse]]
             [clj-time.format :as tf]
             [clojure.walk :refer [postwalk]])
   (:import (com.fasterxml.jackson.core JsonFactory JsonFactory$Feature
@@ -82,8 +83,11 @@
 (defn- evaluate-f [element]
   (let [[function params] element]
       (case function
-        "~#moment" (apply parse-time params)
-        "~#date"   (apply parse-time params)
+        "~#moment"  (if params (apply parse-time params) (nilled org.joda.time.DateTime))
+        "~#date"    (if params (apply parse-time params) (nilled org.joda.time.DateTime))
+        "~#int"     (if params (int (first params)) (nilled java.lang.Integer))
+        "~#boolean" (if params (boolean (first params)) (nilled java.lang.Boolean))
+        "~#double"  (if params (double (first params)) (nilled java.lang.Double))
         element ; never fail just return element
         ))
   )

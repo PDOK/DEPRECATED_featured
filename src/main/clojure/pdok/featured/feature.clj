@@ -1,13 +1,44 @@
 (ns pdok.featured.feature
   (:refer-clojure :exclude [type])
   (:require [clojure.string :as str]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [clojure.java.jdbc :as j]
+            [pdok.postgres :as pg]
+            [cognitect.transit :as transit])
   (:import [pdok.featured WstxParser]
            [org.geotools.gml2 SrsSyntax]
            [org.geotools.gml3 GMLConfiguration]
            [com.vividsolutions.jts.geom Geometry]
            [com.vividsolutions.jts.io WKTWriter]
            ))
+
+(deftype NilAttribute [class]
+  Object
+  (toString [_] nil)
+  clojure.lang.IEditableCollection
+  (asTransient [this] this)
+  clojure.lang.ITransientAssociative
+  (conj [this _] this)
+  (persistent [v] v)
+  (assoc [this _ _] this)
+  (valAt [_ _] class)
+  (valAt [_ _ _] class)
+  j/ISQLValue
+  (sql-value [v] nil)
+  clojure.lang.IMeta
+  (meta [_] {:type class})
+  )
+
+(defn nilled [class]
+  (->NilAttribute class))
+
+(def nil-attribute-writer
+  (transit/write-handler
+   "x"
+   (fn [v] (.getName (:class v)))
+   (fn [v] (.getName (:class v)))))
+
+(pg/register-transit-handler pdok.featured.feature.NilAttribute nil-attribute-writer)
 
 (def gml3-configuration
   (doto (GMLConfiguration.) (.setSrsSyntax SrsSyntax/OGC_URN)))

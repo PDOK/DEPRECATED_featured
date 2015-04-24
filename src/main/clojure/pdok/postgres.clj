@@ -6,9 +6,6 @@
            [com.vividsolutions.jts.io WKTWriter]
            [java.io ByteArrayOutputStream]))
 
-(defprotocol IPostgresType
-  (clj-to-pg-type [v]))
-
 (def wkt-writer (WKTWriter.))
 
 (def joda-time-writer
@@ -17,10 +14,17 @@
    (fn [v] (-> v tc/to-date .getTime))
    (fn [v] (-> v tc/to-date .getTime .toString))))
 
+(def transit-handlers (atom {}))
+
+(defn register-transit-handler [type handler]
+  (swap! transit-handlers assoc type handler))
+
+(register-transit-handler org.joda.time.DateTime joda-time-writer)
+
 (defn to-json [obj]
   (let [out (ByteArrayOutputStream. 1024)
         writer (transit/writer out :json
-                               {:handlers {org.joda.time.DateTime joda-time-writer}})]
+                       {:handlers @transit-handlers})]
     (transit/write writer obj)
     (.toString out))
   )
@@ -43,17 +47,16 @@
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
     (.setObject s i (j/sql-value v) java.sql.Types/VARCHAR)))
 
-(extend-protocol IPostgresType
-  Object
-  (clj-to-pg-type [_] "text")
-  nil
-  (clj-to-pg-type [_] "text")
-  clojure.lang.Keyword
-  (clj-to-pg-type [_] "text")
-  clojure.lang.IPersistentMap
-  (clj-to-pg-type [_] "text")
-  org.joda.time.DateTime
-  (clj-to-pg-type  [_] "timestamp without time zone"))
+(defn clj-to-pg-type [clj-type]
+  (condp = clj-type
+    nil "text"
+    clojure.lang.Keyword "text"
+    clojure.lang.IPersistentMap "text"
+    org.joda.time.DateTime "timestamp without time zone"
+    java.lang.Integer "integer"
+    java.lang.Double "double precision"
+    java.lang.Boolean "boolean"
+    "text"))
 
 (def quoted (j/quoted \"))
 
