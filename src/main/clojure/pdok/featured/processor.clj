@@ -248,8 +248,19 @@
     :drop nil ;; Not sure if we need the drop at all?
     (make-invalid feature "Unknown action")))
 
-(defn pre-process [feature]
-  (flatten (collect-attributes feature)))
+ 
+(defn rename-keys [src-map change-key]
+  "Change keys in map with function change-key"
+  (let [kmap (into {} (map #(vector %1 (change-key %1)) (keys src-map)))]
+     (clojure.set/rename-keys src-map kmap)))
+
+(defn lower-case [feature]
+  (let [attributes-lower-case (rename-keys (:attributes feature) clojure.string/lower-case)
+        feature-lower-case (assoc feature :attributes attributes-lower-case)]
+  (update-in feature-lower-case [:collection] clojure.string/lower-case)))
+
+(defn pre-process [feature]                        
+   ((comp flatten lower-case collect-attributes) feature))
 
 (defmulti consume (fn [_ features] (type features)))
 
