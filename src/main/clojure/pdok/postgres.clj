@@ -82,7 +82,7 @@
 
 (defn create-table [db schema table & fields]
   (j/db-do-commands db
-                    (apply j/create-table-ddl (str (name schema) "." (name table)) fields)))
+                    (apply j/create-table-ddl (str (-> schema name quoted) "." (-> table name quoted)) fields)))
 
 (defn create-index [db schema table & columns]
   (let [column-names (map name columns)

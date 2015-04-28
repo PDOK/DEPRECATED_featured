@@ -89,7 +89,7 @@
            (let [all-attributes (all-attributes-fn dataset collection)
                  all-fields-constructor (apply juxt (map #(fn [col] (get col %)) all-attributes))
                  records (map #(feature-to-sparse-record % all-fields-constructor) grouped-features)
-                 fields (concat [:_id :_geometry] (map keyword all-attributes))]
+                 fields (concat [:_id :_geometry] (map (comp keyword pg/quoted) all-attributes))]
              (apply
               (partial j/insert! c (str dataset "." collection) fields) records)))))
       (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
