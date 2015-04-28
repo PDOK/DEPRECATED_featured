@@ -50,7 +50,7 @@
                   (merge
                     {:_action "new"}
                     {:_geometry example-geometry-bgt-wegdeel}
-                    example-attributes-bgt-wegdeel))
+                     example-attributes-bgt-wegdeel))
 
 (defn example-features [n] (repeat n example-feature-bgt-wegdeel))
 
@@ -72,6 +72,9 @@
  (defn write-gml-files [n]
     (time (with-open [w (clojure.java.io/writer "target/features.gml.json")]
        (json/generate-stream {:features (render-wegdeel-with-example n)} w))))
+  
+ (def test-map {:Mutatie "Iets" :AndereMutatie "EnIetsAnders"})
+ 
          
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s)))))

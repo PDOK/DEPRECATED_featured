@@ -28,7 +28,8 @@
 
                   (or (.valAt feature feature-key) "")))))
 
-(defmulti render-template (fn [template features] (if (instance? clojure.lang.IFn features) :single-feature :feature-collection)))
+(defmulti render-template (fn [template features] 
+  (if (instance? clojure.lang.IFn features) :single-feature :feature-collection)))
 
 (defmethod render-template :single-feature [template feature] 
   (clojure.string/replace template (template-to-pattern template) feature))
