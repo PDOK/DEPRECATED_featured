@@ -78,6 +78,9 @@
         rec (conj! rec id)]
     (persistent! rec)))
 
+(defn- all-fields-constructor [attributes] 
+  (if (empty? attributes) (constantly nil) (apply juxt (map #(fn [col] (get col %)) attributes))))
+
 (defn- gs-add-feature
   ([db all-attributes-fn features]
    (try
@@ -87,11 +90,9 @@
        (doseq [[{:keys [dataset collection]} grouped-features] per-dataset-collection]
          (j/with-db-connection [c db]
            (let [all-attributes (all-attributes-fn dataset collection)
-                 all-fields-constructor (apply juxt (map #(fn [col] (get col %)) all-attributes))
-                 records (map #(feature-to-sparse-record % all-fields-constructor) grouped-features)
+                 records (map #(feature-to-sparse-record % (all-fields-constructor all-attributes)) grouped-features)
                  fields (concat [:_id :_geometry] (map (comp keyword pg/quoted) all-attributes))]
-             (apply
-              (partial j/insert! c (str dataset "." (pg/quoted collection)) fields) records)))))
+                          (apply (partial j/insert! c (str dataset "." (pg/quoted collection)) fields) records)))))
       (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
   )
 
