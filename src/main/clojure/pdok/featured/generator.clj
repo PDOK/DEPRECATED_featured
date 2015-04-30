@@ -111,7 +111,7 @@
 (defn random-json-features [out-stream dataset collection total & args]
   (let [{:keys [change? close? nested geometry?] :or {change? false close? false nested 0 geometry? true}} args
         validity (tf/unparse date-time-formatter (local-now))
-        attributes (create-attributes 0 :names [":bronhouder" ":in-onderzoek" ":publicatie-datum"])
+        attributes (create-attributes 3)
         new-features (repeatedly #(random-new-feature collection attributes))
         with-nested (map #(combine-to-nested-feature % "nested" geometry?) (partition (+ 1 nested) new-features))
         with-extra (mapcat #(followed-by % change? close?) with-nested)

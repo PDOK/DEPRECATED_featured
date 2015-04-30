@@ -13,7 +13,7 @@
     (pers/create-stream this dataset collection id nil nil))
   (create-stream [this dataset collection id parent-collection parent-id]
     (swap! streams-n inc))
-  (append-to-stream [this action dataset collection id validity geometry attributes]
+  (append-to-stream [this version action dataset collection id validity geometry attributes]
     (swap! appends-n inc))
   (current-validity [_ dataset collection id]
     current-validity)
@@ -89,8 +89,11 @@
 
 (def make-broken-new-transformations
   [["no dataset" #(dissoc % :dataset)]
+   ["empty dataset" #(assoc % :dataset "")]
    ["no collection" #(dissoc % :collection)]
+   ["empty collection" #(assoc % :collection "")]
    ["no id" #(dissoc % :id)]
+   ["empty id" #(assoc % :id "")]
    ["no validity" #(dissoc % :id)]])
 
 (deftest nok-new-feature
@@ -98,11 +101,11 @@
     (let [processor (create-processor)
           invalid-new-feature (transform valid-new-feature)
           processed (first(consume processor invalid-new-feature))]
-      (testing (str  name "should break")
+      (testing (str name " should break")
         (is (not (nil? processed)))
         (is (:invalid? processed))
         (is (= 0 @(-> processor :persistence :streams-n)))
-        (is (= 1 @(-> processor :persistence :appends-n))) ; do append for logging
+        (is (= 0 @(-> processor :persistence :appends-n)))
         (is (= 0 @(-> processor :projectors first :features-n)))))))
 
 (deftest ok-change-feature
@@ -133,7 +136,7 @@
       (testing (str name " should break")
         (is (not (nil? processed)))
         (is (:invalid? processed))
-        (is (= 1 @(-> processor :persistence :appends-n)))
+        (is (= 0 @(-> processor :persistence :appends-n)))
         (is (= 0 @(-> processor :projectors first :features-n))) ; no new features
         (is (= 0 @(-> processor :projectors first :changes-n))))
       )))

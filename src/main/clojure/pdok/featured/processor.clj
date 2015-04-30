@@ -1,14 +1,16 @@
 (ns pdok.featured.processor
   (:refer-clojure :exclude [flatten])
-  (:require [pdok.featured.feature :as feature]
+  (:require [pdok.random :as random]
+            [pdok.featured.feature :as feature]
             [pdok.featured.persistence :as pers]
             [pdok.featured.json-reader :refer :all]
             [pdok.featured.projectors :as proj]
             [clj-time [local :as tl] [coerce :as tc]]
-            [environ.core :refer [env]])
+            [environ.core :refer [env]]
+            [clojure.string :as str])
   (:import  [pdok.featured.projectors GeoserverProjector]))
 
-(def ^:private pdok-fields [:action :id :dataset :collection :validity :geometry :current-validity
+(def ^:private pdok-fields [:action :id :dataset :collection :validity :version :geometry :current-validity
                             :parent-id :parent-collection :attributes])
 
 (def ^:private processor-db {:subprotocol "postgresql"
@@ -16,7 +18,7 @@
                      :user (or (env :processor-database-user) "postgres")
                      :password (or (env :processor-database-password) "postgres")})
 
-(declare consume process pre-process)
+(declare consume process pre-process append-feature)
 
 (defn- make-invalid [feature reason]
   (let [current-reasons (or (:invalid-reasons feature) [])
@@ -25,7 +27,7 @@
 
 (defn- apply-all-features-validation [_ feature]
   (let [{:keys [dataset collection id validity geometry attributes]} feature]
-    (if (some nil? [dataset collection id validity])
+    (if (or (some str/blank? [dataset collection id]) (nil? validity))
       (make-invalid feature "All feature require: dataset collection id validity")
       feature)))
 
@@ -78,6 +80,7 @@
     (when-not (:invalid? validated)
       (let [{:keys [dataset collection id validity geometry attributes]} validated]
         (pers/create-stream persistence dataset collection id (:parent-collection feature) (:parent-id feature))
+        (append-feature persistence validated)
         (doseq [p projectors] (proj/new-feature p validated))))
     validated))
 
@@ -92,6 +95,7 @@
                        (apply-closed-feature-cannot-be-changed-validation persistence)
                        (apply-non-new-feature-requires-matching-current-validity-validation persistence))]
     (when-not (:invalid? validated)
+      (append-feature persistence validated)
       (let [{:keys [dataset collection id current-validity validity geometry attributes]} validated]
         (doseq [p projectors] (proj/change-feature p validated))))
     validated))
@@ -107,6 +111,7 @@
                        (apply-non-new-feature-requires-existing-stream-validation persistence)
                        (apply-non-new-feature-requires-matching-current-validity-validation persistence))]
     (when-not (:invalid? validated)
+      (append-feature persistence validated)
       (let [{:keys [dataset collection id current-validity validity geometry attributes]} validated]
         (doseq [p projectors] (proj/close-feature p validated))))
     validated))
@@ -119,9 +124,7 @@
                          (dissoc :geometry)
                          (assoc :attributes [])
                          (assoc :current-validity validity))]
-    ;; niet echt mooi om hier append to stream te doen. Maar voor nu maar even wel.
-    (pers/append-to-stream (:persistence processor) action dataset collection id validity geometry attributes)
-    (process-close-feature processor no-update-nw)))
+    (list nw (process-close-feature processor no-update-nw))))
 
 (defn- nested-features [attributes]
   (letfn [( flat-multi [[key values]] (map #(vector key %) values))]
@@ -219,36 +222,43 @@
         collected (assoc no-attributes :attributes collected)]
     collected))
 
-(defn- close-all [processor meta-record]
-  (let [{:keys [dataset collection parent-collection parent-id end-time]} meta-record
-        persistence (:persistence processor)
-        ids (pers/childs persistence dataset parent-collection parent-id collection )]
-    (doseq [id ids]
-      (let [validity (pers/current-validity persistence dataset collection id)
+(defn- close-all* [processor dataset collection id end-time]
+  (let [persistence (:persistence processor)
+        validity (pers/current-validity persistence dataset collection id)
             state (pers/last-action persistence dataset collection id)]
         (when-not (= state :close)
-          (consume processor {
-                              :action :close
+          (consume processor {:action :close
                               :dataset dataset
                               :collection collection
                               :id id
                               :current-validity validity
-                              :validity end-time}))))))
+                              :validity end-time}))))
+
+(defn- close-all [processor meta-record]
+  (let [{:keys [dataset collection parent-collection parent-id end-time]} meta-record
+        persistence (:persistence processor)
+        ids (pers/childs persistence dataset parent-collection parent-id collection )
+        closed (doall (mapcat #(close-all* processor dataset collection % end-time) ids))]
+    closed))
+
+(defn make-seq [obj]
+  (if (seq? obj) obj (list obj)))
 
 (defn process [processor feature]
   "Processes feature event. Should return the feature, possibly with added data"
-  (condp = (:action feature)
-    :new (process-new-feature processor feature)
-    :change (process-change-feature processor feature)
-    :close (process-close-feature processor feature)
-    :nested-new (process-nested-new-feature processor feature)
-    :nested-change (process-nested-new-feature processor feature)
-    :nested-close  (process-nested-close-feature processor feature)
-    :close-all (close-all processor feature);; should save this too... So we can backtrack actions. Right?
-    :drop nil ;; Not sure if we need the drop at all?
-    (make-invalid feature "Unknown action")))
+  (let [vf (assoc feature :version (random/UUID))]
+    (condp = (:action vf)
+      :new (process-new-feature processor vf)
+      :change (process-change-feature processor vf)
+      :close (process-close-feature processor vf)
+      :nested-new (process-nested-new-feature processor vf)
+      :nested-change (process-nested-new-feature processor vf)
+      :nested-close  (process-nested-close-feature processor vf)
+      :close-all (close-all processor vf);; should save this too... So we can backtrack actions. Right?
+      :drop nil ;; Not sure if we need the drop at all?
+      (make-invalid vf "Unknown action"))))
 
- 
+
 (defn rename-keys [src-map change-key]
   "Change keys in map with function change-key"
   (let [kmap (into {} (map #(vector %1 (change-key %1)) (keys src-map)))]
@@ -257,23 +267,24 @@
 (defn lower-case [feature]
   (let [attributes-lower-case (rename-keys (:attributes feature) clojure.string/lower-case)
         feature-lower-case (assoc feature :attributes attributes-lower-case)]
-  (update-in feature-lower-case [:collection] clojure.string/lower-case)))
+    (if (str/blank? (:collection feature-lower-case))
+      feature-lower-case
+      (update-in feature-lower-case [:collection] str/lower-case))))
 
-(defn pre-process [feature]                        
+(defn pre-process [feature]
    ((comp flatten lower-case collect-attributes) feature))
 
 (defmulti consume (fn [_ features] (type features)))
 
-(defn- feature-appender [{persistence :persistence} feature]
-  (let [{:keys [action dataset collection id validity geometry attributes]} feature]
-    (pers/append-to-stream persistence action dataset collection id validity geometry attributes)
+(defn- append-feature [persistence feature]
+  (let [{:keys [version action dataset collection id validity geometry attributes]} feature]
+    (pers/append-to-stream persistence version action dataset collection id validity geometry attributes)
     feature))
 
 (defmethod consume clojure.lang.IPersistentMap [processor feature]
   (let [pre-processed (pre-process feature)
-        consumed (filter (complement nil?) (map #(process processor %) pre-processed))
-        logged (map #(feature-appender processor %) consumed)]
-    logged))
+        consumed (filter (complement nil?) (mapcat #(make-seq (process processor %)) pre-processed))]
+    consumed))
 
 (defmethod consume clojure.lang.ISeq [processor features]
   (mapcat #(consume processor %) features))

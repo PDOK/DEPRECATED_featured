@@ -11,6 +11,7 @@
                  [environ "1.0.0"]
                  [org.clojure/tools.cli "0.3.1"]
                  [com.fasterxml.jackson.core/jackson-core "2.4.4"]
+                 [com.fasterxml.uuid/java-uuid-generator "3.1.3"]
                  [clj-time "0.9.0"]
                  [cheshire "5.4.0"]
                  [org.clojure/core.cache "0.6.4"]

@@ -13,7 +13,7 @@
   (create-stream
     [this dataset collection id]
     [this dataset collection id parent-collection parent-id])
-  (append-to-stream [this action dataset collection id validity geometry attributes])
+  (append-to-stream [this version action dataset collection id validity geometry attributes])
   (current-validity [this dataset collection id])
   (last-action [this dataset collection id])
   (childs [this dataset parent-collection parent-id child-collection])
@@ -47,6 +47,7 @@
   (when-not (pg/table-exists? db *jdbc-schema* *jdbc-feature-stream*)
     (pg/create-table db *jdbc-schema* *jdbc-feature-stream*
                      [:id "bigserial" :primary :key]
+                     [:version "uuid"]
                      [:action "character(12)"]
                      [:dataset "varchar(100)"]
                      [:collection "varchar(255)"]
@@ -77,7 +78,7 @@ WHERE dataset = ? AND collection = ?  AND feature_id = ?")]
   (j/with-db-connection [c db]
     (let [results
           (j/query c [(str "SELECT parent_id, feature_id FROM " (qualified-features)
-" WHERE dataset = ?  AND parent_collection = ? AND collection = ? AND closed = false ")
+                           " WHERE dataset = ?  AND parent_collection = ? AND collection = ? AND closed = false ")
                       dataset parent-collection child-collection])
           per-id (group-by :parent_id results)
           for-cache (map (fn [[parent-id values]]
@@ -94,13 +95,13 @@ WHERE dataset = ? AND collection = ?  AND feature_id = ?")]
       results)))
 
 (defn- jdbc-insert
-  ([db action dataset collection id validity geometry attributes]
-   (jdbc-insert db (list [action dataset collection id validity geometry attributes])))
+  ([db version action dataset collection id validity geometry attributes]
+   (jdbc-insert db (list [version action dataset collection id validity geometry attributes])))
   ([db entries]
    (try (j/with-db-connection [c db]
           (apply
            (partial j/insert! c (qualified-feature-stream) :transaction? false
-                    [:action :dataset :collection :feature_id :validity :geometry :attributes])
+                    [:version :action :dataset :collection :feature_id :validity :geometry :attributes])
            entries)
             )
         (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
@@ -141,9 +142,9 @@ WHERE rn = 1"
     (create-stream this dataset collection id nil nil))
   (create-stream [_ dataset collection id parent-collection parent-id]
     (jdbc-create-stream db dataset collection id parent-collection parent-id))
-  (append-to-stream [_ action dataset collection id validity geometry attributes]
+  (append-to-stream [_ version action dataset collection id validity geometry attributes]
     ; compose with nil, because insert returns record. Should fix this...
-    (jdbc-insert db action dataset collection id validity geometry attributes)
+    (jdbc-insert db version action dataset collection id validity geometry attributes)
     nil)
   (current-validity [_ dataset collection id]
     (-> (jdbc-last-stream-validity-and-action db dataset collection id) first))
@@ -172,12 +173,12 @@ WHERE rn = 1"
           batched (with-batch link-batch link-batch-size (partial jdbc-create-stream db))
           cache-batched (with-cache childs-cache batched key-fn value-fn)]
       (cache-batched dataset collection id parent-collection parent-id)))
-  (append-to-stream [_ action dataset collection id validity geometry attributes]
-    (let [key-fn   (fn [_ dataset collection id _ _ _] [dataset collection id])
-          value-fn (fn [_ action _ _ _ validity _ _] [validity action])
+  (append-to-stream [_ version action dataset collection id validity geometry attributes]
+    (let [key-fn   (fn [_ _ dataset collection id _ _ _] [dataset collection id])
+          value-fn (fn [_ _ action _ _ _ validity _ _] [validity action])
           batched (with-batch stream-batch stream-batch-size (partial jdbc-insert db))
           cache-batched (with-cache stream-cache batched key-fn value-fn)]
-      (cache-batched action dataset collection id validity geometry attributes)))
+      (cache-batched version action dataset collection id validity geometry attributes)))
   (current-validity [_ dataset collection id]
     (let [key-fn (fn [& params] (->> params (take 3)))
           load-cache (fn [dataset collection id]

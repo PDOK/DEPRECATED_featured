@@ -40,6 +40,9 @@
   (sql-value [v] (to-json v)))
 
 (extend-protocol j/ISQLParameter
+  java.util.UUID
+  (set-parameter [v ^java.sql.PreparedStatement s ^long i]
+    (.setObject s i (j/sql-value v) java.sql.Types/OTHER))
   com.vividsolutions.jts.geom.Geometry
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
     (.setObject s i (j/sql-value v) java.sql.Types/OTHER))
@@ -56,6 +59,7 @@
     java.lang.Integer "integer"
     java.lang.Double "double precision"
     java.lang.Boolean "boolean"
+    java.util.UUID "uuid"
     "text"))
 
 (def quoted (j/quoted \"))

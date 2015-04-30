@@ -44,7 +44,9 @@
     (let [processor (processor [(proj/geoserver-projector {:db-config data-db})
                                 (proj/parent-child-projector {:db-config data-db})])
           features (features-from-stream json)
-          consumed (consume processor features)]
+          consumed (consume processor features)
+         ; _ (doseq [c consumed] ( println c))
+          ]
       (time (do (println "EVENTS PROCESSED: " (count consumed))
                 (shutdown processor)
                 ))
