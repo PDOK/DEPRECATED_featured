@@ -29,4 +29,5 @@
   :java-source-paths ["src/main/java"]
   :resource-paths ["resources" "src/main/resources"]
   :test-paths ["src/test/clojure"]
+  :aliases {"build" ["do" ["compile"] ["test"] ["uberjar"]]}
   :profiles {:uberjar {:aot :all}})
