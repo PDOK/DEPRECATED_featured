@@ -5,20 +5,22 @@
             [pdok.featured.projectors :as proj]
             [clojure.test :refer :all]))
 
-(defrecord MockedPersistence [streams-n appends-n exists? current-validity last-action]
+(defrecord MockedPersistence [streams streams-n state events-n]
   pers/ProcessorPersistence
   (init [this] (assoc this :initialized true))
-  (stream-exists? [this dataset collection id] exists?)
+  (stream-exists? [this dataset collection id] (get @streams [dataset collection id]))
   (create-stream [this dataset collection id]
     (pers/create-stream this dataset collection id nil nil))
   (create-stream [this dataset collection id parent-collection parent-id]
+    (swap! streams assoc [dataset collection id] 1)
     (swap! streams-n inc))
   (append-to-stream [this version action dataset collection id validity geometry attributes]
-    (swap! appends-n inc))
+    (swap! state assoc [dataset collection id] [action validity])
+    (swap! events-n inc))
   (current-validity [_ dataset collection id]
-    current-validity)
+    (second (get @state [dataset collection id] nil)))
   (last-action [this dataset collection id]
-    last-action)
+    (first (get @state [dataset collection id] nil)))
   (close [this] (assoc this :closed true)))
 
 (defrecord MockedProjector [features-n changes-n]
@@ -30,7 +32,7 @@
     (swap! changes-n inc))
   (close [this] (assoc this :closed true)))
 
-(defn create-persistence [] (->MockedPersistence (atom 0) (atom 0) false nil nil))
+(defn create-persistence [] (->MockedPersistence (atom {}) (atom 0) (atom {}) (atom 0)))
 
 (defn create-projectors [n]
   (repeatedly n #(->MockedProjector (atom 0) (atom 0))))
@@ -55,12 +57,16 @@
 (def valid-change-feature
   {:action :change
    :dataset "known-dataset"
-   :collection "collection1"
+   :collection "collection-1"
    :id "valid-feature"
    :validity default-validity
    :current-validity default-validity
    :geometry {:type "dummy"}
    :attributes {:field2 "test"}})
+
+(defn- init-with-feature [persistence {:keys [dataset collection id action validity]}]
+  (pers/create-stream persistence dataset collection id)
+  (pers/append-to-stream persistence nil action dataset collection id validity nil nil))
 
 (deftest inititialized-processor
   (let [processor (processor (create-persistence) (create-projectors 2))]
@@ -81,10 +87,10 @@
 (deftest ok-new-feature
   (let [processor (create-processor)
         processed (first (consume processor valid-new-feature))]
-    (is (not (nil? processed)))
+    (is (= false (nil? processed)))
     (is (not (:invalid? processed)))
-    (is (= 1 @(-> processor :persistence :streams-n)))
-    (is (= 1 @(-> processor :persistence :appends-n)))
+    (is (= 1 (-> processor :persistence :streams-n deref)))
+    (is (= 1 (-> processor :persistence :events-n deref)))
     (is (= 1 @(-> processor :projectors first :features-n)))))
 
 (def make-broken-new-transformations
@@ -102,21 +108,21 @@
           invalid-new-feature (transform valid-new-feature)
           processed (first(consume processor invalid-new-feature))]
       (testing (str name " should break")
-        (is (not (nil? processed)))
+        (is (= false (nil? processed)))
         (is (:invalid? processed))
-        (is (= 0 @(-> processor :persistence :streams-n)))
-        (is (= 0 @(-> processor :persistence :appends-n)))
+        (is (= 0 (-> processor :persistence :streams-n deref)))
+        (is (= 0 (-> processor :persistence :events-n deref)))
         (is (= 0 @(-> processor :projectors first :features-n)))))))
 
 (deftest ok-change-feature
-  (let [processor (-> (create-processor)
-                      (assoc-in [:persistence :current-validity] default-validity)
-                      (assoc-in [:persistence :exists?] true))
+  (let [processor (create-processor)
+        persistence (:persistence processor)
+        _ (init-with-feature persistence valid-new-feature)
         processed (first (consume processor valid-change-feature))]
-    (is (not (nil? processed)))
+    (is (= false (nil? processed)))
     (is (not (:invalid? processed)) (str (:invalid-reasons processed)))
-    (is (= 0 @(-> processor :persistence :streams-n))) ; no new stream
-    (is (= 1 @(-> processor :persistence :appends-n)))
+    (is (= 1 (-> processor :persistence :streams-n deref))) ; no new stream
+    (is (= 2 (-> processor :persistence :events-n deref)))
     (is (= 0 @(-> processor :projectors first :features-n))) ; no new features
     (is (= 1 @(-> processor :projectors first :changes-n)))
     ))
@@ -136,7 +142,7 @@
       (testing (str name " should break")
         (is (not (nil? processed)))
         (is (:invalid? processed))
-        (is (= 0 @(-> processor :persistence :appends-n)))
+        (is (= 0 (-> processor :persistence :events-n deref)))
         (is (= 0 @(-> processor :projectors first :features-n))) ; no new features
         (is (= 0 @(-> processor :projectors first :changes-n))))
       )))
