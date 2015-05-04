@@ -13,11 +13,6 @@
 (def ^:private pdok-fields [:action :id :dataset :collection :validity :version :geometry :current-validity
                             :parent-id :parent-collection :attributes])
 
-(def ^:private processor-db {:subprotocol "postgresql"
-                     :subname (or (env :processor-database-url) "//localhost:5432/pdok")
-                     :user (or (env :processor-database-user) "postgres")
-                     :password (or (env :processor-database-password) "postgres")})
-
 (declare consume process pre-process append-feature)
 
 (defn- make-invalid [feature reason]
@@ -297,9 +292,6 @@
      :projectors closed-projectors}))
 
 (defn processor
-  ([projectors]
-   (let [jdbc-persistence (pers/cached-jdbc-processor-persistence {:db-config processor-db :batch-size 10000})]
-    (processor jdbc-persistence projectors)))
   ([persistence projectors]
    (let [initialized-persistence (pers/init persistence)
          initialized-projectors (doall (map proj/init projectors))]

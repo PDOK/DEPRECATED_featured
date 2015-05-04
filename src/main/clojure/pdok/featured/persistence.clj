@@ -205,17 +205,6 @@ WHERE rn = 1"
     this)
   )
 
-(defn once-true-fn
-  "Returns a function which returns true once for an argument"
-  []
-  (let [mem (atom {})]
-    (fn [& args]
-      (if-let [e (find @mem args)]
-        false
-        (do
-          (swap! mem assoc args nil)
-          true)))))
-
 (defn jdbc-processor-persistence [config]
   (let [db (:db-config config)]
     (JdbcProcessorPersistence. db)))

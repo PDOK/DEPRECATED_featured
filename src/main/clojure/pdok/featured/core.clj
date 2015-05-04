@@ -2,12 +2,19 @@
   (:require [pdok.featured.json-reader :refer [features-from-stream file-stream]]
             [pdok.featured.processor :refer :all]
             [pdok.featured.projectors :as proj]
+            [pdok.featured.timeline :as tl]
+            [pdok.featured.persistence :as pers]
             [pdok.featured.generator :refer [random-json-feature-stream]]
             [clojure.tools.cli :refer [parse-opts]]
             [environ.core :refer [env]])
   (:gen-class))
 
 (declare cli-options)
+
+(def ^:private processor-db {:subprotocol "postgresql"
+                     :subname (or (env :processor-database-url) "//localhost:5432/pdok")
+                     :user (or (env :processor-database-user) "postgres")
+                     :password (or (env :processor-database-password) "postgres")})
 
 (def data-db {:subprotocol "postgresql"
                      :subname (or (env :data-database-url) "//localhost:5432/pdok")
@@ -18,10 +25,11 @@
                        dataset-name
                        no-projectors]}]
   (println (str "start" (when dataset-name " dataset: " dataset-name) (when no-projectors " without projectors")))
-  (let [processor (if no-projectors
-                    (processor [])
-                    (processor [(proj/geoserver-projector {:db-config data-db})
-                                (proj/parent-child-projector {:db-config data-db})]))]
+  (let [proc-fact (partial processor (pers/cached-jdbc-processor-persistence {:db-config processor-db :batch-size 10000}))
+        processor (if no-projectors
+                    (proc-fact [])
+                    (proc-fact [(proj/geoserver-projector {:db-config data-db})
+                                (tl/timeline-projector {:db-config data-db})]))]
     (with-open [s (file-stream json-file)]
       (let [consumed (consume processor (features-from-stream s :dataset dataset-name))]
         (time (do (println "EVENTS PROCESSED: " (count consumed))
@@ -42,7 +50,7 @@
 (defn performance-test [n & args]
   (with-open [json (apply random-json-feature-stream "perftest" "col1" n args)]
     (let [processor (processor [(proj/geoserver-projector {:db-config data-db})
-                                (proj/parent-child-projector {:db-config data-db})])
+                                (tl/timeline-projector {:db-config data-db})])
           features (features-from-stream json)
           consumed (consume processor features)
          ; _ (doseq [c consumed] ( println c))

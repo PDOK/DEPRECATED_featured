@@ -54,3 +54,14 @@
               (let [ret# (apply f# fn-args#)]
                 (swap! ~cache assoc cache-key# ret#)
                 ret#)))))))
+
+(defn once-true-fn
+  "Returns a function which returns true once for an argument"
+  []
+  (let [mem (atom {})]
+    (fn [& args]
+      (if-let [e (find @mem args)]
+        false
+        (do
+          (swap! mem assoc args nil)
+          true)))))
