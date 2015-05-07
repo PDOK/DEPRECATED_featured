@@ -14,7 +14,7 @@
 
 (deftype NilAttribute [class]
   Object
-  (toString [_] nil)
+  (toString [_] (str "nil "(.getName class)))
   clojure.lang.IEditableCollection
   (asTransient [this] this)
   clojure.lang.ITransientAssociative
@@ -38,7 +38,22 @@
    (fn [v] (.getName (:class v)))
    (fn [v] (.getName (:class v)))))
 
-(pg/register-transit-handler pdok.featured.feature.NilAttribute nil-attribute-writer)
+(def nil-attribute-reader
+  (transit/read-handler
+   (fn [v]
+     (let [[ns class] (as-> v x
+                            (str/reverse x)
+                            (str/split x #"\." 2)
+                            (map str/reverse x)
+                            (reverse x))
+           ns (create-ns (symbol ns))
+           _ (println ns)
+           class (ns-resolve ns (symbol class))
+           _ (println class)]
+       (->NilAttribute class)))))
+
+(pg/register-transit-write-handler pdok.featured.feature.NilAttribute nil-attribute-writer)
+(pg/register-transit-read-handler "x" nil-attribute-reader)
 
 (def gml3-configuration
   (doto (GMLConfiguration.) (.setSrsSyntax SrsSyntax/OGC_URN)))
