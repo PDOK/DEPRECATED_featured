@@ -44,7 +44,8 @@
                 [:gid "serial" :primary :key]
                 [:_id "varchar(100)"]
                 [:_geometry "geometry"])
-  (pg/create-index db dataset collection "_id"))
+  (pg/create-index db dataset collection "_id")
+  (pg/add-geo-constraints db dataset collection :_geometry))
 
 (defn- gs-collection-attributes [db dataset collection]
   ;(println "attributes")
