@@ -114,6 +114,11 @@
       (j/db-do-commands db c))
     (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
 
+(defn populate-geometry-columns [db schema table]
+  (try 
+    (j/query db [(str "SELECT public.populate_geometry_columns (( SELECT '" (-> schema name quoted) "."  (-> table name quoted) "'::regclass::oid ))")])
+    (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
+
 (defn table-columns [db schema table]
   "Get table columns"
   (j/with-db-connection [c db]
