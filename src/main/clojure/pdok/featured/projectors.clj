@@ -27,6 +27,14 @@
 (defn- conj!-when-not-nil [target src & srcs]
   (apply conj!-when target identity src srcs))
 
+(def visualization-table 
+  {:bgt {:wegdeel$kruinlijn "kruinlijn"}})
+
+(defn visualization [dataset collection]
+  (let [k-collection (keyword collection)
+        k-dataset (keyword dataset)]
+    (or (get-in visualization-table [k-dataset k-collection] collection))))
+
 (defn- gs-dataset-exists? [db dataset]
   ;(println "dataset exists?")
   (pg/schema-exists? db dataset))
@@ -35,18 +43,19 @@
   (pg/create-schema db dataset))
 
 (defn- gs-collection-exists? [db dataset collection]
-  ;(println "collection exists?")
-  (pg/table-exists? db dataset collection))
+  (let [table (visualization dataset collection)]
+    (pg/table-exists? db dataset table)))
 
 (defn- gs-create-collection [db dataset collection]
   "Create table with default fields"
-  (pg/create-table db dataset collection
+  (let [table (visualization dataset collection)]
+    (pg/create-table db dataset table
                 [:gid "serial" :primary :key]
                 [:_id "varchar(100)"]
                 [:_geometry "geometry"])
-  (pg/create-index db dataset collection "_id")
-  (pg/add-geo-constraints db dataset collection :_geometry)
-  (pg/populate-geometry-columns db dataset collection))
+    (pg/create-index db dataset table "_id")
+    (pg/add-geo-constraints db dataset table :_geometry)
+    (pg/populate-geometry-columns db dataset table)))
 
 (defn- gs-collection-attributes [db dataset collection]
   ;(println "attributes")
@@ -95,7 +104,7 @@
            (let [all-attributes (all-attributes-fn dataset collection)
                  records (map #(feature-to-sparse-record % (all-fields-constructor all-attributes)) grouped-features)
                  fields (concat [:_id :_geometry] (map (comp keyword pg/quoted) all-attributes))]
-                          (apply (partial j/insert! c (str dataset "." (pg/quoted collection)) fields) records)))))
+                          (apply (partial j/insert! c (str dataset "." (pg/quoted (visualization dataset collection))) fields) records)))))
       (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
   )
 
@@ -113,7 +122,7 @@
         (let [keyed (group-by feature-keys collection-features)]
           (doseq [[columns vals] keyed]
             (when (< 0 (count columns))
-              (let [sql (gs-update-sql dataset collection (map name columns))
+              (let [sql (gs-update-sql dataset (visualization dataset collection) (map name columns))
                     update-vals (map feature-to-update-record vals)]
                 (j/execute! db (cons sql update-vals) :multi? true :transaction? false)))))
         ))
@@ -129,7 +138,7 @@
     (let [per-dataset-collection
           (group-by #(select-keys % [:dataset :collection]) features)]
       (doseq [[{:keys [dataset collection]} collection-features] per-dataset-collection]
-        (let [sql (gs-delete-sql dataset collection)
+        (let [sql (gs-delete-sql dataset (visualization dataset collection))
               ids (map #(vector (:id %)) collection-features)]
           (j/execute! db (cons sql ids) :multi? true :transaction? false))))))
 
