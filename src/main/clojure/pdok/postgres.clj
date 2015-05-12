@@ -47,7 +47,7 @@
   org.joda.time.DateTime
   (sql-value [v] (tc/to-timestamp v))
   com.vividsolutions.jts.geom.Geometry
-  (sql-value [v] (.write wkt-writer v))
+  (sql-value [v] (str "SRID=28992;" (.write wkt-writer v)))
   clojure.lang.Keyword
   (sql-value [v] (name v))
   clojure.lang.IPersistentMap
@@ -109,8 +109,29 @@
     (try
       (j/db-do-commands db (str "CREATE INDEX " (quoted index-name)
                                 " ON "  (-> schema name quoted) "." (-> table name quoted)
-                                "  USING btree (" quoted-columns ")" ))
+                                " USING btree (" quoted-columns ")" ))
       (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
+
+(defn- db-constraint [schema table geo-column constraint-name constraint constraint-pred]
+  (let [schema-name-quoted (-> schema name quoted)
+        table-name-quoted (-> table name quoted)
+        geo-column-quoted (-> geo-column name quoted)]
+  (str "ALTER TABLE " schema-name-quoted "." table-name-quoted " ADD CONSTRAINT " constraint-name " CHECK (" geo-column-quoted " IS NULL OR " constraint "(" geo-column-quoted ")" constraint-pred ")")))
+
+(defn add-geo-constraints [db schema table geometry-column]
+  (let [ndims (db-constraint schema table geometry-column "enforce_dims_geom" "public.st_ndims" "= 2")
+        srid (db-constraint schema table geometry-column "enforce_srid_geom" "public.st_srid" "= 28992")
+        geotype (db-constraint schema table geometry-column "enforce_geotype_geom" "public.geometrytype" "IN ('POINT'::text, 'MULTIPOINT'::text, 'LINESTRING'::text, 'MULTILINESTRING'::text, 'POLYGON'::text, 'MULTIPOLYGON'::text, 'CIRCULARSTRING'::text, 'COMPOUNDCURVE'::text, 'MULTICURVE'::text, 'CURVEPOLYGON'::text, 'MULTISURFACE'::text, 'GEOMETRY'::text, 'GEOMETRYCOLLECTION'::text, 'POINTM'::text, 'MULTIPOINTM'::text, 'LINESTRINGM'::text, 'MULTILINESTRINGM'::text, 'POLYGONM'::text, 'MULTIPOLYGONM'::text, 'CIRCULARSTRINGM'::text, 'COMPOUNDCURVEM'::text, 'MULTICURVEM'::text, 'CURVEPOLYGONM'::text, 'MULTISURFACEM'::text, 'GEOMETRYCOLLECTIONM'::text)")
+        constraints (vector ndims srid geotype)]
+  (try 
+    (doseq [c constraints]
+      (j/db-do-commands db c))
+    (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
+
+(defn populate-geometry-columns [db schema table]
+  (try 
+    (j/query db [(str "SELECT public.populate_geometry_columns (( SELECT '" (-> schema name quoted) "."  (-> table name quoted) "'::regclass::oid ))")])
+    (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
 
 (defn table-columns [db schema table]
   "Get table columns"

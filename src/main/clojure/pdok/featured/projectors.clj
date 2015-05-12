@@ -44,7 +44,9 @@
                 [:gid "serial" :primary :key]
                 [:_id "varchar(100)"]
                 [:_geometry "geometry"])
-  (pg/create-index db dataset collection "_id"))
+  (pg/create-index db dataset collection "_id")
+  (pg/add-geo-constraints db dataset collection :_geometry)
+  (pg/populate-geometry-columns db dataset collection))
 
 (defn- gs-collection-attributes [db dataset collection]
   ;(println "attributes")
@@ -60,7 +62,8 @@
 
 (defn- feature-to-sparse-record [{:keys [id geometry attributes]} all-fields-constructor]
   (let [sparse-attributes (all-fields-constructor attributes)
-        record (concat [id (-> geometry as-jts)] sparse-attributes)]
+        geometry (-> geometry as-jts)
+        record (concat [id geometry] sparse-attributes)]
     record))
 
 (defn- feature-keys [feature]
