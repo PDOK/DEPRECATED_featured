@@ -4,7 +4,7 @@
             [cognitect.transit :as transit])
   (:import [com.vividsolutions.jts.geom Geometry]
            [com.vividsolutions.jts.io WKTWriter]
-           [java.io ByteArrayOutputStream]))
+           [java.io ByteArrayOutputStream ByteArrayInputStream]))
 
 (def wkt-writer (WKTWriter.))
 
@@ -14,20 +14,34 @@
    (fn [v] (-> v tc/to-date .getTime))
    (fn [v] (-> v tc/to-date .getTime .toString))))
 
-(def transit-handlers (atom {}))
+(def joda-time-reader
+  (transit/read-handler #(tc/from-long (Long/parseLong %))))
 
-(defn register-transit-handler [type handler]
-  (swap! transit-handlers assoc type handler))
+(def transit-write-handlers (atom {}))
+(def transit-read-handlers (atom {}))
 
-(register-transit-handler org.joda.time.DateTime joda-time-writer)
+(defn register-transit-write-handler [type handler]
+  (swap! transit-write-handlers assoc type handler))
+
+(defn register-transit-read-handler [prefix handler]
+  (swap! transit-read-handlers assoc prefix handler))
+
+(register-transit-write-handler org.joda.time.DateTime joda-time-writer)
+(register-transit-read-handler "m" joda-time-reader)
 
 (defn to-json [obj]
   (let [out (ByteArrayOutputStream. 1024)
         writer (transit/writer out :json
-                       {:handlers @transit-handlers})]
+                       {:handlers @transit-write-handlers})]
     (transit/write writer obj)
     (.toString out))
   )
+
+(defn from-json [str]
+  (let [in (ByteArrayInputStream. (.getBytes str))
+        reader (transit/reader in :json
+                               {:handlers @transit-read-handlers})]
+    (transit/read reader)))
 
 (extend-protocol j/ISQLValue
   org.joda.time.DateTime
