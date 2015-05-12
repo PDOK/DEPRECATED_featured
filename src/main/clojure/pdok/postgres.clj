@@ -118,10 +118,16 @@
         geo-column-quoted (-> geo-column name quoted)]
   (str "ALTER TABLE " schema-name-quoted "." table-name-quoted " ADD CONSTRAINT " constraint-name " CHECK (" geo-column-quoted " IS NULL OR " constraint "(" geo-column-quoted ")" constraint-pred ")")))
 
+(def geo-constraints
+  {:_geometry_point "'POINT'::text, 'MULTIPOINT'::text, 'POINTM'::text, 'MULTIPOINTM'::text" 
+   :_geometry_line "'LINESTRING'::text, 'MULTILINESTRING'::text, 'LINESTRINGM'::text, 'MULTILINESTRINGM'::text" 
+   :_geometry_polygon "'POLYGON'::text, 'MULTIPOLYGON'::text, 'CIRCULARSTRING'::text, 'COMPOUNDCURVE'::text, 'MULTICURVE'::text, 'CURVEPOLYGON'::text, 'MULTISURFACE'::text, 'GEOMETRY'::text, 'GEOMETRYCOLLECTION'::text, 'POLYGONM'::text, 'MULTIPOLYGONM'::text, 'CIRCULARSTRINGM'::text, 'COMPOUNDCURVEM'::text, 'MULTICURVEM'::text, 'CURVEPOLYGONM'::text, 'MULTISURFACEM'::text, 'GEOMETRYCOLLECTIONM'::text"})
+
 (defn add-geo-constraints [db schema table geometry-column]
-  (let [ndims (db-constraint schema table geometry-column "enforce_dims_geom" "public.st_ndims" "= 2")
-        srid (db-constraint schema table geometry-column "enforce_srid_geom" "public.st_srid" "= 28992")
-        geotype (db-constraint schema table geometry-column "enforce_geotype_geom" "public.geometrytype" "IN ('POINT'::text, 'MULTIPOINT'::text, 'LINESTRING'::text, 'MULTILINESTRING'::text, 'POLYGON'::text, 'MULTIPOLYGON'::text, 'CIRCULARSTRING'::text, 'COMPOUNDCURVE'::text, 'MULTICURVE'::text, 'CURVEPOLYGON'::text, 'MULTISURFACE'::text, 'GEOMETRY'::text, 'GEOMETRYCOLLECTION'::text, 'POINTM'::text, 'MULTIPOINTM'::text, 'LINESTRINGM'::text, 'MULTILINESTRINGM'::text, 'POLYGONM'::text, 'MULTIPOLYGONM'::text, 'CIRCULARSTRINGM'::text, 'COMPOUNDCURVEM'::text, 'MULTICURVEM'::text, 'CURVEPOLYGONM'::text, 'MULTISURFACEM'::text, 'GEOMETRYCOLLECTIONM'::text)")
+  (let [column-name (-> geometry-column name)
+        ndims (db-constraint schema table geometry-column (str "enforce_dims_" column-name) "public.st_ndims" "= 2")
+        srid (db-constraint schema table geometry-column (str "enforce_srid_" column-name) "public.st_srid" "= 28992")
+        geotype (db-constraint schema table geometry-column (str "enforce_geotype_" column-name) "public.geometrytype" (str "IN (" (-> column-name keyword geo-constraints) ")" ) )
         constraints (vector ndims srid geotype)]
   (try 
     (doseq [c constraints]

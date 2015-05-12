@@ -27,6 +27,14 @@
 (defn- conj!-when-not-nil [target src & srcs]
   (apply conj!-when target identity src srcs))
 
+(def visualization-table 
+  {:bgt {:wegdeel$kruinlijn "kruinlijn"}})
+
+(defn visualization [dataset collection]
+  (let [k-collection (keyword collection)
+        k-dataset (keyword dataset)]
+    (or (get-in visualization-table [k-dataset k-collection] collection))))
+
 (defn- gs-dataset-exists? [db dataset]
   ;(println "dataset exists?")
   (pg/schema-exists? db dataset))
@@ -34,36 +42,78 @@
 (defn- gs-create-dataset [db dataset]
   (pg/create-schema db dataset))
 
+(def point-types
+  "Geometry types of Point-category"
+  #{:Point :MultiPoint})
+
+(def line-types
+  "Geometry types of Line-category"
+  #{:Line :LineString :MultiLine})
+
+(defn- geometry-group*
+  "Returns the geometry-group of the given type"
+  [type]
+  (condp get (keyword type)
+    point-types :point
+    line-types :line
+    :polygon))
+
+(defn- geometry-group-fn [geometry]
+  (-> geometry .getGeometryType geometry-group*))
+
+(defn- add-geometry-group [record]
+  (let [[id geometry & more] record]
+    {:geotype (geometry-group-fn geometry)}))
+
+(defn- update-geometry-group [geometry-index update-val]
+  (let [geometry (get update-val geometry-index)]
+    {:geotype (geometry-group-fn geometry)}))
+
 (defn- gs-collection-exists? [db dataset collection]
-  ;(println "collection exists?")
-  (pg/table-exists? db dataset collection))
+  (let [table (visualization dataset collection)]
+    (pg/table-exists? db dataset table)))
 
 (defn- gs-create-collection [db dataset collection]
   "Create table with default fields"
-  (pg/create-table db dataset collection
+  (let [table (visualization dataset collection)]
+    
+      (pg/create-table db dataset table
                 [:gid "serial" :primary :key]
                 [:_id "varchar(100)"]
-                [:_geometry "geometry"])
-  (pg/create-index db dataset collection "_id")
-  (pg/add-geo-constraints db dataset collection :_geometry)
-  (pg/populate-geometry-columns db dataset collection))
+                [:_geometry_point "geometry"]
+                [:_geometry_line "geometry"]
+                [:_geometry_polygon "geometry"]
+                [:_geo_group "varchar (20)"])
+      
+      (pg/create-index db dataset table "_id")
+      (pg/add-geo-constraints db dataset table :_geometry_point)
+      (pg/add-geo-constraints db dataset table :_geometry_line)
+      (pg/add-geo-constraints db dataset table :_geometry_polygon)
+      (pg/populate-geometry-columns db dataset table)))
 
 (defn- gs-collection-attributes [db dataset collection]
   ;(println "attributes")
-  (let [columns (pg/table-columns db dataset collection)
-        no-defaults (filter #(not (some #{(:column_name %)} ["gid" "_id" "_geometry"])) columns)
+  (let [table (visualization dataset collection)
+        columns (pg/table-columns db dataset table)
+        no-defaults (filter #(not (some #{(:column_name %)} ["gid" 
+                                                             "_id" 
+                                                             "_geometry_point" 
+                                                             "_geometry_line" 
+                                                             "_geometry_polygon"
+                                                             "_geo_group"])) columns)
         attributes (map #(:column_name %) no-defaults)]
     attributes))
 
 (defn- gs-add-attribute [db dataset collection attribute-name attribute-type]
-  (try
-    (pg/add-column db dataset collection attribute-name attribute-type)
-    (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
+  (let [table (visualization dataset collection)]
+    (try
+      (pg/add-column db dataset table attribute-name attribute-type)
+      (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
 
 (defn- feature-to-sparse-record [{:keys [id geometry attributes]} all-fields-constructor]
   (let [sparse-attributes (all-fields-constructor attributes)
         geometry (-> geometry as-jts)
-        record (concat [id geometry] sparse-attributes)]
+        record (concat [id geometry (geometry-group-fn geometry)] sparse-attributes)]
     record))
 
 (defn- feature-keys [feature]
@@ -84,41 +134,53 @@
 (defn- all-fields-constructor [attributes]
   (if (empty? attributes) (constantly nil) (apply juxt (map #(fn [col] (get col %)) attributes))))
 
+(defn- geo-column [geogroup]
+   (str "_geometry_" (name geogroup)))
+
 (defn- gs-add-feature
   ([db all-attributes-fn features]
    (try
-     (let [per-dataset-collection
-           (group-by #(select-keys % [:dataset :collection]) features)
-           ]
+     (let [per-dataset-collection (group-by #(select-keys % [:dataset :collection]) features)]
        (doseq [[{:keys [dataset collection]} grouped-features] per-dataset-collection]
          (j/with-db-connection [c db]
            (let [all-attributes (all-attributes-fn dataset collection)
                  records (map #(feature-to-sparse-record % (all-fields-constructor all-attributes)) grouped-features)
-                 fields (concat [:_id :_geometry] (map (comp keyword pg/quoted) all-attributes))]
-                          (apply (partial j/insert! c (str dataset "." (pg/quoted collection)) fields) records)))))
-      (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
-  )
+                 per-dataset-collection-geotype (group-by add-geometry-group records)]   
+                   (doseq [[{:keys [geotype]} grouped-records] per-dataset-collection-geotype]
+                     ;; group per geotype so we can batch every group
+                     (let [fields (concat [:_id (geo-column geotype) :_geo_group] (map (comp keyword pg/quoted) all-attributes))]
+                       (apply (partial j/insert! c (str dataset "." (pg/quoted (visualization dataset collection))) fields) grouped-records)))))))
+      (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
+
 
 (defn- gs-update-sql [schema table columns]
   (str "UPDATE " (pg/quoted schema) "." (pg/quoted table)
        " SET " (str/join "," (map #(str (pg/quoted %) " = ?") columns))
        " WHERE \"_id\" = ?;"))
 
-(defn- gs-update-feature [db features]
+(defn- execute-update-sql [db dataset collection columns update-vals]
   (try
+    (let [sql (gs-update-sql dataset (visualization dataset collection) (map name columns))]
+      (j/execute! db (cons sql update-vals) :multi? true :transaction? false))
+      (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
+
+(defn- gs-update-feature [db features]
     (let [per-dataset-collection
           (group-by #(select-keys % [:dataset :collection]) features)]
       (doseq [[{:keys [dataset collection]} collection-features] per-dataset-collection]
         ;; group per key collection so we can batch every group
         (let [keyed (group-by feature-keys collection-features)]
           (doseq [[columns vals] keyed]
+            (let [geometry-index (.indexOf columns :_geometry)]
             (when (< 0 (count columns))
-              (let [sql (gs-update-sql dataset collection (map name columns))
-                    update-vals (map feature-to-update-record vals)]
-                (j/execute! db (cons sql update-vals) :multi? true :transaction? false)))))
-        ))
-    ;; (catch java.sql.SQLException e (j/print-sql-exception-chain e))
-    ))
+              (let [update-vals (map feature-to-update-record vals)]
+                (if (= geometry-index -1)
+                  (execute-update-sql db dataset collection columns update-vals)
+                  (let [per-geotype (group-by (partial update-geometry-group geometry-index) update-vals)]
+                    (doseq [[{:keys [geotype]} grouped-vals] per-geotype]
+                      (let [columns (assoc columns geometry-index (geo-column geotype))]
+                        (execute-update-sql db dataset collection columns update-vals)))))))))))))
+
 
 (defn- gs-delete-sql [schema table]
   (str "DELETE FROM " (pg/quoted schema) "." (pg/quoted table)
@@ -129,7 +191,7 @@
     (let [per-dataset-collection
           (group-by #(select-keys % [:dataset :collection]) features)]
       (doseq [[{:keys [dataset collection]} collection-features] per-dataset-collection]
-        (let [sql (gs-delete-sql dataset collection)
+        (let [sql (gs-delete-sql dataset (visualization dataset collection))
               ids (map #(vector (:id %)) collection-features)]
           (j/execute! db (cons sql ids) :multi? true :transaction? false))))))
 
