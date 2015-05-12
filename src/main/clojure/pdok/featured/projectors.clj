@@ -134,8 +134,8 @@
 (defn- all-fields-constructor [attributes]
   (if (empty? attributes) (constantly nil) (apply juxt (map #(fn [col] (get col %)) attributes))))
 
-(defn- geo-column [geogroup]
-   (str "_geometry_" (name geogroup)))
+(defn- geo-column [geo-group]
+   (str "_geometry_" (name geo-group)))
 
 (defn- gs-add-feature
   ([db all-attributes-fn features]
@@ -171,15 +171,15 @@
         ;; group per key collection so we can batch every group
         (let [keyed (group-by feature-keys collection-features)]
           (doseq [[columns vals] keyed]
-            (let [geometry-index (.indexOf columns :_geometry)]
             (when (< 0 (count columns))
-              (let [update-vals (map feature-to-update-record vals)]
+              (let [update-vals (map feature-to-update-record vals)
+                    geometry-index (.indexOf columns :_geometry)]
                 (if (= geometry-index -1)
-                  (execute-update-sql db dataset collection columns update-vals)
-                  (let [per-geotype (group-by (partial update-geometry-group geometry-index) update-vals)]
-                    (doseq [[{:keys [geotype]} grouped-vals] per-geotype]
-                      (let [columns (assoc columns geometry-index (geo-column geotype))]
-                        (execute-update-sql db dataset collection columns update-vals)))))))))))))
+                    (execute-update-sql db dataset collection columns update-vals)
+                    (let [per-geotype (group-by (partial update-geometry-group geometry-index) update-vals)]
+                      (doseq [[{:keys [geotype]} grouped-vals] per-geotype]
+                        (let [columns (assoc columns geometry-index (geo-column geotype))]
+                          (execute-update-sql db dataset collection columns update-vals))))))))))))
 
 
 (defn- gs-delete-sql [schema table]
