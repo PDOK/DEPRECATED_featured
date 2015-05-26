@@ -1,6 +1,6 @@
 (ns pdok.featured.projectors
   (:require [pdok.cache :refer :all]
-            [pdok.featured.feature :refer [as-jts]]
+            [pdok.featured.feature :as f :refer [as-jts]]
             [pdok.postgres :as pg]
             [clojure.core.cache :as cache]
             [clojure.java.jdbc :as j]
@@ -17,17 +17,14 @@
 (defn- remove-keys [map keys]
   (apply dissoc map keys))
 
-(defn- conj!-when
-  ([target delegate src & srcs]
-    (let [nw (if (delegate src) (conj! target src) target)]
-      (if (empty? srcs)
-        nw
-        (recur nw delegate (first srcs) (rest srcs))))))
+(defn conj!-coll [target x & xs]
+  (if (or (seq? x) (vector? x))
+    (apply conj!-coll target x)
+    (if (empty? xs)
+      (conj! target x)
+      (recur (conj! target x) (first xs) (rest xs)))))
 
-(defn- conj!-when-not-nil [target src & srcs]
-  (apply conj!-when target identity src srcs))
-
-(def visualization-table 
+(def visualization-table
   {:bgt {:wegdeel$kruinlijn "kruinlijn"}})
 
 (defn visualization [dataset collection]
@@ -42,33 +39,6 @@
 (defn- gs-create-dataset [db dataset]
   (pg/create-schema db dataset))
 
-(def point-types
-  "Geometry types of Point-category"
-  #{:Point :MultiPoint})
-
-(def line-types
-  "Geometry types of Line-category"
-  #{:Line :LineString :MultiLine})
-
-(defn- geometry-group*
-  "Returns the geometry-group of the given type"
-  [type]
-  (condp get (keyword type)
-    point-types :point
-    line-types :line
-    :polygon))
-
-(defn- geometry-group-fn [geometry]
-  (-> geometry .getGeometryType geometry-group*))
-
-(defn- add-geometry-group [record]
-  (let [[id geometry & more] record]
-    {:geotype (geometry-group-fn geometry)}))
-
-(defn- update-geometry-group [geometry-index update-val]
-  (let [geometry (get update-val geometry-index)]
-    {:geotype (geometry-group-fn geometry)}))
-
 (defn- gs-collection-exists? [db dataset collection]
   (let [table (visualization dataset collection)]
     (pg/table-exists? db dataset table)))
@@ -76,7 +46,7 @@
 (defn- gs-create-collection [db dataset collection]
   "Create table with default fields"
   (let [table (visualization dataset collection)]
-    
+
       (pg/create-table db dataset table
                 [:gid "serial" :primary :key]
                 [:_id "varchar(100)"]
@@ -84,7 +54,7 @@
                 [:_geometry_line "geometry"]
                 [:_geometry_polygon "geometry"]
                 [:_geo_group "varchar (20)"])
-      
+
       (pg/create-index db dataset table "_id")
       (pg/add-geo-constraints db dataset table :_geometry_point)
       (pg/add-geo-constraints db dataset table :_geometry_line)
@@ -95,10 +65,10 @@
   ;(println "attributes")
   (let [table (visualization dataset collection)
         columns (pg/table-columns db dataset table)
-        no-defaults (filter #(not (some #{(:column_name %)} ["gid" 
-                                                             "_id" 
-                                                             "_geometry_point" 
-                                                             "_geometry_line" 
+        no-defaults (filter #(not (some #{(:column_name %)} ["gid"
+                                                             "_id"
+                                                             "_geometry_point"
+                                                             "_geometry_line"
                                                              "_geometry_polygon"
                                                              "_geo_group"])) columns)
         attributes (map #(:column_name %) no-defaults)]
@@ -110,26 +80,40 @@
       (pg/add-column db dataset table attribute-name attribute-type)
       (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
 
-(defn- feature-to-sparse-record [{:keys [id geometry attributes]} all-fields-constructor]
-  (let [sparse-attributes (all-fields-constructor attributes)
-        geometry (-> geometry as-jts)
-        record (concat [id geometry (geometry-group-fn geometry)] sparse-attributes)]
-    record))
+(defn- feature-to-sparse-record [feature all-fields-constructor]
+   (let [id (:id feature)
+         sparse-attributes (all-fields-constructor (:attributes feature))
+         geometry (-> feature (:geometry) (f/as-jts))
+         geo-group (f/geometry-group (:geometry feature))
+         record (concat [id
+                         (when (= :point geo-group)  geometry)
+                         (when (= :line geo-group)  geometry)
+                         (when (= :polygon geo-group)  geometry)
+                         geo-group]
+                        sparse-attributes)]
+      record))
 
 (defn- feature-keys [feature]
-  (let [geometry? (contains? feature :geometry)]
-    (-> (apply conj!-when-not-nil
-               (transient [])
-               (when geometry? :_geometry)
-               (keys (:attributes feature)))
-        (persistent!))))
+  (let [geometry (:geometry feature)
+         attributes (:attributes feature)]
+     (cond-> (transient [])
+             geometry (conj!-coll :_geometry_point :_geometry_line :_geometry_polygon :_geo_group)
+             attributes (conj!-coll (keys attributes))
+             true (persistent!))))
 
-(defn- feature-to-update-record [{:keys [id geometry attributes]}]
-  (let [attr-vals (vals attributes)
-        rec (conj!-when-not-nil (transient []) (as-jts geometry))
-        rec (apply conj!-when rec (fn [_] true) attr-vals)
-        rec (conj! rec id)]
-    (persistent! rec)))
+ (defn- feature-to-update-record [feature]
+   (let [attributes (:attributes feature)
+         geometry (:geometry feature)
+         geo-group (when geometry (f/geometry-group geometry))]
+     (cond-> (transient [])
+             geometry (conj!-coll
+                       (when (= :point geo-group) (f/as-jts geometry))
+                       (when (= :line geo-group) (f/as-jts geometry))
+                       (when (= :polygon geo-group)  (f/as-jts geometry))
+                       geo-group)
+             attributes (conj!-coll (vals attributes))
+             true (conj! (:id feature))
+             true (persistent!))))
 
 (defn- all-fields-constructor [attributes]
   (if (empty? attributes) (constantly nil) (apply juxt (map #(fn [col] (get col %)) attributes))))
@@ -140,16 +124,16 @@
 (defn- gs-add-feature
   ([db all-attributes-fn features]
    (try
-     (let [per-dataset-collection (group-by #(select-keys % [:dataset :collection]) features)]
-       (doseq [[{:keys [dataset collection]} grouped-features] per-dataset-collection]
+     (let [selector (juxt :dataset :collection)
+           per-dataset-collection (group-by selector features)]
+        (doseq [[[dataset collection] grouped-features] per-dataset-collection]
          (j/with-db-connection [c db]
            (let [all-attributes (all-attributes-fn dataset collection)
-                 records (map #(feature-to-sparse-record % (all-fields-constructor all-attributes)) grouped-features)
-                 per-dataset-collection-geotype (group-by add-geometry-group records)]   
-                   (doseq [[{:keys [geotype]} grouped-records] per-dataset-collection-geotype]
-                     ;; group per geotype so we can batch every group
-                     (let [fields (concat [:_id (geo-column geotype) :_geo_group] (map (comp keyword pg/quoted) all-attributes))]
-                       (apply (partial j/insert! c (str dataset "." (pg/quoted (visualization dataset collection))) fields) grouped-records)))))))
+                 records (map #(feature-to-sparse-record % (all-fields-constructor all-attributes)) grouped-features)]
+              (let [fields (concat [:_id :_geometry_point :_geometry_line :_geometry_polygon :_geo_group]
+                                   (map pg/quoted all-attributes))]
+                (apply (partial j/insert! c (str dataset "." (pg/quoted (visualization dataset collection))) fields)
+                       records))))))
       (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
 
 
@@ -165,21 +149,17 @@
       (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
 
 (defn- gs-update-feature [db features]
-    (let [per-dataset-collection
-          (group-by #(select-keys % [:dataset :collection]) features)]
-      (doseq [[{:keys [dataset collection]} collection-features] per-dataset-collection]
+    (let [selector (juxt :dataset :collection)
+         per-dataset-collection
+           (group-by selector features)]
+     (doseq [[[dataset collection] collection-features] per-dataset-collection]
         ;; group per key collection so we can batch every group
         (let [keyed (group-by feature-keys collection-features)]
           (doseq [[columns vals] keyed]
             (when (< 0 (count columns))
-              (let [update-vals (map feature-to-update-record vals)
-                    geometry-index (.indexOf columns :_geometry)]
-                (if (= geometry-index -1)
-                    (execute-update-sql db dataset collection columns update-vals)
-                    (let [per-geotype (group-by (partial update-geometry-group geometry-index) update-vals)]
-                      (doseq [[{:keys [geotype]} grouped-vals] per-geotype]
-                        (let [columns (assoc columns geometry-index (geo-column geotype))]
-                          (execute-update-sql db dataset collection columns update-vals))))))))))))
+               (let [update-vals (map feature-to-update-record vals)]
+                 (execute-update-sql db dataset collection columns update-vals)
+               )))))))
 
 
 (defn- gs-delete-sql [schema table]
@@ -188,9 +168,9 @@
 
 (defn- gs-delete-feature [db features]
   (try
-    (let [per-dataset-collection
-          (group-by #(select-keys % [:dataset :collection]) features)]
-      (doseq [[{:keys [dataset collection]} collection-features] per-dataset-collection]
+    (let [selector (juxt :dataset :collection)
+          per-dataset-collection (group-by selector features)]
+       (doseq [[[dataset collection] collection-features] per-dataset-collection]
         (let [sql (gs-delete-sql dataset (visualization dataset collection))
               ids (map #(vector (:id %)) collection-features)]
           (j/execute! db (cons sql ids) :multi? true :transaction? false))))))

@@ -93,3 +93,45 @@
   (let [jts (as-jts obj)
         wkt (jts-as-wkt jts)]
     wkt))
+
+(defmulti geometry-group
+  "returns :point, :line or :polygon"
+  (fn [obj] (str/lower-case (get obj "type"))))
+
+(defn- starts-with-get [against-set test-value]
+  (some (fn [t] (.startsWith test-value t)) against-set))
+
+(defn- geometry-group*
+  ([point-types line-types test-value]
+   (geometry-group* point-types line-types test-value get))
+  ([point-types line-types test-value predicate]
+    (condp predicate test-value
+      point-types :point
+      line-types :line
+      :polygon)))
+
+;; http://schemas.opengis.net/gml/3.1.1/base/geometryPrimitives.xsd
+
+(def gml-point-types
+  #{"Point" "MultiPoint"})
+
+;; TODO alles toevoegen, of starts with
+(def gml-line-types
+  #{"Curve" "CompositeCurve" "Arc" "ArcString" "Circle" "LineString"})
+
+(defmethod geometry-group "gml" [obj]
+  (let [re-result (re-find #"^<(gml:)?([^\s]+)" (get obj "gml"))
+        type (when re-result (nth re-result 2))]
+    (geometry-group* gml-point-types gml-line-types type)))
+
+(def jts-point-types
+  "Geometry types of Point-category"
+  #{"Point" "MultiPoint"})
+
+(def jts-line-types
+  "Geometry types of Line-category"
+  #{"Line" "LineString" "MultiLine"})
+
+(defmethod geometry-group "jts" [obj]
+  (let [type (-> obj (get "jts") .getGeometryType)]
+    (geometry-group* jts-point-types jts-line-types type)))
