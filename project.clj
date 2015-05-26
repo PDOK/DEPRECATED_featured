@@ -5,6 +5,8 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :repositories [["osgeo" {:url "http://download.osgeo.org/webdav/geotools/"
                            :snapshots false}]]
+  :mirrors {"*" {:name "kadaster"
+                 :url "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/public/"}}
   :dependencies [[org.clojure/clojure "1.7.0-alpha5"]
                  [org.clojure/tools.trace "0.7.8"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
