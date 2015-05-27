@@ -96,7 +96,8 @@
     validated))
 
 (defn- process-nested-change-feature [processor feature]
-  (process-change-feature processor (assoc feature :action :change)))
+  "Nested change is the same a nested new"
+  (process-new-feature processor (assoc feature :action :change)))
 
 (defn- process-close-feature [{:keys [persistence projectors]} feature]
   (let [validated (->> feature
@@ -149,7 +150,7 @@
 (defn- enrich [[child-collection-key child] parent new-attributes]
   (let [{:keys [dataset collection action id validity]} parent
         child-id (str (java.util.UUID/randomUUID))
-        parent-attributes (prefixed-attributes child-collection-key new-attributes)
+        parent-attributes (prefixed-attributes "_parent" new-attributes)
         enriched (-> (transient child)
                      (assoc! :dataset dataset)
                      (assoc! :parent-collection collection)
