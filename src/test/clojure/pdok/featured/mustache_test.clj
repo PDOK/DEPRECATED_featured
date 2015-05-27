@@ -31,25 +31,24 @@
 (def example-attributes-bgt-wegdeel
   { :traffic-area-gml-id "abcdef"
     :creation-data "2014-12-05"
-    :publicatie-datum "2015-02-05T17:22:59.000"
-    :tijdstip-regristatie "2014-12-05T15:32:38.000"
-    :in-onderzoek false
-    :relatieve-hoogteligging "0"
-    :bronhouder "G0303"
-    :imgeo-namespace "NL.IMGeo"
-    :imgeo-lokaalid "G0303.0979f33001fd319ae05332a1e90a5e0b"
-    :bgt-status "bestaand"
-    :plus-status "geenWaarde"
-    :function "voetpad"
-    :surface-material "open verharding"
-    :kruinlijn-wegdeel-nil-reason "geenWaarde"
-    :wegdeel-op-talud false
-    :plus-fysiek-voorkomen-wegdeel "tegels"})
+    "LV-publicatiedatum" "2015-02-05T17:22:59.000"
+    "tijdstipRegistratie" "2014-12-05T15:32:38.000"
+    "inOnderzoek" false
+    "relatieveHoogteligging" 0
+    "bronhouder" "G0303"
+    "lokaalID" "G0303.0979f33001fd319ae05332a1e90a5e0b"
+    "status" "bestaand"
+    "plus-status" "geenWaarde"
+    "functie" "voetpad"
+    "fysiekVoorkomen" "open verharding"
+    "kruinlijn-leeg" "geenWaarde"
+    "opTalud" false
+    "plus-fysiekVoorkomen" "tegels"})
 
 (def example-feature-bgt-wegdeel 
                   (merge
                     {:_action "new"}
-                    {:_geometry example-geometry-bgt-wegdeel}
+    ;;                {:geometry example-geometry-bgt-wegdeel}
                      example-attributes-bgt-wegdeel))
 
 (defn example-features [n] (repeat n example-feature-bgt-wegdeel))

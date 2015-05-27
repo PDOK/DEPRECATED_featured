@@ -9,7 +9,7 @@
   distinct (re-seq #"\{\{[\S]*\}\}" template))
 
 (defn template-to-pattern [template]
-  (let [ variable-list  (distinct (re-seq #"\{\{[\S]*\}\}" template))
+  (let [ variable-list  (distinct (re-seq #"\{\{[^\s\{\}]*\}\}" template))
          pattern (str (apply str (interpose "|" (map #(java.util.regex.Pattern/quote %) variable-list))))]
     (re-pattern pattern)))
 
@@ -19,20 +19,21 @@
 (deftype MapProxy [feature]
    clojure.lang.IFn
       (invoke [_ k]
-             (let [feature-key (keyword (clojure.string/replace k #"\{\{|\}\}" ""))]
-              (if (= :_geometry.gml feature-key)
+             (let [feature-key (clojure.string/replace k #"\{\{|\}\}" "")]
+              (if (= "geometry.gml" feature-key)
                   (let [render-function (str feature-key)
                         render-function (last (clojure.string/split render-function #"\."))]
-                   
-                    ((resolve-as-function render-function) (:_geometry feature)))
+                    (or ((resolve-as-function render-function) (:geometry feature)) "not defined"))
 
-                  (or (.valAt feature feature-key) "")))))
+                  (or (str (.valAt feature feature-key)) "not defined")))))
 
 (defmulti render-template (fn [template features] 
   (if (instance? clojure.lang.IFn features) :single-feature :feature-collection)))
 
-(defmethod render-template :single-feature [template feature] 
-  (clojure.string/replace template (template-to-pattern template) feature))
+(defmethod render-template :single-feature [template feature]
+  (let [pattern (template-to-pattern template)
+        _ (println pattern)]
+  (clojure.string/replace template pattern feature)))
 
 (defmethod render-template :feature-collection [template features]
   (let [template (read-template template)]
