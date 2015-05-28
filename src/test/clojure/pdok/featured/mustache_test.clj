@@ -4,13 +4,12 @@
              [cheshire.core :as json]
              [pdok.featured.mustache :refer :all]))
 
-(def testMapping {:begin "eerste stap", :eind "tweede stap"})
+(def testMapping {"begin" "eerste stap", "eind" "tweede stap"})
 (def testTemplate "Dit is een {{begin}} en later nog een {{eind}}")
 
 (def resultTemplateMapping "Dit is een eerste stap en later nog een tweede stap")
 
-
-(def testMapping2 {:begin "aaa", :eind "bbb"})
+(def testMapping2 {"begin" "aaa", "eind" "bbb"})
 (def testTemplate2 "Eerst iets anders {{begin}} en op het einde {{eind}}")
 (def resultTemplate2Mapping2 "Eerst iets anders aaa en op het einde bbb")
 
@@ -48,7 +47,7 @@
 (def example-feature-bgt-wegdeel 
                   (merge
                     {:_action "new"}
-    ;;                {:geometry example-geometry-bgt-wegdeel}
+                    {:geometry example-geometry-bgt-wegdeel}
                      example-attributes-bgt-wegdeel))
 
 (defn example-features [n] (repeat n example-feature-bgt-wegdeel))

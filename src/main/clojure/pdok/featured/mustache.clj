@@ -27,12 +27,12 @@
 
                   (or (str (.valAt feature feature-key)) "not defined")))))
 
+
 (defmulti render-template (fn [template features] 
   (if (instance? clojure.lang.IFn features) :single-feature :feature-collection)))
 
 (defmethod render-template :single-feature [template feature]
-  (let [pattern (template-to-pattern template)
-        _ (println pattern)]
+  (let [pattern (template-to-pattern template)]
   (clojure.string/replace template pattern feature)))
 
 (defmethod render-template :feature-collection [template features]
