@@ -20,9 +20,9 @@
    clojure.lang.IFn
       (invoke [_ k]
              (let [feature-key (clojure.string/replace k #"\{\{|\}\}" "")]
-              (if (= "geometry.gml" feature-key)
+              (if (= "geometry#gml" feature-key)
                   (let [render-function (str feature-key)
-                        render-function (last (clojure.string/split render-function #"\."))]
+                        render-function (last (clojure.string/split render-function #"\#"))]
                     (or ((resolve-as-function render-function) (:geometry feature)) "not defined"))
 
                   (or (str (.valAt feature feature-key)) "not defined")))))
