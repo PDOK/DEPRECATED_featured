@@ -47,7 +47,7 @@
 (def example-feature-bgt-wegdeel 
                   (merge
                     {:_action "new"}
-                    {:geometry example-geometry-bgt-wegdeel}
+                    {"geometry" example-geometry-bgt-wegdeel}
                      example-attributes-bgt-wegdeel))
 
 (defn example-features [n] (repeat n example-feature-bgt-wegdeel))
@@ -72,6 +72,45 @@
        (json/generate-stream {:features (render-wegdeel-with-example n)} w))))
   
  (def test-map {:Mutatie "Iets" :AndereMutatie "EnIetsAnders"})
+ 
+ (deftest test-split-feature-key-nested-with-function
+   (let [feature-key "wegdeel.kruinlijn.geo.#gml"]
+     (is (= {:template-keys ["wegdeel" "kruinlijn" "geo"]
+             :template-function "gml"} 
+            (split-feature-key feature-key)))))
+  
+ (deftest test-split-feature-key-nested-without-function
+   (let [feature-key "wegdeel.kruinlijn.geo"]
+     (is (= {:template-keys ["wegdeel" "kruinlijn" "geo"]
+             :template-function nil} 
+            (split-feature-key feature-key)))))
+ 
+ (deftest test-split-feature-key-nested-with-function
+   (let [feature-key "wegdeel.kruinlijn.geo.#gml"]
+     (is (= {:template-keys ["wegdeel" "kruinlijn" "geo"]
+             :template-function "gml"} 
+            (split-feature-key feature-key)))))
+  
+ (deftest test-split-feature-key-with-function
+   (let [feature-key "wegdeel.geo.#gml"]
+     (is (= {:template-keys ["wegdeel" "geo"]
+             :template-function "gml"} 
+            (split-feature-key feature-key)))))
+ 
+ (deftest test-split-simple-feature-key
+   (let [feature-key "wegdeel"]
+     (is (= {:template-keys ["wegdeel"]
+             :template-function nil} 
+            (split-feature-key feature-key)))))
+ 
+ (deftest test-split-simple-feature-key-with-keys
+   (let [feature-key "wegdeel"]
+     (is (= {:template-keys ["wegdeel"]
+             :template-function nil} 
+            (split-feature-key feature-key)))))
+ 
+ 
+ 
  
          
 
