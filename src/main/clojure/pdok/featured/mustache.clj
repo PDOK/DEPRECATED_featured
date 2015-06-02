@@ -27,18 +27,35 @@
   { :template-keys (template-keys feature-key)
     :template-function (template-function feature-key)})
 
+(defn- splitted-keys-with-default [splitted-keys]
+  (let [feature-keys (:template-keys splitted-keys)
+        feature-keys-with-default (assoc feature-keys (- (count feature-keys) 1) (str (last feature-keys) "_leeg"))]
+    (assoc splitted-keys :template-keys feature-keys-with-default)
+    ))
+
+(defn- resolve-feature-value [feature-value template-function]
+  (if (nil? template-function)
+        feature-value
+        (let [resolved-function (resolve-as-function template-function)
+              resolved-value (resolved-function feature-value)]
+         resolved-value)))
+
+(defn- value-or-default-or-no-value [resolved-feature-value feature splitted-keys-with-default]
+    (if (nil? resolved-feature-value)
+      (or (get-in feature (:template-keys splitted-keys-with-default)) 
+          "NO VALUE")
+      resolved-feature-value))
+
 (deftype MapProxy [feature]
    clojure.lang.IFn
       (invoke [_ k]
-             (let [feature-key (clojure.string/replace k #"\{\{|\}\}" "")
-                   splitted-keys (split-feature-key feature-key)
-                   template-function (:template-function splitted-keys)
-                   feature-value (get-in feature (:template-keys splitted-keys))]
-                 (if (nil? template-function) 
-                     (or (str feature-value) "not defined")
-                     (let [resolved-function (resolve-as-function template-function)
-                           resolved-value (resolved-function feature-value)]
-                      (or (str resolved-value) "not defined (with function)"))))))
+        (let [feature-key (clojure.string/replace k #"\{\{|\}\}" "")
+              splitted-keys (split-feature-key feature-key)
+              splitted-keys-with-default (splitted-keys-with-default splitted-keys)
+              template-function (:template-function splitted-keys)
+              feature-value (get-in feature (:template-keys splitted-keys))
+              resolved-feature-value (resolve-feature-value feature-value template-function)]
+          (str (value-or-default-or-no-value resolved-feature-value feature splitted-keys-with-default)))))
 
 (defmulti render-template (fn [template features] 
   (if (instance? clojure.lang.IFn features) :single-feature :feature-collection)))

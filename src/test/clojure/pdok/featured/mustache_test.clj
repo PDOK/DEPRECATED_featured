@@ -28,51 +28,76 @@
 (def example-geometry-bgt-wegdeel {"gml" example-gml-bgt-wegdeel, "type" "gml"})
 
 (def example-attributes-bgt-wegdeel
-  { :traffic-area-gml-id "abcdef"
-    :creation-data "2014-12-05"
+  { "_traffic-area-gml-id" "abcdef"
+    "_creation-data" "2014-12-05"
     "LV-publicatiedatum" "2015-02-05T17:22:59.000"
     "tijdstipRegistratie" "2014-12-05T15:32:38.000"
     "inOnderzoek" false
     "relatieveHoogteligging" 0
     "bronhouder" "G0303"
-    "lokaalID" "G0303.0979f33001fd319ae05332a1e90a5e0b"
-    "status" "bestaand"
-    "plus-status" "geenWaarde"
-    "functie" "voetpad"
-    "fysiekVoorkomen" "open verharding"
-    "kruinlijn-leeg" "geenWaarde"
-    "opTalud" false
-    "plus-fysiekVoorkomen" "tegels"})
+    "lokaalID" "G0303.0979f33001fd319ae05332a1e90a5e0b"})
 
 (def example-feature-bgt-wegdeel 
                   (merge
-                    {:_action "new"}
-                    {"geometry" example-geometry-bgt-wegdeel}
+                    {"_action" "new"}
+                    {"_geometry" example-geometry-bgt-wegdeel}
                      example-attributes-bgt-wegdeel))
 
 (defn example-features [n] (repeat n example-feature-bgt-wegdeel))
 
-
- (defn render-wegdeel-with-example [n] 
+(defn render-wegdeel-with-example [n] 
    (render-template 
      "pdok/featured/templates/bgt-wegdeel.template" 
      (example-features n)))
+
   
  (deftest test-features-mapping
-   (is (= 5 (count(filter #(re-find #"G0303.0979f33001fd319ae05332a1e90a5e0b" %) (render-wegdeel-with-example 5))))))
+   (is (= 5 (count(filter #(re-find #"G0303.0979f33001fd319ae05332a1e90a5e0b" %) (render-wegdeel-with-example 5)))))
+   (is (= 5 (count(filter #(re-find #"<imgeo:inOnderzoek>false</imgeo:inOnderzoek>" %) (render-wegdeel-with-example 5))))))
 
+ 
  (deftest test-features-gml-mapping
    (is (= 5 (count(filter #(re-find #"<gml:posList" %) (render-wegdeel-with-example 5))))))
  
  (deftest test-5-features-5
    (is (= 0 (count (filter #(re-find #"not be found" %) (render-wegdeel-with-example 5))))))
 
+
+(def example-attributes-bgt-wegdeel-with-default
+  { "_traffic-area-gml-id" "abcdef"
+    "_creation-data" "2014-12-05"
+    "inOnderzoek" nil
+    "inOnderzoek_leeg" true
+    "relatieveHoogteligging" 0
+    "bronhouder" nil
+    "bronhouder_leeg" "BGT"
+    "lokaalID" "G0303.0979f33001fd319ae05332a1e90a5e0b"})
+
+(def example-feature-bgt-wegdeel-with-default 
+      (merge {"_action" "new"}
+             {"_geometry" nil}
+             {"_geometry_leeg" "NO GEO"}
+             example-attributes-bgt-wegdeel-with-default))
+
+(defn example-features-with-default [n] (repeat n example-feature-bgt-wegdeel-with-default))
+
+(defn render-wegdeel-with-example-with-default [n] 
+   (render-template 
+     "pdok/featured/templates/bgt-wegdeel.template" 
+     (example-features-with-default n)))
+
+(deftest test-features-mapping-with-default 
+  (let [rendered-template (first (render-wegdeel-with-example-with-default 1))]
+    (is (= 1 (count (re-seq #"NO GEO" rendered-template))))
+    (is (= 1 (count (re-seq #"<imgeo:bronhouder>BGT</imgeo:bronhouder>" rendered-template))))
+    (is (= 1 (count (re-seq #"<imgeo:inOnderzoek>true</imgeo:inOnderzoek>" rendered-template))))
+    (is (= 13 (count (re-seq #"NO VALUE" rendered-template))))
+    (is (= 1 (count (re-seq #"G0303.09" rendered-template))))))
+
  (defn write-gml-files [n]
     (time (with-open [w (clojure.java.io/writer "target/features.gml.json")]
        (json/generate-stream {:features (render-wegdeel-with-example n)} w))))
   
- (def test-map {:Mutatie "Iets" :AndereMutatie "EnIetsAnders"})
- 
  (deftest test-split-feature-key-nested-with-function
    (let [feature-key "wegdeel.kruinlijn.geo.#gml"]
      (is (= {:template-keys ["wegdeel" "kruinlijn" "geo"]
