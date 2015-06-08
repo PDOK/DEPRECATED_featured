@@ -11,6 +11,8 @@
            [com.vividsolutions.jts.geom Geometry]
            [com.vividsolutions.jts.io WKTWriter]
            ))
+(def lower-case
+  (fnil str/lower-case ""))
 
 (deftype NilAttribute [class]
   Object
@@ -67,13 +69,13 @@
 (defn strip-gml-ns [input]
   (str/replace input "gml:" ""))
 
-(defmulti as-gml (fn [obj] str/lower-case (get obj "type")))
+(defmulti as-gml (fn [obj] lower-case (get obj "type")))
 
 (defmethod as-gml "gml" [obj] (get obj "gml"))
-(defmethod as-gml nil [obj] nil)
+(defmethod as-gml :default [obj] nil)
 
-(defmulti as-jts (fn [obj] str/lower-case (get obj "type")))
-(defmethod as-jts nil [_] nil)
+(defmulti as-jts (fn [obj] lower-case (get obj "type")))
+(defmethod as-jts :default [_] nil)
 (defmethod as-jts "gml" [obj]
   (let [gml (-> obj (get "gml") strip-gml-ns (.getBytes "UTF-8"))
         in (io/input-stream gml)]
@@ -82,7 +84,7 @@
 (defmethod as-jts "jts" [obj]
   (get obj "jts"))
 
-(defmulti as-wkt (fn [obj] str/lower-case (get obj "type")))
+(defmulti as-wkt (fn [obj] lower-case (get obj "type")))
 
 (def wkt-writer (WKTWriter.))
 
@@ -96,7 +98,9 @@
 
 (defmulti geometry-group
   "returns :point, :line or :polygon"
-  (fn [obj] (str/lower-case (get obj "type"))))
+  (fn [obj] (lower-case (get obj "type"))))
+
+(defmethod geometry-group :default [_] nil)
 
 (defn- starts-with-get [against-set test-value]
   (some (fn [t] (.startsWith test-value t)) against-set))

@@ -1,6 +1,6 @@
 (ns pdok.featured.processor-test
   (:require [clj-time.local :as tl]
-            [pdok.featured.processor :refer :all]
+            [pdok.featured.processor :as processor :refer [consume shutdown]]
             [pdok.featured.persistence :as pers]
             [pdok.featured.projectors :as proj]
             [clojure.test :refer :all]))
@@ -69,7 +69,7 @@
   (pers/append-to-stream persistence nil action dataset collection id validity nil nil))
 
 (deftest inititialized-processor
-  (let [processor (processor (create-persistence) (create-projectors 2))]
+  (let [processor (processor/create (create-persistence) (create-projectors 2))]
     (testing "Initialized persistence?"
       (is (-> processor :persistence :initialized)))
     (testing "Initialized projectors?"
@@ -84,14 +84,29 @@
       (doseq [p (:projectors processor)]
         (is (-> p :closed))))))
 
+(defn- new-should-be-ok [processor processed]
+  (is (= false (nil? processed)))
+  (is (not (:invalid? processed)))
+  (is (= 1 (-> processor :persistence :streams-n deref)))
+  (is (= 1 (-> processor :persistence :events-n deref)))
+  (is (= 1 @(-> processor :projectors first :features-n))))
+
 (deftest ok-new-feature
   (let [processor (create-processor)
         processed (first (consume processor valid-new-feature))]
-    (is (= false (nil? processed)))
-    (is (not (:invalid? processed)))
-    (is (= 1 (-> processor :persistence :streams-n deref)))
-    (is (= 1 (-> processor :persistence :events-n deref)))
-    (is (= 1 @(-> processor :projectors first :features-n)))))
+    (new-should-be-ok processor processed)))
+
+(def still-valid-new-transformations
+  [["no geometry" #(dissoc % :geometry)]
+   ["nil geometry" #(assoc % :geometry nil)]])
+
+(deftest also-ok-new-feature
+  (doseq [[name transform] still-valid-new-transformations]
+    (let [processor (create-processor)
+          also-valid-new-feature (transform valid-new-feature)
+          processed (first (consume processor also-valid-new-feature))]
+      (testing (str name " should be ok for " processed)
+        (new-should-be-ok processor processed)))))
 
 (def make-broken-new-transformations
   [["no dataset" #(dissoc % :dataset)]
@@ -114,18 +129,30 @@
         (is (= 0 (-> processor :persistence :events-n deref)))
         (is (= 0 @(-> processor :projectors first :features-n)))))))
 
+(defn- change-should-be-ok [processor processed]
+  (is (= false (nil? processed)))
+  (is (not (:invalid? processed)) (str (:invalid-reasons processed)))
+  (is (= 1 (-> processor :persistence :streams-n deref))) ; no new stream
+  (is (= 2 (-> processor :persistence :events-n deref)))
+  (is (= 0 @(-> processor :projectors first :features-n))) ; no new features
+  (is (= 1 @(-> processor :projectors first :changes-n))))
+
 (deftest ok-change-feature
   (let [processor (create-processor)
         persistence (:persistence processor)
         _ (init-with-feature persistence valid-new-feature)
         processed (first (consume processor valid-change-feature))]
-    (is (= false (nil? processed)))
-    (is (not (:invalid? processed)) (str (:invalid-reasons processed)))
-    (is (= 1 (-> processor :persistence :streams-n deref))) ; no new stream
-    (is (= 2 (-> processor :persistence :events-n deref)))
-    (is (= 0 @(-> processor :projectors first :features-n))) ; no new features
-    (is (= 1 @(-> processor :projectors first :changes-n)))
+    (change-should-be-ok processor processed)
     ))
+
+(deftest also-ok-change-feature
+  (doseq [[name transform] still-valid-new-transformations]
+    (let [processor (create-processor)
+          _ (init-with-feature (:persistence processor) valid-new-feature)
+          also-valid-change-feature (transform valid-change-feature)
+          processed (first (consume processor also-valid-change-feature))]
+      (testing (str name " should be ok")
+        (change-should-be-ok processor processed)))))
 
 (def make-broken-change-transformations
   [["no current-validity" #(dissoc % :current-validity)]
@@ -134,15 +161,14 @@
 (deftest nok-change-feature
   (doseq [[name transform] (concat make-broken-new-transformations
                                    make-broken-change-transformations)]
-    (let [processor (-> (create-processor)
-                        (assoc-in [:persistence :current-validity] default-validity)
-                        (assoc-in [:persistence :exists?] true))
+    (let [processor (create-processor)
+          _ (init-with-feature (:persistence processor) valid-new-feature)
           invalid-change-feature (transform valid-change-feature)
           processed (first (consume processor invalid-change-feature))]
       (testing (str name " should break")
         (is (not (nil? processed)))
         (is (:invalid? processed))
-        (is (= 0 (-> processor :persistence :events-n deref)))
+        (is (= 1 (-> processor :persistence :events-n deref))) ;; only new
         (is (= 0 @(-> processor :projectors first :features-n))) ; no new features
         (is (= 0 @(-> processor :projectors first :changes-n))))
       )))

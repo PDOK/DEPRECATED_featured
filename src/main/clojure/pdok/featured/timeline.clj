@@ -123,7 +123,7 @@ WHERE dataset = ? AND collection = ? AND  feature_id = ?"))
     this)
   )
 
-(defn timeline-projector [config]
+(defn create [config]
   (let [db (:db-config config)
         cache (ref (cache/basic-cache-factory {}))
         load-cache?-fn (once-true-fn)

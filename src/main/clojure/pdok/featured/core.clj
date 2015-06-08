@@ -1,8 +1,8 @@
 (ns pdok.featured.core
   (:require [pdok.featured.json-reader :refer [features-from-stream file-stream]]
-            [pdok.featured.processor :refer :all]
+            [pdok.featured.processor :as processor :refer [consume shutdown]]
             [pdok.featured.projectors :as proj]
-            [pdok.featured.timeline :as tl]
+            [pdok.featured.timeline :as timeline]
             [pdok.featured.persistence :as pers]
             [pdok.featured.generator :refer [random-json-feature-stream]]
             [clojure.tools.cli :refer [parse-opts]]
@@ -25,11 +25,13 @@
                        dataset-name
                        no-projectors]}]
   (println (str "start" (when dataset-name " dataset: " dataset-name) (when no-projectors " without projectors")))
-  (let [proc-fact (partial processor (pers/cached-jdbc-processor-persistence {:db-config processor-db :batch-size 10000}))
+  (let [persistence (pers/cached-jdbc-processor-persistence
+                    {:db-config processor-db :batch-size 10000})
         processor (if no-projectors
-                    (proc-fact [])
-                    (proc-fact [(proj/geoserver-projector {:db-config data-db})
-                                (tl/timeline-projector {:db-config data-db})]))]
+                    (processor/create persistence)
+                    (processor/create persistence
+                      [(proj/geoserver-projector {:db-config data-db})
+                       (timeline/create {:db-config processor-db :persistence persistence})]))]
     (with-open [s (file-stream json-file)]
       (let [consumed (consume processor (features-from-stream s :dataset dataset-name))]
         (time (do (println "EVENTS PROCESSED: " (count consumed))
@@ -49,8 +51,10 @@
 
 (defn performance-test [n & args]
   (with-open [json (apply random-json-feature-stream "perftest" "col1" n args)]
-    (let [processor (processor [(proj/geoserver-projector {:db-config data-db})
-                                (tl/timeline-projector {:db-config data-db})])
+    (let [persistence (pers/cached-jdbc-processor-persistence {:db-config processor-db})
+          processor (processor/create persistence
+                      [(proj/geoserver-projector {:db-config data-db})
+                       (timeline/create {:db-config processor-db :persistence persistence})])
           features (features-from-stream json)
           consumed (consume processor features)
          ; _ (doseq [c consumed] ( println c))
