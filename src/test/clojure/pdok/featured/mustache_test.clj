@@ -29,22 +29,22 @@
                      example-attributes-bgt-wegdeel)
 )
 
-(defn example-features [n] (repeat n example-feature-bgt-wegdeel))
+(defn example-bgt-features [n] (repeat n example-feature-bgt-wegdeel))
 
-(defn render-wegdeel-with-example [n] 
+(defn render-wegdeel-with-bgt-example [n] 
    (map (partial m/render-resource "pdok/featured/templates/bgt-wegdeel.template") 
-      (example-features n)))
+      (example-bgt-features n)))
 
   
  (deftest test-features-mapping
-   (is (= 5 (count(filter #(re-find #"G0303.0979f33001fd319ae05332a1e90a5e0b" %) (render-wegdeel-with-example 5)))))
-   (is (= 5 (count(filter #(re-find #"<imgeo:inOnderzoek>false</imgeo:inOnderzoek>" %) (render-wegdeel-with-example 5))))))
+   (is (= 5 (count(filter #(re-find #"G0303.0979f33001fd319ae05332a1e90a5e0b" %) (render-wegdeel-with-bgt-example 5)))))
+   (is (= 5 (count(filter #(re-find #"<imgeo:inOnderzoek>false</imgeo:inOnderzoek>" %) (render-wegdeel-with-bgt-example 5))))))
 
  
  (deftest test-features-gml-mapping
-   (is (= 5 (count(filter #(re-find #"<gml:posList" %) (render-wegdeel-with-example 5))))))
+   (is (= 5 (count(filter #(re-find #"<gml:posList" %) (render-wegdeel-with-bgt-example 5))))))
  
  (defn write-gml-files [n]
     (time (with-open [w (clojure.java.io/writer "target/features.gml.json")]
-       (json/generate-stream {:features (render-wegdeel-with-example n)} w))))
+       (json/generate-stream {:features (render-wegdeel-with-bgt-example n)} w))))
   
