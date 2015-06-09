@@ -8,7 +8,6 @@
   "Returns the template-representation of the collection of features for a the given feature-type,
    based on the feature-type and the dataset a (gml-)template will be used"
   (let [template (template-file dataset feature-type)]
-    (render-template template features)))
-
+    (map (partial render-resource-m template) features)))
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))

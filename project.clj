@@ -23,7 +23,8 @@
                  [org.geotools/gt-xml "13.0"]
                  [org.geotools/gt-epsg-extension "13.0"]
                  [org.geotools/gt-shapefile "13.0"]
-                 [org.codehaus.woodstox/woodstox-core-asl "4.4.1"]]
+                 [org.codehaus.woodstox/woodstox-core-asl "4.4.1"]
+                 [de.ubercode.clostache/clostache "1.4.0"]]
   :plugins [[lein-environ "1.0.0"]]
   :main ^:skip-aot pdok.featured.core
   :target-path "target/%s"

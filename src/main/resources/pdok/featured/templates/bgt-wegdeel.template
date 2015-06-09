@@ -17,7 +17,7 @@
 		<function codeSpace="{{functie_codeSpace}}">{{functie}}</function>
 		<surfaceMaterial codeSpace="{{fysiekVoorkomen_codeSpace}}">{{fysiekVoorkomen}}</surfaceMaterial>
 		<imgeo:kruinlijnWegdeel nilReason={{kruinlijn-leeg}}/>
-		<imgeo:geometrie2dWegdeel>{{_geometry.#gml}}</imgeo:geometrie2dWegdeel>
+		<imgeo:geometrie2dWegdeel>{{{_geometry.gml}}}</imgeo:geometrie2dWegdeel>
 		<imgeo:wegdeelOpTalud>{{opTalud}}</imgeo:wegdeelOpTalud>
 		<imgeo:plus-fysiekVoorkomenWegdeel codeSpace="{{fysiekVoorkomen_codeSpace}}">{{plus-fysiek-voorkomen-wegdeel}}</imgeo:plus-fysiekVoorkomenWegdeel>
 		<imgeo:plus-functieWegdeel codeSpace="http://www.geostandaarden.nl/imgeo/def/2.1#VoidReasonValue"/>				
