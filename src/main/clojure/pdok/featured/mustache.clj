@@ -1,5 +1,5 @@
 (ns pdok.featured.mustache
-   (:require [clostache.parser :refer :all]))
+   (:require [clostache.parser :as clostache]))
 
 (defn resolve-as-function [function]
   (ns-resolve *ns* (symbol (str "pdok.featured.mustache-functions/" (name function)))))
@@ -21,10 +21,10 @@
     Object
       (toString [_] (str obj))))
 
-(defn render-m [template feature]
-  (render template (lookup-proxy feature)))
+(defn render [template feature]
+  (clostache/render template (lookup-proxy feature)))
 
-(defn render-resource-m [path feature]
-  (render-resource path (lookup-proxy feature)))
+(defn render-resource [path feature]
+  (clostache/render-resource path (lookup-proxy feature)))
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))

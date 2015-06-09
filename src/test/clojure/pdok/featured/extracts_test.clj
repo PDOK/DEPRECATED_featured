@@ -15,11 +15,11 @@
 (defn two-features [] (list (test-feature "name1" "A" "B") 
                              (test-feature "name2" "C" "D")))
 
-(deftest test-two-template-features
-  (is (= 2 )(count (template-features "test" "dummy" (two-features)))))
+(deftest test-two-rendered-features
+  (is (= 2 )(count (render-features "test" "dummy" (two-features)))))
 
-(deftest test-template-feature-resolve-gml
-  (let [result-feature (first (template-features "test" "dummy" (one-feature)))]
+(deftest test-rendered-feature-gml
+  (let [result-feature (first (render-features "test" "dummy" (one-feature)))]
     (is (boolean (re-find #"<geo><gml:Polygon" result-feature)))
     (is (boolean (re-find #"<naam>PDOK</naam>" result-feature)))))
 
@@ -35,9 +35,9 @@
 (defn write-xml [dataset feature-type path]
   "Helper function to write template-features to filesystem."
   (let [features (file-to-features path dataset)
-        template-features (template-features dataset feature-type features)]
-     (doseq [ [idx template-feature] (map #(vector %1 %2) (range) template-features)] 
-               (write-feature template-feature (str "target/output_" idx ".xml")))))
+        rendered-features (render-features dataset feature-type features)]
+     (doseq [ [idx rendered-feature] (map #(vector %1 %2) (range) rendered-features)] 
+               (write-feature rendered-feature (str "target/output_" idx ".xml")))))
 
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))

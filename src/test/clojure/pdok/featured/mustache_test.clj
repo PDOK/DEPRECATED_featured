@@ -1,9 +1,7 @@
 (ns pdok.featured.mustache-test
-   (:require [clojure.java.io :as io]
-             [clojure.test :refer :all]
+   (:require [clojure.test :refer :all]
              [cheshire.core :as json]
-             [pdok.featured.mustache :refer :all]
-             [pdok.featured.feature :refer :all]))
+             [pdok.featured.mustache :as m]))
 
 
 (def example-gml-bgt-wegdeel
@@ -34,7 +32,7 @@
 (defn example-features [n] (repeat n example-feature-bgt-wegdeel))
 
 (defn render-wegdeel-with-example [n] 
-   (map (partial render-resource-m "pdok/featured/templates/bgt-wegdeel.template") 
+   (map (partial m/render-resource "pdok/featured/templates/bgt-wegdeel.template") 
       (example-features n)))
 
   
