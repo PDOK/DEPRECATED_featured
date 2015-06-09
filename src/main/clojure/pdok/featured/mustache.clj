@@ -2,7 +2,7 @@
    (:require [clostache.parser :refer :all]))
 
 (defn resolve-as-function [function]
-  (ns-resolve *ns* (symbol (str "pdok.featured.mustache-functions/as-" (name function)))))
+  (ns-resolve *ns* (symbol (str "pdok.featured.mustache-functions/" (name function)))))
 
 (defn lookup-proxy [obj]
   (reify
