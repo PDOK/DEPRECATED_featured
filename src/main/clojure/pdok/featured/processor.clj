@@ -26,11 +26,6 @@
       (make-invalid feature "All feature require: dataset collection id validity")
       feature)))
 
-(defn- apply-new-feature-requires-geometry-validation [_ feature]
-  (if (nil? (:geometry feature))
-    (make-invalid feature "New feature requires: geometry")
-    feature))
-
 (defn- apply-new-feature-requires-non-existing-stream-validation [persistence feature]
   (let [{:keys [dataset collection id]} feature]
     (if (and (not (:invalid? feature)) (pers/stream-exists? persistence dataset collection id))
@@ -53,12 +48,6 @@
           (make-invalid feature "When updating current-validity should match")
           feature)))))
 
-(defn- apply-change-feature-cannot-have-nil-geometry-validation [_ feature]
-  (let [geometry (:geometry feature)]
-    (if (and (contains? feature :geometry) (nil? geometry))
-      (make-invalid feature "Change feature cannot have nil geometry (also remove the key)")
-      feature)))
-
 (defn- apply-closed-feature-cannot-be-changed-validation [persistence feature]
   (let [{:keys [dataset collection id]} feature
         last-action (pers/last-action persistence dataset collection id)]
@@ -70,7 +59,6 @@
 (defn- process-new-feature [{:keys [persistence projectors]} feature]
   (let [validated (->> feature
                        (apply-all-features-validation persistence)
-                       (apply-new-feature-requires-geometry-validation persistence)
                        (apply-new-feature-requires-non-existing-stream-validation persistence))]
     (when-not (:invalid? validated)
       (let [{:keys [dataset collection id validity geometry attributes]} validated]
@@ -85,7 +73,6 @@
 (defn- process-change-feature [{:keys [persistence projectors]} feature]
   (let [validated (->> feature
                        (apply-all-features-validation persistence)
-                       (apply-change-feature-cannot-have-nil-geometry-validation persistence)
                        (apply-non-new-feature-requires-existing-stream-validation persistence)
                        (apply-closed-feature-cannot-be-changed-validation persistence)
                        (apply-non-new-feature-requires-matching-current-validity-validation persistence))]
@@ -96,13 +83,13 @@
     validated))
 
 (defn- process-nested-change-feature [processor feature]
-  (process-change-feature processor (assoc feature :action :change)))
+  "Nested change is the same a nested new"
+  (process-new-feature processor (assoc feature :action :change)))
 
 (defn- process-close-feature [{:keys [persistence projectors]} feature]
   (let [validated (->> feature
                        (apply-all-features-validation persistence)
                        (apply-closed-feature-cannot-be-changed-validation persistence)
-                       (apply-change-feature-cannot-have-nil-geometry-validation persistence)
                        (apply-non-new-feature-requires-existing-stream-validation persistence)
                        (apply-non-new-feature-requires-matching-current-validity-validation persistence))]
     (when-not (:invalid? validated)
@@ -140,27 +127,6 @@
                   (assoc! :collection (str collection "$" (name child-collection-key))))]
     (persistent! with-parent)))
 
-(defn- prefixed-attributes [prefix attributes]
-  (let [replacement-map (persistent! (reduce (fn [c [k v]] (assoc! c k v)) (transient {})
-                                             (map #(vector %1 (str prefix "$" (name %1)) ) (keys attributes))))
-        prefixed (clojure.set/rename-keys attributes replacement-map)]
-    prefixed))
-
-(defn- enrich [[child-collection-key child] parent new-attributes]
-  (let [{:keys [dataset collection action id validity]} parent
-        child-id (str (java.util.UUID/randomUUID))
-        parent-attributes (prefixed-attributes child-collection-key new-attributes)
-        enriched (-> (transient child)
-                     (assoc! :dataset dataset)
-                     (assoc! :parent-collection collection)
-                     (assoc! :parent-id id)
-                     (assoc! :collection (str collection "$" (name child-collection-key)))
-                     (assoc! :action (keyword (str "nested-" (name (:action parent)))))
-                     (assoc! :id child-id)
-                     (assoc! :validity validity)
-                     (assoc! :attributes (merge (:attributes child) parent-attributes)))]
-   (persistent! enriched) ))
-
 (defn- meta-close-all-features [features]
   "{:action :close-all :dataset _ :collection _ :parent-collection _ :parent-id _ :end-time _"
   (let [grouped (group-by #(select-keys % [:dataset :collection :parent-collection :parent-id :validity]) features)]
@@ -175,7 +141,7 @@
              (meta dataset collection parent-collection parent-id validity)) grouped)
       )))
 
-(defn- flatten-with-geometry [feature]
+(defn- flatten [feature]
   (let [attributes (:attributes feature)
         nested (nested-features attributes)
         without-nested (apply dissoc attributes (map #(first %) nested))
@@ -183,28 +149,10 @@
         linked-nested (map #(link-parent % feature) nested)
         close-all (meta-close-all-features linked-nested)]
     (if (empty? linked-nested)
-      (list  flat)
+      (list flat)
       (cons flat (concat close-all (mapcat pre-process linked-nested))))
     )
   )
-
-(defn- flatten-without-geometry [feature]
-  ;; collection van parent is prefix, en voeg parents toe aan childs
-  (let [dropped-parent (assoc feature :action :drop)
-        attributes (:attributes feature)
-        nested (nested-features attributes)
-        attributes-without-nested (apply dissoc attributes (map #(first %) nested))
-        enriched-nested (map #(enrich % feature attributes-without-nested) nested)
-        close-all (meta-close-all-features enriched-nested)]
-    (if (empty? enriched-nested)
-      (list (if (= (:action feature) :new) dropped-parent feature))
-      (cons dropped-parent (concat close-all (mapcat pre-process enriched-nested)))))
-  )
-
-(defn- flatten [feature]
-  (if (contains? feature :geometry)
-    (flatten-with-geometry feature)
-    (flatten-without-geometry feature)))
 
 (defn- attributes [obj]
   (apply dissoc obj pdok-fields)
@@ -291,7 +239,7 @@
     {:persistence closed-persistence
      :projectors closed-projectors}))
 
-(defn processor
+(defn create
   ([persistence projectors]
    (let [initialized-persistence (pers/init persistence)
          initialized-projectors (doall (map proj/init projectors))]
