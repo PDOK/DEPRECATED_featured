@@ -1,8 +1,8 @@
 (ns pdok.featured.mustache
    (:require [clostache.parser :as clostache]))
 
-(defn resolve-as-function [function]
-  (ns-resolve *ns* (symbol (str "pdok.featured.mustache-functions/" (name function)))))
+(defn resolve-as-function [namespace function]
+  (ns-resolve *ns* (symbol (str namespace "/" (name function)))))
 
 (defn lookup-proxy [obj]
   (reify
@@ -12,7 +12,7 @@
                     (or (contains? obj k)(contains? obj (name k)))) 
              (let [value (get obj k (get obj (name k)))] 
                   (lookup-proxy value)) 
-             (when-let [f (resolve-as-function k)]
+             (when-let [f (resolve-as-function "pdok.featured.mustache-functions" k)]
                (lookup-proxy (f obj)))))
       
     clojure.lang.IPersistentCollection 

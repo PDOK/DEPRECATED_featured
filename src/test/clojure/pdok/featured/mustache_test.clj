@@ -4,6 +4,10 @@
              [pdok.featured.mustache :as m]))
 
 
+(deftest test-resolve-as-function
+  (is (= nil (m/resolve-as-function "clojure.string" "no-function")))
+  (is (= #'clojure.string/split (m/resolve-as-function "clojure.string" "split"))))
+
 (def example-gml-bgt-wegdeel
   "<gml:Surface srsName=\"urn:ogc:def:crs:EPSG::28992\"><gml:patches><gml:PolygonPatch><gml:exterior><gml:LinearRing><gml:posList srsDimension=\"2\" count=\"5\">172307.599 509279.740 172307.349 509280.920 172306.379 509280.670 172306.699 509279.490 172307.599 509279.740</gml:posList></gml:LinearRing></gml:exterior></gml:PolygonPatch></gml:patches></gml:Surface>"
    )
