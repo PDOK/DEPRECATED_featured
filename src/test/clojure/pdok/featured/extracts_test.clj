@@ -1,6 +1,8 @@
 (ns pdok.featured.extracts-test
    (:require [pdok.featured.json-reader :refer [features-from-stream file-stream]]
              [pdok.featured.extracts :refer :all]
+             [pdok.featured.feature :as f]
+             [pdok.featured.projectors :as p]
              [clojure.test :refer :all]
              [clojure.java.io :as io]))
 
@@ -16,28 +18,24 @@
                              (test-feature "name2" "C" "D")))
 
 (deftest test-two-rendered-features
-  (is (= 2 )(count (render-features "test" "dummy" (two-features)))))
+  (is (= 2 )(count (features-for-extract "test" "dummy" (two-features)))))
 
 (deftest test-rendered-feature-gml
-  (let [result-feature (first (render-features "test" "dummy" (one-feature)))]
+  (let [[tiles result-feature] (first (features-for-extract "test" "dummy" (one-feature)))]
     (is (boolean (re-find #"<geo><gml:Polygon" result-feature)))
     (is (boolean (re-find #"<naam>PDOK</naam>" result-feature)))))
 
 
-(defn- file-to-features [path dataset] 
+(defn file-to-features [path dataset] 
   (with-open [s (file-stream path)]
    (doall (features-from-stream s :dataset dataset))))
 
-(defn- write-feature [gml-from-feature file]
-  (with-open [w (clojure.java.io/writer file)]
-     (.write w gml-from-feature)))
 
-(defn write-xml [dataset feature-type path]
-  "Helper function to write template-features to filesystem."
+(defn write-xml-to-database [dataset feature-type path]
+  "Helper function to write features to an extract-schema"
   (let [features (file-to-features path dataset)
-        rendered-features (render-features dataset feature-type features)]
-     (doseq [ [idx rendered-feature] (map #(vector %1 %2) (range) rendered-features)] 
-               (write-feature rendered-feature (str "target/output_" idx ".xml")))))
-
+        features-for-extract (features-for-extract dataset feature-type features)
+        ]
+    (add-extract-records dataset feature-type features-for-extract)))
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))

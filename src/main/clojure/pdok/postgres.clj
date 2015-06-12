@@ -62,7 +62,24 @@
     (.setObject s i (j/sql-value v) java.sql.Types/OTHER))
   clojure.lang.IPersistentMap
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
-    (.setObject s i (j/sql-value v) java.sql.Types/VARCHAR)))
+    (.setObject s i (j/sql-value v) java.sql.Types/VARCHAR))
+  clojure.lang.IPersistentVector
+  (set-parameter [v ^java.sql.PreparedStatement s ^long i]
+    (j/set-parameter (into-array v) s i)))
+
+(extend-protocol j/ISQLParameter
+  (Class/forName "[Ljava.lang.Long;")
+   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
+      (let [con (.getConnection s)
+            postgres-array (.createArrayOf con "integer" v)]
+             (.setObject s i postgres-array java.sql.Types/OTHER))))
+
+(extend-protocol j/ISQLParameter
+  (Class/forName "[Ljava.lang.Integer;")
+   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
+      (let [con (.getConnection s)
+            postgres-array (.createArrayOf con "integer" v)]
+             (.setObject s i postgres-array java.sql.Types/OTHER))))
 
 (defn clj-to-pg-type [clj-type]
   (condp = clj-type
