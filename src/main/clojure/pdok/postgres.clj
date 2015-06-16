@@ -17,6 +17,15 @@
 (def joda-time-reader
   (transit/read-handler #(tc/from-long (Long/parseLong %))))
 
+(def joda-local-date-writer
+  (transit/write-handler
+   (constantly "ld")
+   (fn [v] (-> v tc/to-date .getTime))
+   (fn [v] (-> v tc/to-date .getTime .toString))))
+
+(def joda-local-date-reader
+  (transit/read-handler #(tc/to-local-date (tc/from-long %))))
+
 (def transit-write-handlers (atom {}))
 (def transit-read-handlers (atom {}))
 
@@ -28,6 +37,9 @@
 
 (register-transit-write-handler org.joda.time.DateTime joda-time-writer)
 (register-transit-read-handler "m" joda-time-reader)
+
+(register-transit-write-handler org.joda.time.LocalDate joda-local-date-writer)
+(register-transit-read-handler "ld" joda-local-date-reader)
 
 (defn to-json [obj]
   (let [out (ByteArrayOutputStream. 1024)
@@ -48,6 +60,8 @@
 (extend-protocol j/ISQLValue
   org.joda.time.DateTime
   (sql-value [v] (tc/to-timestamp v))
+  org.joda.time.LocalDate
+  (sql-value [v] (tc/to-sql-date v))
   com.vividsolutions.jts.geom.Geometry
   (sql-value [v] (str "SRID=28992;" (.write wkt-writer v)))
   clojure.lang.Keyword
@@ -89,6 +103,7 @@
     clojure.lang.Keyword "text"
     clojure.lang.IPersistentMap "text"
     org.joda.time.DateTime "timestamp without time zone"
+    org.joda.time.LocalDate "date"
     java.lang.Integer "integer"
     java.lang.Double "double precision"
     java.lang.Boolean "boolean"

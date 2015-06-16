@@ -1,8 +1,8 @@
 (ns pdok.featured.json-reader
   (:require [pdok.featured.feature :refer [nilled]]
    [cheshire [core :as json] [factory :as jfac] [parse :as jparse]]
-            [clj-time.format :as tf]
-            [clojure.walk :refer [postwalk]])
+   [clj-time [format :as tf] [coerce :as tc]]
+    [clojure.walk :refer [postwalk]])
   (:import (com.fasterxml.jackson.core JsonFactory JsonFactory$Feature
                                        JsonParser$Feature JsonParser JsonToken)))
 
@@ -10,9 +10,10 @@
   {"_action" :action "_collection" :collection "_id" :id "_validity" :validity
    "_geometry" :geometry "_current_validity" :current-validity})
 
-(declare parse-time)
-(declare geometry-from-json)
-(declare upgrade-data)
+(declare parse-time
+         parse-date
+         geometry-from-json
+         upgrade-data)
 
 (defn map-to-feature [dataset obj]
   (let [action (keyword (get obj "_action"))
@@ -26,10 +27,17 @@
 ;; 2015-02-26T15:48:26.578Z
 (def ^{:private true} date-time-formatter (tf/formatters :date-time-parser) )
 
+(def ^{:private true} date-formatter (tf/formatter "yyyy-MM-dd"))
+
 (defn- parse-time
   "Parses an ISO8601 date timestring to local date"
   [datetimestring]
   (tf/parse date-time-formatter datetimestring))
+
+(defn- parse-date
+  "Parses an date string to local date"
+  [datestring]
+  (tc/to-local-date (tf/parse date-formatter datestring)))
 
 (defn- parse-object [^JsonParser jp]
   (jparse/parse* jp identity nil nil))
@@ -84,7 +92,7 @@
   (let [[function params] element]
       (case function
         "~#moment"  (if params (apply parse-time params) (nilled org.joda.time.DateTime))
-        "~#date"    (if params (apply parse-time params) (nilled org.joda.time.DateTime))
+        "~#date"    (if params (apply parse-date params) (nilled org.joda.time.LocalDate))
         "~#int"     (if params (int (first params)) (nilled java.lang.Integer))
         "~#boolean" (if params (boolean (first params)) (nilled java.lang.Boolean))
         "~#double"  (if params (double (first params)) (nilled java.lang.Double))
