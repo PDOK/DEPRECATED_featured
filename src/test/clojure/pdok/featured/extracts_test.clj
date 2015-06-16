@@ -18,23 +18,17 @@
                              (test-feature "name2" "C" "D")))
 
 (deftest test-two-rendered-features
-  (is (= 2 )(count (features-for-extract "test" "dummy" (two-features)))))
+  (is (= 2 )(count (features-for-extract "test" "dummy" (two-features) "src/main/resources/pdok/featured/templates"))))
 
 (deftest test-rendered-feature-gml
-  (let [[tiles result-feature] (first (features-for-extract "test" "dummy" (one-feature)))]
+  (let [[tiles result-feature] (first (features-for-extract "test" "dummy" (one-feature) "src/main/resources/pdok/featured/templates"))]
     (is (boolean (re-find #"<geo><gml:Polygon" result-feature)))
     (is (boolean (re-find #"<naam>PDOK</naam>" result-feature)))))
 
-
-(defn file-to-features [path dataset] 
-  (with-open [s (file-stream path)]
-   (doall (features-from-stream s :dataset dataset))))
-
-
-(defn write-xml-to-database [dataset feature-type path]
+(defn write-xml-to-database [dataset feature-type path template-dir]
   "Helper function to write features to an extract-schema"
   (let [features (file-to-features path dataset)
-        features-for-extract (features-for-extract dataset feature-type features)
+        features-for-extract (features-for-extract dataset feature-type features template-dir)
         ]
     (add-extract-records dataset feature-type features-for-extract)))
 

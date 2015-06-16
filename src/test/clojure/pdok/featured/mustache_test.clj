@@ -37,7 +37,7 @@
 (defn example-bgt-features [n] (repeat n example-feature-bgt-wegdeel))
 
 (defn render-wegdeel-with-bgt-example [n] 
-   (map (partial m/render-resource "pdok/featured/templates/bgt-wegdeel.template") 
+   (map (partial m/render-resource "src/main/resources/pdok/featured/templates/bgt-wegdeel.template") 
       (example-bgt-features n)))
 
   
@@ -51,16 +51,16 @@
  
 
  (defn render-wegdeel-with-sets-with-bgt-example [n]   
-   (map (partial m/render-resource "pdok/featured/templates/test-dummy-set.template") 
+   (map (partial m/render-resource "src/main/resources/pdok/featured/templates/test-dummy-set.template") 
       (example-bgt-features n)))
  
  (deftest test-features-mapping-with-sets
    (is (= 2 (count (filter #(re-find #"<val>een</val>" %) (render-wegdeel-with-sets-with-bgt-example 2)))))
    (is (= 2 (count (filter #(re-find #"<val>drie</val>" %) (render-wegdeel-with-sets-with-bgt-example 2)))))
    )
- 
- 
+  
   (defn write-gml-files [n]
     (time (with-open [w (clojure.java.io/writer "target/features.gml.json")]
        (json/generate-stream {:features (render-wegdeel-with-bgt-example n)} w))))
   
+ 
