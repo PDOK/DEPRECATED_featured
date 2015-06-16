@@ -11,7 +11,7 @@
   (:import  [pdok.featured.projectors GeoserverProjector]))
 
 (def ^:private pdok-fields [:action :id :dataset :collection :validity :version :geometry :current-validity
-                            :parent-id :parent-collection :attributes])
+                            :parent-id :parent-collection :parent-field :attributes])
 
 (declare consume process pre-process append-feature)
 
@@ -62,7 +62,8 @@
                        (apply-new-feature-requires-non-existing-stream-validation persistence))]
     (when-not (:invalid? validated)
       (let [{:keys [dataset collection id validity geometry attributes]} validated]
-        (pers/create-stream persistence dataset collection id (:parent-collection feature) (:parent-id feature))
+        (pers/create-stream persistence dataset collection id
+                            (:parent-collection feature) (:parent-id feature) (:parent-field feature))
         (append-feature persistence validated)
         (doseq [p projectors] (proj/new-feature p validated))))
     validated))
@@ -121,6 +122,7 @@
                   (assoc! :dataset dataset)
                   (assoc! :parent-collection collection)
                   (assoc! :parent-id id)
+                  (assoc! :parent-field (name child-collection-key))
                   (assoc! :action  (keyword (str "nested-" (name (:action parent)))))
                   (assoc! :id child-id)
                   (assoc! :validity validity)
@@ -239,12 +241,15 @@
     {:persistence closed-persistence
      :projectors closed-projectors}))
 
+(defn add-projector [processor projector]
+  (let [initialized-projector (proj/init projector)]
+    (update-in processor [:projectors] conj initialized-projector)))
+
 (defn create
+  ([persistence] (create persistence []))
   ([persistence projectors]
    (let [initialized-persistence (pers/init persistence)
          initialized-projectors (doall (map proj/init projectors))]
-     (doseq [p projectors]
-       (proj/init p))
      {:persistence initialized-persistence
       :projectors initialized-projectors})))
 

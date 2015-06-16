@@ -10,8 +10,8 @@
   (init [this] (assoc this :initialized true))
   (stream-exists? [this dataset collection id] (get @streams [dataset collection id]))
   (create-stream [this dataset collection id]
-    (pers/create-stream this dataset collection id nil nil))
-  (create-stream [this dataset collection id parent-collection parent-id]
+    (pers/create-stream this dataset collection id nil nil nil))
+  (create-stream [this dataset collection id parent-collection parent-id parent-field]
     (swap! streams assoc [dataset collection id] 1)
     (swap! streams-n inc))
   (append-to-stream [this version action dataset collection id validity geometry attributes]
