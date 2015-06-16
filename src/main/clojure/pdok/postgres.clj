@@ -38,10 +38,12 @@
   )
 
 (defn from-json [str]
-  (let [in (ByteArrayInputStream. (.getBytes str))
-        reader (transit/reader in :json
-                               {:handlers @transit-read-handlers})]
-    (transit/read reader)))
+  (if (clojure.string/blank? str)
+    nil
+    (let [in (ByteArrayInputStream. (.getBytes str))
+          reader (transit/reader in :json
+                                 {:handlers @transit-read-handlers})]
+      (transit/read reader))))
 
 (extend-protocol j/ISQLValue
   org.joda.time.DateTime
@@ -136,8 +138,8 @@
   (str "ALTER TABLE " schema-name-quoted "." table-name-quoted " ADD CONSTRAINT " constraint-name " CHECK (" geo-column-quoted " IS NULL OR " constraint "(" geo-column-quoted ")" constraint-pred ")")))
 
 (def geo-constraints
-  {:_geometry_point "'POINT'::text, 'MULTIPOINT'::text, 'POINTM'::text, 'MULTIPOINTM'::text" 
-   :_geometry_line "'LINESTRING'::text, 'MULTILINESTRING'::text, 'LINESTRINGM'::text, 'MULTILINESTRINGM'::text" 
+  {:_geometry_point "'POINT'::text, 'MULTIPOINT'::text, 'POINTM'::text, 'MULTIPOINTM'::text"
+   :_geometry_line "'LINESTRING'::text, 'MULTILINESTRING'::text, 'LINESTRINGM'::text, 'MULTILINESTRINGM'::text"
    :_geometry_polygon "'POLYGON'::text, 'MULTIPOLYGON'::text, 'CIRCULARSTRING'::text, 'COMPOUNDCURVE'::text, 'MULTICURVE'::text, 'CURVEPOLYGON'::text, 'MULTISURFACE'::text, 'GEOMETRY'::text, 'GEOMETRYCOLLECTION'::text, 'POLYGONM'::text, 'MULTIPOLYGONM'::text, 'CIRCULARSTRINGM'::text, 'COMPOUNDCURVEM'::text, 'MULTICURVEM'::text, 'CURVEPOLYGONM'::text, 'MULTISURFACEM'::text, 'GEOMETRYCOLLECTIONM'::text"})
 
 (defn add-geo-constraints [db schema table geometry-column]
@@ -146,13 +148,13 @@
         srid (db-constraint schema table geometry-column (str "enforce_srid_" column-name) "public.st_srid" "= 28992")
         geotype (db-constraint schema table geometry-column (str "enforce_geotype_" column-name) "public.geometrytype" (str "IN (" (-> column-name keyword geo-constraints) ")" ) )
         constraints (vector ndims srid geotype)]
-  (try 
+  (try
     (doseq [c constraints]
       (j/db-do-commands db c))
     (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
 
 (defn populate-geometry-columns [db schema table]
-  (try 
+  (try
     (j/query db [(str "SELECT public.populate_geometry_columns (( SELECT '" (-> schema name quoted) "."  (-> table name quoted) "'::regclass::oid ))")])
     (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
 

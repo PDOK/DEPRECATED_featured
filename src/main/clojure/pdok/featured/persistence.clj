@@ -12,24 +12,24 @@
   (stream-exists? [this dataset collection id])
   (create-stream
     [this dataset collection id]
-    [this dataset collection id parent-collection parent-id])
+    [this dataset collection id parent-collection parent-id parent-field])
   (append-to-stream [this version action dataset collection id validity geometry attributes])
   (current-validity [this dataset collection id])
   (last-action [this dataset collection id])
   (childs [this dataset parent-collection parent-id child-collection])
-  (parent [this dataset collection id] "Returns [collection id] tuple or nil")
+  (parent [this dataset collection id] "Returns [collection id field] tuple or nil")
   (close [_])
   )
 
 (defn path [persistence dataset collection id]
-  "Returns sequence of [collection id] tuples. Parents first. Root only means empty sequence"
+  "Returns sequence of [collection id field] tuples. Parents first. Root only means empty sequence"
   (when (and dataset collection id)
-    (if-let [[parent-collection parent-id] (parent persistence dataset collection id)]
-      (loop [path (list)
+    (if-let [[parent-collection parent-id parent-field] (parent persistence dataset collection id)]
+      (loop [path (list [parent-collection parent-id parent-field])
              pc  parent-collection
              pid parent-id]
-        (if-let [[new-pc new-pid] (parent persistence dataset pc pid)]
-          (recur (conj path [new-pc new-pid]) new-pc new-pid)
+        (if-let [[new-pc new-pid new-pf] (parent persistence dataset pc pid)]
+          (recur (conj path [new-pc new-pid new-pf]) new-pc new-pid)
           path))
       (list))))
 
@@ -38,7 +38,7 @@
   (let [path (path persistence dataset collection id)]
     (if (empty? path)
       [collection id]
-      (first path))))
+      (take 2 (first path)))))
 
 (def ^:dynamic *jdbc-schema* :featured)
 (def ^:dynamic *jdbc-features* :feature)
@@ -61,6 +61,7 @@
                      [:feature_id "varchar(50)"]
                      [:parent_collection "varchar(255)"]
                      [:parent_id "varchar(50)"]
+                     [:parent_field "varchar(255)"]
                      [:closed "boolean" "default false"])
     (pg/create-index db *jdbc-schema* *jdbc-features* :dataset :collection :feature_id)
     (pg/create-index db *jdbc-schema* *jdbc-features* :dataset :parent_collection :parent_id))
@@ -78,12 +79,12 @@
     (pg/create-index db *jdbc-schema* *jdbc-feature-stream* :dataset :collection :feature_id)))
 
 (defn- jdbc-create-stream
-  ([db dataset collection id parent-collection parent-id]
-   (jdbc-create-stream db (list [dataset collection id parent-collection parent-id])))
+  ([db dataset collection id parent-collection parent-id parent-field]
+   (jdbc-create-stream db (list [dataset collection id parent-collection parent-id parent-field])))
   ([db entries]
    (j/with-db-connection [c db]
      (apply ( partial j/insert! c (qualified-features) :transaction? false?
-                      [:dataset :collection :feature_id :parent_collection :parent_id])
+                      [:dataset :collection :feature_id :parent_collection :parent_id :parent_field])
             entries))))
 
 (defn- jdbc-close-stream
@@ -117,11 +118,11 @@ WHERE dataset = ? AND collection = ?  AND feature_id = ?")]
 (defn- jdbc-load-parent-cache [db dataset collection]
   (j/with-db-connection [c db]
     (let [results
-          (j/query c [(str "SELECT feature_id, parent_collection, parent_id FROM " (qualified-features)
+          (j/query c [(str "SELECT feature_id, parent_collection, parent_id, parent_field FROM " (qualified-features)
                            " WHERE dataset = ? AND collection = ?")
                       dataset collection] :as-arrays? true)
-          for-cache (map (fn [[feature-id parent-collection parent-id]]
-                           [dataset collection feature-id] [parent-collection parent-id])
+          for-cache (map (fn [[feature-id parent-collection parent-id parent-field]]
+                           [dataset collection feature-id] [parent-collection parent-id parent-field])
                          (drop 1 results))]
       for-cache)))
 
@@ -179,9 +180,9 @@ WHERE rn = 1"
     (let [current-validity (partial jdbc-last-stream-validity-and-action db)]
       (not (nil? (current-validity dataset collection id)))))
   (create-stream [this dataset collection id]
-    (create-stream this dataset collection id nil nil))
-  (create-stream [_ dataset collection id parent-collection parent-id]
-    (jdbc-create-stream db dataset collection id parent-collection parent-id))
+    (create-stream this dataset collection id nil nil nil))
+  (create-stream [_ dataset collection id parent-collection parent-id parent-field]
+    (jdbc-create-stream db dataset collection id parent-collection parent-id parent-field))
   (append-to-stream [_ version action dataset collection id validity geometry attributes]
     ; compose with nil, because insert returns record. Should fix this...
     (jdbc-insert db version action dataset collection id validity geometry attributes)
@@ -197,7 +198,7 @@ WHERE rn = 1"
   (close [this] this)
   )
 
-(defn- append-cached-child [acc _ _ id _ _]
+(defn- append-cached-child [acc _ _ id _ _ _]
   (let [acc (if acc acc [])]
     (conj acc id)))
 
@@ -209,16 +210,16 @@ WHERE rn = 1"
   (stream-exists? [this dataset collection id]
     (not (nil? (current-validity this dataset collection id))))
   (create-stream [this dataset collection id]
-    (create-stream this dataset collection id nil nil))
-  (create-stream [_ dataset collection id parent-collection parent-id]
-    (let [childs-key-fn (fn [dataset collection _ p-col p-id] [dataset p-col p-id collection])
+    (create-stream this dataset collection id nil nil nil))
+  (create-stream [_ dataset collection id parent-collection parent-id parent-field]
+    (let [childs-key-fn (fn [dataset collection _ p-col p-id _] [dataset p-col p-id collection])
           childs-value-fn append-cached-child
-          parent-key-fn (fn [dataset collection id _ _] [dataset collection id])
-          parent-value-fn (fn [_ _ _ _ pc pid] [pc pid])
+          parent-key-fn (fn [dataset collection id _ _ _] [dataset collection id])
+          parent-value-fn (fn [_ _ _ _ pc pid pf] [pc pid pf])
           batched (with-batch link-batch link-batch-size (partial jdbc-create-stream db))
           cache-batched (with-cache childs-cache batched childs-key-fn childs-value-fn)
           double-cache-batched (with-cache parent-cache cache-batched parent-key-fn parent-value-fn)]
-      (double-cache-batched dataset collection id parent-collection parent-id)))
+      (double-cache-batched dataset collection id parent-collection parent-id parent-field)))
   (append-to-stream [_ version action dataset collection id validity geometry attributes]
     (let [key-fn   (fn [_ _ dataset collection id _ _ _] [dataset collection id])
           value-fn (fn [_ _ action _ _ _ validity _ _] [validity action])

@@ -1,11 +1,18 @@
 (ns pdok.featured.timeline
+  (:refer-clojure :exclude [merge])
   (:require [pdok.cache :refer :all]
             [pdok.postgres :as pg]
             [pdok.featured.projectors :as proj]
+            [pdok.featured.persistence :as pers]
             [clojure.java.jdbc :as j]
-            [clojure.core.cache :as cache]))
+            [clojure.core.cache :as cache]
+            [clojure.string :as str]))
 
-(comment Een simpele tabel met een alle relevante (parent + childs) events in een array. Een trigger zorgt ervoor dat de huidige wordt dichtgezet en naar een history tabel wordt gezet.)
+(defn indices-of [f coll]
+  (keep-indexed #(if (f %2) %1 nil) coll))
+
+(defn index-of [f coll]
+  (first (indices-of f coll)))
 
 (def ^:dynamic *timeline-schema* "featured")
 (def ^:dynamic *history-table* "timeline")
@@ -20,7 +27,7 @@
                [:feature_id "varchar(100)"]
                [:valid_from "timestamp without time zone"]
                [:valid_to "timestamp without time zone"]
-               [:stream "text[]"]))
+               [:feature "text"]))
 
 (defn- create-current-table [db]
   (pg/create-table db *timeline-schema* *current-table*
@@ -29,7 +36,7 @@
                [:collection "varchar(255)"]
                [:feature_id "varchar(100)"]
                [:valid_from "timestamp without time zone"]
-               [:stream "text[]"])
+               [:feature "text"])
   (pg/create-index db *timeline-schema* *current-table* :dataset :collection :feature_id))
 
 (defn- init [db]
@@ -46,89 +53,160 @@
 (defn- qualified-current []
   (str (name *timeline-schema*) "." (name *current-table*)))
 
-(defn- collection [feature]
-  (or (:parent-collection feature) (:collection feature)))
+(defn- init-root
+  ([feature]
+   (if-let [dataset (:dataset feature)]
+     {:_dataset dataset :_collection (:collection feature) :_id (:id feature)}
+     {:_collection (:collection feature) :_id (:id feature)}))
+  ([collection id]
+   {:_collection collection :_id id})
+  ([dataset collection id]
+   {:_dataset dataset :_collection collection :_id id}))
 
-(defn- id [feature]
-  (or (:parent-id feature) (:id feature)))
+(defn- mustafy [feature]
+  (let [result (init-root feature)
+        geom (:geometry feature)
+        result (cond-> result geom (assoc :_geometry geom))
+        result (reduce (fn [acc [k v]] (assoc acc (keyword k) v)) result (:attributes feature))]
+    result))
 
-(defn- new-stream-sql []
-  (str "INSERT INTO " (qualified-current) " (dataset, collection, feature_id, valid_from, stream)
-VALUES (?, ?, ? ,?, ARRAY[?])"))
+(defn- path->merge-fn [target path]
+  (if-not (empty? path)
+    (loop [[[field id] & rest] path
+           t target
+           f identity]
+      ;(println field id t f)
+      (if field
+        (let [field-value (get target field)]
+          (if field-value
+            (cond
+             (vector? field-value)
+             (if-let [i (index-of #(= id (:_id %)) field-value)]
+               (recur rest (get field-value i) #(f (update-in t [field i] (fn [v] (clojure.core/merge v %)))))
+               (do ;(println "vector: not found")
+                   (recur rest {} #(f (assoc-in t [field (count field-value)] %)))))
+             ;; if it is not a vector we are probable replacing existing values.
+             ;; Treat this as a non existing value, ie. override value;
+             :else (do ;(println "override:" field (f {}))
+                       (recur rest (init-root field id) #(f (assoc t field (vector %)))))
+             )
+            ;; no field-value => we are working with child objects, place it in a vector
+            (do ;(println "no-value: " field (f {}))
+                (recur rest nil #(f (assoc t field (vector %))))
+              )
+            ))
+        (do ;(println "no path: "(f {}))
+            f
+          )))
+    #(clojure.core/merge target %))
+  )
 
-(defn- new-stream
+(comment (merge {:a 1 :b [{:_id 1 :c 2} {:_id 2 :c 3}]} [["a" 1] [:G 2]] {:dataset "DD" :collection "test" :id 12 :attributes {"ZZ" 12}}))
+
+(defn- merge
+  ([target path feature]
+   (let [keyworded-path (map (fn [[_ id field]] [(keyword field) id]) path)
+         mustafied (mustafy feature)
+         merger (path->merge-fn target keyworded-path)
+         merged (merger mustafied)]
+     merged)))
+
+(defn- sync-valid-from [acc feature]
+  (assoc acc :_valid_from  (:validity feature)))
+
+(defn- sync-valid-to [acc feature]
+  (assoc acc :_valid_to (:validity feature)))
+
+(defn- new-current-sql []
+  (str "INSERT INTO " (qualified-current) " (dataset, collection, feature_id, valid_from, feature)
+VALUES (?, ?, ? ,?, ?)"))
+
+(defn- new-current
   ([db features]
    (try
-     (let [transform-fn (juxt :dataset collection id :validity identity)
+     (let [transform-fn (juxt :_dataset :_collection :_id :_valid_from pg/to-json)
            records (map transform-fn features)]
-       (j/execute! db (cons (new-stream-sql) records) :multi? true :transaction? false))
+       (j/execute! db (cons (new-current-sql) records) :multi? true :transaction? false))
       (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
   )
 
-(defn- stream-exists? [db dataset collection id]
+(defn- get-current [db dataset collection id]
   (j/with-db-connection [c db]
     (let [results
-          (j/query c [(str "SELECT id FROM " (qualified-current)
+          (j/query c [(str "SELECT  FROM " (qualified-current)
                            " WHERE dataset = ? AND collection = ?  AND feature_id = ?")
                       dataset collection id])]
-      (not (empty? results)))))
+      (pg/from-json (:feature (first results))))))
 
-(defn- load-stream-cache [db dataset collection]
+(defn- load-current-feature-cache [db dataset collection]
   (j/with-db-connection [c db]
     (let [results
-          (j/query c [(str "SELECT dataset, collection  feature_id FROM " (qualified-current)
+          (j/query c [(str "SELECT dataset, collection,  feature_id, feature FROM " (qualified-current)
                            " WHERE dataset = ? AND collection = ?")
-                      dataset collection] :as-arrays? true)]
-      (map #(vector % true) results))))
+                      dataset collection] :as-arrays? true)
+          for-cache
+          (map #(vector (take 3 %1) (pg/from-json (last %1)) ) (drop 1 results))]
+      for-cache)))
 
-(defn- append-to-stream-sql []
+(defn- update-current-sql []
   (str "UPDATE " (qualified-current) "
-SET stream = array_append(stream, CAST (? as TEXT)),
+SET feature = ?,
     valid_from = ?
 WHERE dataset = ? AND collection = ? AND  feature_id = ?"))
 
-(defn- append-to-stream [db features]
+(defn- update-current [db features]
   (try
-    (let [transform-fn (juxt identity :validity :dataset collection id)
+    (let [transform-fn (juxt pg/to-json :_valid_from :_dataset :_collection :_id)
           records (map transform-fn features)]
-      (j/execute! db (cons (append-to-stream-sql) records) :multi? true :transaction? false))
-     (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
+      (j/execute! db (cons (update-current-sql) records) :multi? true :transaction? false))
+    (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
 
-(deftype Timeline [db stream-cache load-cache?-fn insert-batch insert-batch-size
-                               update-batch update-batch-size]
+(defn- feature-key [feature]
+  [(:dataset feature) (:collection feature) (:id feature)])
+
+;; TODO batches moeten gelinked zijn, want update moet na new. Als update eerder flushed gaat het mis
+(deftype Timeline [db root-fn path-fn
+                   stream-cache load-cache?-fn insert-batch insert-batch-size
+                   update-batch update-batch-size]
   proj/Projector
   (init [this]
     (init db) this)
   (proj/new-feature [_ feature]
-    (let [cache-add-key-fn (fn [f] [(:dataset f) (collection f) (id f)])
-          cache-add-value-fn (fn [_ f] true)
+    (let [[dataset collection id] (feature-key feature)
+          [root-col root-id] (root-fn dataset collection id)
+          path (path-fn dataset collection id)
+          cache-store-key-fn (fn [f] [(:_dataset f) (:_collection f) (:_id f)])
+          cache-value-fn (fn [_ f] f)
           cache-use-key-fn (fn [dataset collection id] [dataset collection id])
-          batched-new (with-batch insert-batch insert-batch-size (partial new-stream db))
-          cache-batched-new (with-cache stream-cache batched-new cache-add-key-fn cache-add-value-fn)
-          batched-append (with-batch update-batch update-batch-size (partial append-to-stream db))
+          batched-new (with-batch insert-batch insert-batch-size (partial new-current db))
+          cache-batched-new (with-cache stream-cache batched-new cache-store-key-fn cache-value-fn)
+          batched-update (with-batch update-batch update-batch-size (partial update-current db))
           load-cache (fn [dataset collection id]
                        (when (load-cache?-fn dataset collection)
-                         (load-stream-cache db dataset collection)))
-          cached-stream-exists? (use-cache stream-cache cache-use-key-fn load-cache)]
-      (if (cached-stream-exists? (:dataset feature) (collection feature) (id feature))
-        (batched-append feature)
-        (cache-batched-new feature))))
+                         (load-current-feature-cache db dataset collection)))
+          cached-get-current (use-cache stream-cache cache-use-key-fn load-cache)]
+      (if-let [current (cached-get-current dataset root-col root-id)]
+        (batched-update (sync-valid-from (merge current path feature) feature))
+        (cache-batched-new (sync-valid-from (merge (init-root dataset root-col root-id) path feature) feature)))))
   (proj/change-feature [_ feature]
     (proj/new-feature _ feature))
   (proj/close-feature [_ feature]
     (proj/new-feature _ feature))
   (proj/close [this]
-    (flush-batch insert-batch (partial new-stream db))
-    (flush-batch update-batch (partial append-to-stream db))
+    (flush-batch insert-batch (partial new-current db))
+    (flush-batch update-batch (partial update-current db))
     this)
   )
 
 (defn create [config]
   (let [db (:db-config config)
+        persistence (or (:persistence config) (pers/cached-jdbc-processor-persistence config))
         cache (ref (cache/basic-cache-factory {}))
         load-cache?-fn (once-true-fn)
         insert-batch-size (or (:insert-batch-size config) (:batch-size config) 10000)
         insert-batch (ref (clojure.lang.PersistentQueue/EMPTY))
         update-batch-size (or (:update-batch-size config) (:batch-size config) 10000)
         update-batch (ref (clojure.lang.PersistentQueue/EMPTY))]
-    (->Timeline db cache load-cache?-fn insert-batch insert-batch-size update-batch update-batch-size)))
+    (->Timeline db (partial pers/root persistence) (partial pers/path persistence)
+                cache load-cache?-fn insert-batch insert-batch-size
+                update-batch update-batch-size)))
