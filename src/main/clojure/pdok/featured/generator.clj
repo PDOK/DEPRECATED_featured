@@ -1,7 +1,6 @@
 (ns pdok.featured.generator
   (:require [cheshire.core :as json]
-            [clj-time [format :as tf]
-             [local :refer [local-now]]])
+            [clj-time [core :as t] [format :as tf] [local :refer [local-now]]])
   (:import  [java.io PipedInputStream PipedOutputStream]))
 
 ;; 2015-02-26T15:48:26.578Z
@@ -40,13 +39,13 @@
   (-> feature
       (assoc :_action "change")
       (assoc :_current_validity (:_validity feature))
-      (assoc :_validity (tf/unparse date-time-formatter (local-now)))))
+      (assoc :_validity (tf/unparse date-time-formatter (t/plus (local-now) (t/minutes 1))))))
 
 (defn transform-to-close [feature]
   (-> feature
       (assoc :_action "close")
       (assoc :_current_validity (:_validity feature))
-      (assoc :_validity (tf/unparse date-time-formatter (local-now)))))
+      (assoc :_validity (tf/unparse date-time-formatter (t/plus (local-now) (t/minutes 1))))))
 
 (defn transform-to-nested [feature]
   (apply dissoc feature [:_action :_collection :_id :_validity :_current_validity]))

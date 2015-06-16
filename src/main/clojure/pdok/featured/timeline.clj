@@ -6,7 +6,8 @@
             [pdok.featured.persistence :as pers]
             [clojure.java.jdbc :as j]
             [clojure.core.cache :as cache]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [clj-time.core :as t]))
 
 (defn indices-of [f coll]
   (keep-indexed #(if (f %2) %1 nil) coll))
@@ -161,13 +162,26 @@ WHERE dataset = ? AND collection = ? AND  feature_id = ?"))
       (j/execute! db (cons (update-current-sql) records) :multi? true :transaction? false))
     (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
 
+(defn- new-history-sql []
+  (str "INSERT INTO " (qualified-history) " (dataset, collection, feature_id, valid_from, valid_to, feature)
+VALUES (?, ?, ?, ?, ?, ?)"))
+
+(defn- new-history [db features]
+  (try
+    (let [transform-fn (juxt :_dataset :_collection :_id :_valid_from :_valid_to pg/to-json)
+          records (map transform-fn features)]
+      (j/execute! db (cons (new-history-sql) records) :multi? true :transaction? false))
+    (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
+
 (defn- feature-key [feature]
   [(:dataset feature) (:collection feature) (:id feature)])
 
 ;; TODO batches moeten gelinked zijn, want update moet na new. Als update eerder flushed gaat het mis
 (deftype Timeline [db root-fn path-fn
-                   stream-cache load-cache?-fn insert-batch insert-batch-size
-                   update-batch update-batch-size]
+                   feature-cache load-cache?-fn
+                   new-current-batch new-current-batch-size
+                   update-current-batch update-current-batch-size
+                   new-history-batch new-history-batch-size]
   proj/Projector
   (init [this]
     (init db) this)
@@ -178,23 +192,33 @@ WHERE dataset = ? AND collection = ? AND  feature_id = ?"))
           cache-store-key-fn (fn [f] [(:_dataset f) (:_collection f) (:_id f)])
           cache-value-fn (fn [_ f] f)
           cache-use-key-fn (fn [dataset collection id] [dataset collection id])
-          batched-new (with-batch insert-batch insert-batch-size (partial new-current db))
-          cache-batched-new (with-cache stream-cache batched-new cache-store-key-fn cache-value-fn)
-          batched-update (with-batch update-batch update-batch-size (partial update-current db))
+          batched-new (with-batch new-current-batch new-current-batch-size (partial new-current db))
+          cache-batched-new (with-cache feature-cache batched-new cache-store-key-fn cache-value-fn)
+          batched-update (with-batch update-current-batch update-current-batch-size (partial update-current db))
+          cache-batched-update (with-cache feature-cache batched-update cache-store-key-fn cache-value-fn)
+          batched-history (with-batch new-history-batch new-history-batch-size (partial new-history db))
           load-cache (fn [dataset collection id]
                        (when (load-cache?-fn dataset collection)
                          (load-current-feature-cache db dataset collection)))
-          cached-get-current (use-cache stream-cache cache-use-key-fn load-cache)]
+          cached-get-current (use-cache feature-cache cache-use-key-fn load-cache)]
       (if-let [current (cached-get-current dataset root-col root-id)]
-        (batched-update (sync-valid-from (merge current path feature) feature))
+        (if (t/before? (:_valid_from current) (:validity feature))
+          (do ;(println "NOT-SAME")
+              (batched-history (sync-valid-to current feature))
+              (cache-batched-update (sync-valid-from (merge current path feature) feature)))
+          (do ;(println "SAME")
+              (cache-batched-update (sync-valid-from (merge current path feature) feature))))
         (cache-batched-new (sync-valid-from (merge (init-root dataset root-col root-id) path feature) feature)))))
   (proj/change-feature [_ feature]
+    ;; change can be the same, because a new nested feature validity change will also result in a new validity
+    ;(println "CHANGE")
     (proj/new-feature _ feature))
   (proj/close-feature [_ feature]
     (proj/new-feature _ feature))
   (proj/close [this]
-    (flush-batch insert-batch (partial new-current db))
-    (flush-batch update-batch (partial update-current db))
+    (flush-batch new-current-batch (partial new-current db))
+    (flush-batch update-current-batch (partial update-current db))
+    (flush-batch new-history-batch (partial new-history db))
     this)
   )
 
@@ -203,10 +227,14 @@ WHERE dataset = ? AND collection = ? AND  feature_id = ?"))
         persistence (or (:persistence config) (pers/cached-jdbc-processor-persistence config))
         cache (ref (cache/basic-cache-factory {}))
         load-cache?-fn (once-true-fn)
-        insert-batch-size (or (:insert-batch-size config) (:batch-size config) 10000)
-        insert-batch (ref (clojure.lang.PersistentQueue/EMPTY))
-        update-batch-size (or (:update-batch-size config) (:batch-size config) 10000)
-        update-batch (ref (clojure.lang.PersistentQueue/EMPTY))]
+        new-current-batch-size (or (:new-current-batch-size config) (:batch-size config) 10000)
+        new-current-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+        update-current-batch-size (or (:update-current-batch-size config) (:batch-size config) 10000)
+        update-current-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+        new-history-batch-size (or (:new-history-batch-size config) (:batch-size config) 10000)
+        new-history-batch (ref (clojure.lang.PersistentQueue/EMPTY))]
     (->Timeline db (partial pers/root persistence) (partial pers/path persistence)
-                cache load-cache?-fn insert-batch insert-batch-size
-                update-batch update-batch-size)))
+                cache load-cache?-fn
+                new-current-batch new-current-batch-size
+                update-current-batch update-current-batch-size
+                new-history-batch new-history-batch-size)))
