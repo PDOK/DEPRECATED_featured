@@ -37,6 +37,7 @@
                [:collection "varchar(255)"]
                [:feature_id "varchar(100)"]
                [:valid_from "timestamp without time zone"]
+               [:valid_to "timestamp without time zone"]
                [:feature "text"])
   (pg/create-index db *timeline-schema* *current-table* :dataset :collection :feature_id))
 
@@ -119,13 +120,13 @@
   (assoc acc :_valid_to (:validity feature)))
 
 (defn- new-current-sql []
-  (str "INSERT INTO " (qualified-current) " (dataset, collection, feature_id, valid_from, feature)
-VALUES (?, ?, ? ,?, ?)"))
+  (str "INSERT INTO " (qualified-current) " (dataset, collection, feature_id, valid_from, valid_to, feature)
+VALUES (?, ?, ? ,?, ?, ?)"))
 
 (defn- new-current
   ([db features]
    (try
-     (let [transform-fn (juxt :_dataset :_collection :_id :_valid_from pg/to-json)
+     (let [transform-fn (juxt :_dataset :_collection :_id :_valid_from :_valid_to pg/to-json)
            records (map transform-fn features)]
        (j/execute! db (cons (new-current-sql) records) :multi? true :transaction? false))
       (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
@@ -152,12 +153,13 @@ VALUES (?, ?, ? ,?, ?)"))
 (defn- update-current-sql []
   (str "UPDATE " (qualified-current) "
 SET feature = ?,
-    valid_from = ?
+    valid_from = ?,
+    valid_to = ?
 WHERE dataset = ? AND collection = ? AND  feature_id = ?"))
 
 (defn- update-current [db features]
   (try
-    (let [transform-fn (juxt pg/to-json :_valid_from :_dataset :_collection :_id)
+    (let [transform-fn (juxt pg/to-json :_valid_from :_valid_to :_dataset :_collection :_id)
           records (map transform-fn features)]
       (j/execute! db (cons (update-current-sql) records) :multi? true :transaction? false))
     (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
@@ -202,12 +204,14 @@ VALUES (?, ?, ?, ?, ?, ?)"))
                          (load-current-feature-cache db dataset collection)))
           cached-get-current (use-cache feature-cache cache-use-key-fn load-cache)]
       (if-let [current (cached-get-current dataset root-col root-id)]
-        (if (t/before? (:_valid_from current) (:validity feature))
-          (do ;(println "NOT-SAME")
+        (if (= (:action feature) :close)
+          (cache-batched-update (sync-valid-to (merge current path feature) feature))
+          (if (t/before? (:_valid_from current) (:validity feature))
+            (do ;(println "NOT-SAME")
               (batched-history (sync-valid-to current feature))
               (cache-batched-update (sync-valid-from (merge current path feature) feature)))
-          (do ;(println "SAME")
-              (cache-batched-update (sync-valid-from (merge current path feature) feature))))
+            (do ;(println "SAME")
+              (cache-batched-update (sync-valid-from (merge current path feature) feature)))))
         (cache-batched-new (sync-valid-from (merge (init-root dataset root-col root-id) path feature) feature)))))
   (proj/change-feature [_ feature]
     ;; change can be the same, because a new nested feature validity change will also result in a new validity

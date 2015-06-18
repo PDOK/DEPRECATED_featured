@@ -5,7 +5,7 @@
             [pdok.featured.persistence :as pers]
             [pdok.featured.json-reader :refer :all]
             [pdok.featured.projectors :as proj]
-            [clj-time [local :as tl] [coerce :as tc]]
+            [clj-time [core :as t] [local :as tl] [coerce :as tc]]
             [environ.core :refer [env]]
             [clojure.string :as str])
   (:import  [pdok.featured.projectors GeoserverProjector]))
@@ -39,14 +39,20 @@
       (make-invalid feature (str "Stream does not exist yet: " dataset ", " collection ", " id))
       feature)))
 
-(defn- apply-non-new-feature-requires-matching-current-validity-validation [persistence feature]
+(defn- apply-non-new-feature-current-validity<=validity-validation [feature]
+  (let [{:keys [validity current-validity]} feature]
+    (if (t/before? validity current-validity)
+      (make-invalid feature "Validity should >= current-validity")
+      feature)))
+
+(defn- apply-non-new-feature-current-validity-validation [persistence feature]
   (let [{:keys [dataset collection id validity current-validity]} feature]
     (if-not current-validity
       (make-invalid feature "Non new feature requires: current-validity")
       (let [stream-validity (pers/current-validity persistence dataset collection id)]
-        (if  (not= (tc/to-date current-validity) (tc/to-date stream-validity))
+        (if  (not= current-validity stream-validity)
           (make-invalid feature "When updating current-validity should match")
-          feature)))))
+          (apply-non-new-feature-current-validity<=validity-validation feature))))))
 
 (defn- apply-closed-feature-cannot-be-changed-validation [persistence feature]
   (let [{:keys [dataset collection id]} feature
@@ -76,7 +82,7 @@
                        (apply-all-features-validation persistence)
                        (apply-non-new-feature-requires-existing-stream-validation persistence)
                        (apply-closed-feature-cannot-be-changed-validation persistence)
-                       (apply-non-new-feature-requires-matching-current-validity-validation persistence))]
+                       (apply-non-new-feature-current-validity-validation persistence))]
     (when-not (:invalid? validated)
       (append-feature persistence validated)
       (let [{:keys [dataset collection id current-validity validity geometry attributes]} validated]
@@ -92,7 +98,7 @@
                        (apply-all-features-validation persistence)
                        (apply-closed-feature-cannot-be-changed-validation persistence)
                        (apply-non-new-feature-requires-existing-stream-validation persistence)
-                       (apply-non-new-feature-requires-matching-current-validity-validation persistence))]
+                       (apply-non-new-feature-current-validity-validation persistence))]
     (when-not (:invalid? validated)
       (append-feature persistence validated)
       (let [{:keys [dataset collection id current-validity validity geometry attributes]} validated]
@@ -105,7 +111,7 @@
         no-update-nw (-> nw
                          (assoc :action :close)
                          (dissoc :geometry)
-                         (assoc :attributes [])
+                         (assoc :attributes {})
                          (assoc :current-validity validity))]
     (list nw (process-close-feature processor no-update-nw))))
 
@@ -191,17 +197,19 @@
 
 (defn process [processor feature]
   "Processes feature event. Should return the feature, possibly with added data"
-  (let [vf (assoc feature :version (random/UUID))]
-    (condp = (:action vf)
-      :new (process-new-feature processor vf)
-      :change (process-change-feature processor vf)
-      :close (process-close-feature processor vf)
-      :nested-new (process-nested-new-feature processor vf)
-      :nested-change (process-nested-new-feature processor vf)
-      :nested-close  (process-nested-close-feature processor vf)
-      :close-all (close-all processor vf);; should save this too... So we can backtrack actions. Right?
-      :drop nil ;; Not sure if we need the drop at all?
-      (make-invalid vf "Unknown action"))))
+  (let [vf (assoc feature :version (random/UUID))
+        processed
+        (condp = (:action vf)
+          :new (process-new-feature processor vf)
+          :change (process-change-feature processor vf)
+          :close (process-close-feature processor vf)
+          :nested-new (process-nested-new-feature processor vf)
+          :nested-change (process-nested-new-feature processor vf)
+          :nested-close  (process-nested-close-feature processor vf)
+          :close-all (close-all processor vf);; should save this too... So we can backtrack actions. Right?
+          :drop nil ;; Not sure if we need the drop at all?
+          (make-invalid vf "Unknown action"))]
+    processed))
 
 
 (defn rename-keys [src-map change-key]

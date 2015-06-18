@@ -157,9 +157,8 @@ WHERE dataset = ? AND collection = ?  AND feature_id = ?")]
 " WHERE dataset = ? AND collection = ?) a
 WHERE rn = 1")
                       dataset collection] :as-arrays? true))]
-    (map (fn [f] (split-at 3 f)) results)
-    )
-  )
+    (map (fn [f] (split-at 3 f)) (drop 1 results))
+    ))
 
 (defn- jdbc-last-stream-validity-and-action [db dataset collection id]
    (j/with-db-connection [c db]
@@ -171,7 +170,7 @@ WHERE rn = 1")
 " WHERE dataset = ? AND collection = ? AND feature_id = ?) a
 WHERE rn = 1"
                        dataset collection id] :as-arrays? true)]
-       (-> results first))))
+       (first (drop 1 results)))))
 
 (deftype JdbcProcessorPersistence [db]
   ProcessorPersistence

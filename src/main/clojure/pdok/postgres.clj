@@ -81,7 +81,9 @@
     (.setObject s i (j/sql-value v) java.sql.Types/VARCHAR))
   clojure.lang.IPersistentVector
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
-    (j/set-parameter (into-array v) s i)))
+    (if (empty? v)
+      (.setObject s i nil java.sql.Types/OTHER)
+      (j/set-parameter (into-array v) s i))))
 
 (extend-protocol j/ISQLParameter
   (Class/forName "[Ljava.lang.Long;")
@@ -95,7 +97,14 @@
    (set-parameter [v ^java.sql.PreparedStatement s ^long i]
       (let [con (.getConnection s)
             postgres-array (.createArrayOf con "integer" v)]
-             (.setObject s i postgres-array java.sql.Types/OTHER))))
+        (.setObject s i postgres-array java.sql.Types/OTHER))))
+
+(extend-protocol j/IResultSetReadColumn
+  java.sql.Date
+  (result-set-read-column [v _ _] (tc/from-sql-date v))
+
+  java.sql.Timestamp
+  (result-set-read-column [v _ _] (tc/from-sql-time v)))
 
 (defn clj-to-pg-type [clj-type]
   (condp = clj-type

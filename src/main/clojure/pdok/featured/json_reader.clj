@@ -18,10 +18,12 @@
 (defn map-to-feature [dataset obj]
   (let [action (keyword (get obj "_action"))
         validity (parse-time (obj "_validity"))
-        feature (-> obj upgrade-data
-                    (assoc :dataset dataset)
-                    (assoc :action action)
-                    (assoc :validity validity))]
+        current-validity (parse-time (obj "_current_validity"))
+        feature (cond-> (upgrade-data obj)
+                    true (assoc :dataset dataset)
+                    true (assoc :action action)
+                    true (assoc :validity validity)
+                    current-validity (assoc :current-validity current-validity))]
     feature))
 
 ;; 2015-02-26T15:48:26.578Z
@@ -32,12 +34,14 @@
 (defn- parse-time
   "Parses an ISO8601 date timestring to local date"
   [datetimestring]
-  (tf/parse date-time-formatter datetimestring))
+  (when-not (clojure.string/blank? datetimestring)
+    (tf/parse date-time-formatter datetimestring)))
 
 (defn- parse-date
-  "Parses an date string to local date"
+  "Parses a date string to local date"
   [datestring]
-  (tc/to-local-date (tf/parse date-formatter datestring)))
+  (when-not (clojure.string/blank? datestring)
+    (tc/to-local-date (tf/parse date-formatter datestring))))
 
 (defn- parse-object [^JsonParser jp]
   (jparse/parse* jp identity nil nil))
