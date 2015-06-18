@@ -5,9 +5,7 @@
             [clojure.core.cache :as cache]
             [clojure.java.jdbc :as j]
             [clojure.string :as str]
-            [environ.core :refer [env]])
-  (:import [pdok.featured.tiles NLTile]             
-             ))
+            [environ.core :refer [env]]))
 
 (defprotocol Projector
   (init [_])
@@ -25,12 +23,6 @@
     (if (empty? xs)
       (conj! target x)
       (recur (conj! target x) (first xs) (rest xs)))))
-
-(defn nl-tiles [feature]
-  "Returns a set with tiles (numbers) based on the geometry in feature."
-  (if-let [geometry (:geometry feature)]
-    (let [coordinates (.getCoordinates (f/as-jts geometry))]
-      (into #{} (map (fn [coordinate] (NLTile/getTileFromRD (.x coordinate) (.y coordinate))) coordinates)))))
 
 (def visualization-table
   {:bgt {:wegdeel$kruinlijn "kruinlijn"}})

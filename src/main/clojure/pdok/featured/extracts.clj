@@ -1,7 +1,7 @@
 (ns pdok.featured.extracts
    (:require [pdok.featured.mustache  :as m]
              [pdok.postgres :as pg]
-             [pdok.featured.projectors :as p]
+             [pdok.featured.tiles :as tiles]
              [pdok.featured.core :as core]
              [pdok.featured.json-reader :as json-reader]
              [clojure.java.jdbc :as j]))
@@ -13,7 +13,7 @@
 (defn features-for-extract [dataset feature-type features template-dir]
   "Returns the rendered representation of the collection of features for a the given feature-type inclusive tiles-set"
   (let [template (template-file dataset feature-type template-dir)]
-    (map #(vector (p/nl-tiles %) (m/render-resource template %)) features)))
+    (map #(vector (tiles/nl %) (m/render-resource template %)) features)))
 
 (defn create-extract-collection [db dataset feature-type]
   (let [table feature-type]
@@ -55,12 +55,12 @@
 
 
 (defn file-to-features [path dataset]
-  "Helper function to read features from a file. 
-   Returns features read from file." 
+  "Helper function to read features from a file.
+   Returns features read from file."
   (with-open [s (json-reader/file-stream path)]
    (doall (json-reader/features-from-stream s :dataset dataset))))
 
 
-  
-  
+
+
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))
