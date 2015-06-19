@@ -4,13 +4,15 @@
             [clojure.java.io :as io]
             [clojure.java.jdbc :as j]
             [pdok.postgres :as pg]
-            [cognitect.transit :as transit])
+            [cognitect.transit :as transit]
+            [clojure.java.io :as io])
   (:import [pdok.featured WstxParser]
            [org.geotools.gml2 SrsSyntax]
            [org.geotools.gml3 GMLConfiguration]
            [com.vividsolutions.jts.geom Geometry]
            [com.vividsolutions.jts.io WKTWriter]
-           ))
+           [pdok.featured.xslt TransformXSLT]))
+
 (def lower-case
   (fnil str/lower-case ""))
 
@@ -74,10 +76,16 @@
 (defmethod as-gml "gml" [obj] (get obj "gml"))
 (defmethod as-gml :default [obj] nil)
 
+(def xsl-curve2linearring (TransformXSLT. (io/file "src/main/resources/pdok/featured/xslt/curve2linearring.xsl")))
+
 (defmulti as-jts (fn [obj] lower-case (get obj "type")))
 (defmethod as-jts :default [_] nil)
 (defmethod as-jts "gml" [obj]
-  (let [gml (-> obj (get "gml") strip-gml-ns (.getBytes "UTF-8"))
+  (let [gml (get obj "gml")
+        gml (if (re-find #"curve|Curve" gml)
+              (.transform xsl-curve2linearring gml)
+              gml)
+        gml (-> gml strip-gml-ns (.getBytes "UTF-8"))
         in (io/input-stream gml)]
     (.parse gml3-parser in)))
 
