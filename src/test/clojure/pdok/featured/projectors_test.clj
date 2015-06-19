@@ -24,7 +24,7 @@
 )
 
 (deftest test-nl-tiles-with-geometry
-  (is (= #{49821 49864} (tiles/nl test-feature-with-geometry))))
+  (is (= #{49821 49864} (tiles/nl (:geometry test-feature-with-geometry)))))
 
 (deftest test-nl-tiles-without-geometry
-  (is (= nil (tiles/nl test-feature-without-geometry))))
+  (is (= nil (tiles/nl (:geometry test-feature-without-geometry)))))

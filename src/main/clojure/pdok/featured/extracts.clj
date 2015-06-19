@@ -13,7 +13,7 @@
 (defn features-for-extract [dataset feature-type features template-dir]
   "Returns the rendered representation of the collection of features for a the given feature-type inclusive tiles-set"
   (let [template (template-file dataset feature-type template-dir)]
-    (map #(vector (tiles/nl %) (m/render-resource template %)) features)))
+    (map #(vector (tiles/nl (:geometry %)) (m/render-resource template %)) features)))
 
 (defn create-extract-collection [db dataset feature-type]
   (let [table feature-type]
