@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.File;
 import java.io.StringReader;
 import java.io.StringWriter;
+import java.io.InputStream;
 
 import javax.xml.transform.Templates;
 import javax.xml.transform.Transformer;
@@ -17,9 +18,9 @@ public class TransformXSLT {
         
        private Templates templates;
         
-        public TransformXSLT(File xsltResource) throws TransformerConfigurationException {
+        public TransformXSLT(InputStream xsltStream) throws TransformerConfigurationException {
                 TransformerFactory factory = TransformerFactory.newInstance("org.apache.xalan.xsltc.trax.TransformerFactoryImpl", null);
-                templates = factory.newTemplates(new StreamSource(xsltResource));
+                templates = factory.newTemplates(new StreamSource(xsltStream));
 
         }
         

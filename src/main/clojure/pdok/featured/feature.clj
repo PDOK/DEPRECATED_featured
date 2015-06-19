@@ -76,7 +76,7 @@
 (defmethod as-gml "gml" [obj] (get obj "gml"))
 (defmethod as-gml :default [obj] nil)
 
-(def xsl-curve2linearring (TransformXSLT. (io/file "src/main/resources/pdok/featured/xslt/curve2linearring.xsl")))
+(def xsl-curve2linearring (TransformXSLT. (io/input-stream (io/resource "pdok/featured/xslt/curve2linearring.xsl"))))
 
 (defmulti as-jts (fn [obj] lower-case (get obj "type")))
 (defmethod as-jts :default [_] nil)
