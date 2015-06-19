@@ -4,6 +4,7 @@
             [pdok.postgres :as pg]
             [pdok.featured.projectors :as proj]
             [pdok.featured.persistence :as pers]
+            [pdok.featured.tiles :as tiles]
             [clojure.java.jdbc :as j]
             [clojure.core.cache :as cache]
             [clojure.string :as str]
@@ -28,7 +29,8 @@
                [:feature_id "varchar(100)"]
                [:valid_from "timestamp without time zone"]
                [:valid_to "timestamp without time zone"]
-               [:feature "text"]))
+               [:feature "text"]
+               [:tiles "integer[]"]))
 
 (defn- create-current-table [db]
   (pg/create-table db *timeline-schema* *current-table*
@@ -38,7 +40,8 @@
                [:feature_id "varchar(100)"]
                [:valid_from "timestamp without time zone"]
                [:valid_to "timestamp without time zone"]
-               [:feature "text"])
+               [:feature "text"]
+               [:tiles "integer[]"])
   (pg/create-index db *timeline-schema* *current-table* :dataset :collection :feature_id))
 
 (defn- init [db]
@@ -58,12 +61,12 @@
 (defn- init-root
   ([feature]
    (if-let [dataset (:dataset feature)]
-     {:_dataset dataset :_collection (:collection feature) :_id (:id feature)}
-     {:_collection (:collection feature) :_id (:id feature)}))
+     (init-root dataset (:collection feature) (:id feature))
+     (init-root (:collection feature) (:id feature))))
   ([collection id]
-   {:_collection collection :_id id})
+   {:_collection collection :_id id :_tiles #{}})
   ([dataset collection id]
-   {:_dataset dataset :_collection collection :_id id}))
+   (assoc (init-root collection id) :_dataset dataset)))
 
 (defn- mustafy [feature]
   (let [result (init-root feature)
@@ -110,7 +113,8 @@
    (let [keyworded-path (map (fn [[_ id field]] [(keyword field) id]) path)
          mustafied (mustafy feature)
          merger (path->merge-fn target keyworded-path)
-         merged (merger mustafied)]
+         merged (merger mustafied)
+         merged (update merged :_tiles #(clojure.set/union % (tiles/nl (:geometry feature))) )]
      merged)))
 
 (defn- sync-valid-from [acc feature]
@@ -120,13 +124,13 @@
   (assoc acc :_valid_to (:validity feature)))
 
 (defn- new-current-sql []
-  (str "INSERT INTO " (qualified-current) " (dataset, collection, feature_id, valid_from, valid_to, feature)
-VALUES (?, ?, ? ,?, ?, ?)"))
+  (str "INSERT INTO " (qualified-current) " (dataset, collection, feature_id, valid_from, valid_to, feature, tiles)
+VALUES (?, ?, ? ,?, ?, ?, ?)"))
 
 (defn- new-current
   ([db features]
    (try
-     (let [transform-fn (juxt :_dataset :_collection :_id :_valid_from :_valid_to pg/to-json)
+     (let [transform-fn (juxt :_dataset :_collection :_id :_valid_from :_valid_to pg/to-json :_tiles)
            records (map transform-fn features)]
        (j/execute! db (cons (new-current-sql) records) :multi? true :transaction? false))
       (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
@@ -154,23 +158,24 @@ VALUES (?, ?, ? ,?, ?, ?)"))
   (str "UPDATE " (qualified-current) "
 SET feature = ?,
     valid_from = ?,
-    valid_to = ?
+    valid_to = ?,
+    tiles = ?
 WHERE dataset = ? AND collection = ? AND  feature_id = ?"))
 
 (defn- update-current [db features]
   (try
-    (let [transform-fn (juxt pg/to-json :_valid_from :_valid_to :_dataset :_collection :_id)
+    (let [transform-fn (juxt pg/to-json :_valid_from :_valid_to :_tiles :_dataset :_collection :_id)
           records (map transform-fn features)]
       (j/execute! db (cons (update-current-sql) records) :multi? true :transaction? false))
     (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
 
 (defn- new-history-sql []
-  (str "INSERT INTO " (qualified-history) " (dataset, collection, feature_id, valid_from, valid_to, feature)
-VALUES (?, ?, ?, ?, ?, ?)"))
+  (str "INSERT INTO " (qualified-history) " (dataset, collection, feature_id, valid_from, valid_to, feature, tiles)
+VALUES (?, ?, ?, ?, ?, ?, ?)"))
 
 (defn- new-history [db features]
   (try
-    (let [transform-fn (juxt :_dataset :_collection :_id :_valid_from :_valid_to pg/to-json)
+    (let [transform-fn (juxt :_dataset :_collection :_id :_valid_from :_valid_to pg/to-json :_tiles)
           records (map transform-fn features)]
       (j/execute! db (cons (new-history-sql) records) :multi? true :transaction? false))
     (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
@@ -204,14 +209,15 @@ VALUES (?, ?, ?, ?, ?, ?)"))
                          (load-current-feature-cache db dataset collection)))
           cached-get-current (use-cache feature-cache cache-use-key-fn load-cache)]
       (if-let [current (cached-get-current dataset root-col root-id)]
-        (if (= (:action feature) :close)
-          (cache-batched-update (sync-valid-to (merge current path feature) feature))
-          (if (t/before? (:_valid_from current) (:validity feature))
-            (do ;(println "NOT-SAME")
-              (batched-history (sync-valid-to current feature))
-              (cache-batched-update (sync-valid-from (merge current path feature) feature)))
-            (do ;(println "SAME")
-              (cache-batched-update (sync-valid-from (merge current path feature) feature)))))
+        (let [new-current (merge current path feature)]
+          (if (= (:action feature) :close)
+            (cache-batched-update (sync-valid-to new-current feature))
+            (if (t/before? (:_valid_from current) (:validity feature))
+              (do ;(println "NOT-SAME")
+                (batched-history (sync-valid-to current feature))
+                (cache-batched-update (sync-valid-from new-current feature)))
+              (do ;(println "SAME")
+                (cache-batched-update (sync-valid-from new-current feature))))))
         (cache-batched-new (sync-valid-from (merge (init-root dataset root-col root-id) path feature) feature)))))
   (proj/change-feature [_ feature]
     ;; change can be the same, because a new nested feature validity change will also result in a new validity

@@ -83,7 +83,10 @@
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
     (if (empty? v)
       (.setObject s i nil java.sql.Types/OTHER)
-      (j/set-parameter (into-array v) s i))))
+      (j/set-parameter (into-array v) s i)))
+  clojure.lang.IPersistentSet
+  (set-parameter [v ^java.sql.PreparedStatement s ^long i]
+    (j/set-parameter (into [] v) s i)))
 
 (extend-protocol j/ISQLParameter
   (Class/forName "[Ljava.lang.Long;")

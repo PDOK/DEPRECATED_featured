@@ -6,4 +6,4 @@
   "Returns a set with NL tiles (numbers) based on the geometry."
   (when geometry
     (let [coordinates (.getCoordinates (f/as-jts geometry))]
-      (into #{} (map (fn [coordinate] (NLTile/getTileFromRD (.x coordinate) (.y coordinate))) coordinates)))))
+      (into #{} (filter #(not= -1 %) (map (fn [coordinate] (NLTile/getTileFromRD (.x coordinate) (.y coordinate))) coordinates))))))
