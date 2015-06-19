@@ -27,6 +27,7 @@
                [:dataset "varchar(100)"]
                [:collection "varchar(255)"]
                [:feature_id "varchar(100)"]
+               [:version "uuid"]
                [:valid_from "timestamp without time zone"]
                [:valid_to "timestamp without time zone"]
                [:feature "text"]
@@ -38,6 +39,7 @@
                [:dataset "varchar(100)"]
                [:collection "varchar(255)"]
                [:feature_id "varchar(100)"]
+               [:version "uuid"]
                [:valid_from "timestamp without time zone"]
                [:valid_to "timestamp without time zone"]
                [:feature "text"]
@@ -114,6 +116,7 @@
          mustafied (mustafy feature)
          merger (path->merge-fn target keyworded-path)
          merged (merger mustafied)
+         merged (assoc merged :_version (:version feature))
          merged (update merged :_tiles #(clojure.set/union % (tiles/nl (:geometry feature))) )]
      merged)))
 
@@ -124,13 +127,13 @@
   (assoc acc :_valid_to (:validity feature)))
 
 (defn- new-current-sql []
-  (str "INSERT INTO " (qualified-current) " (dataset, collection, feature_id, valid_from, valid_to, feature, tiles)
-VALUES (?, ?, ? ,?, ?, ?, ?)"))
+  (str "INSERT INTO " (qualified-current) " (dataset, collection, feature_id, version, valid_from, valid_to, feature, tiles)
+VALUES (?, ?, ? ,?, ?, ?, ?, ?)"))
 
 (defn- new-current
   ([db features]
    (try
-     (let [transform-fn (juxt :_dataset :_collection :_id :_valid_from :_valid_to pg/to-json :_tiles)
+     (let [transform-fn (juxt :_dataset :_collection :_id :_version :_valid_from :_valid_to pg/to-json :_tiles)
            records (map transform-fn features)]
        (j/execute! db (cons (new-current-sql) records) :multi? true :transaction? false))
       (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
@@ -157,6 +160,7 @@ VALUES (?, ?, ? ,?, ?, ?, ?)"))
 (defn- update-current-sql []
   (str "UPDATE " (qualified-current) "
 SET feature = ?,
+    version = ?,
     valid_from = ?,
     valid_to = ?,
     tiles = ?
@@ -164,18 +168,18 @@ WHERE dataset = ? AND collection = ? AND  feature_id = ?"))
 
 (defn- update-current [db features]
   (try
-    (let [transform-fn (juxt pg/to-json :_valid_from :_valid_to :_tiles :_dataset :_collection :_id)
+    (let [transform-fn (juxt pg/to-json :_version :_valid_from :_valid_to :_tiles :_dataset :_collection :_id)
           records (map transform-fn features)]
       (j/execute! db (cons (update-current-sql) records) :multi? true :transaction? false))
     (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
 
 (defn- new-history-sql []
-  (str "INSERT INTO " (qualified-history) " (dataset, collection, feature_id, valid_from, valid_to, feature, tiles)
-VALUES (?, ?, ?, ?, ?, ?, ?)"))
+  (str "INSERT INTO " (qualified-history) " (dataset, collection, feature_id, version, valid_from, valid_to, feature, tiles)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
 
 (defn- new-history [db features]
   (try
-    (let [transform-fn (juxt :_dataset :_collection :_id :_valid_from :_valid_to pg/to-json :_tiles)
+    (let [transform-fn (juxt :_dataset :_collection :_id :_version :_valid_from :_valid_to pg/to-json :_tiles)
           records (map transform-fn features)]
       (j/execute! db (cons (new-history-sql) records) :multi? true :transaction? false))
     (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
