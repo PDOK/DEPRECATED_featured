@@ -60,6 +60,33 @@
 (defn- qualified-current []
   (str (name *timeline-schema*) "." (name *current-table*)))
 
+(defn current [db dataset collection]
+  (j/with-db-connection [c db]
+    (let [results
+          (j/query c [(str "SELECT tiles, feature FROM " (qualified-current)
+                           " WHERE dataset = ? AND collection = ? AND valid_to is null")
+                      dataset collection] :as-arrays? true)
+          current (map (fn [[t f]] (vector t (pg/from-json f))) (drop 1 results))]
+      current)))
+
+(defn closed [db dataset collection]
+  (j/with-db-connection [c db]
+    (let [results
+          (j/query c [(str "SELECT tiles, feature FROM " (qualified-current)
+                           " WHERE dataset = ? AND collection = ? AND valid_to is not null")
+                      dataset collection] :as-arrays? true)
+          current (map (fn [[t f]] (vector t (pg/from-json f))) (drop 1 results))]
+      current)))
+
+(defn history [db dataset collection]
+  (j/with-db-connection [c db]
+    (let [results
+          (j/query c [(str "SELECT tiles, feature FROM " (qualified-history)
+                           " WHERE dataset = ? AND collection = ?")
+                      dataset collection] :as-arrays? true)
+          current (map (fn [[t f]] (vector t (pg/from-json f))) (drop 1 results))]
+      current)))
+
 (defn- init-root
   ([feature]
    (if-let [dataset (:dataset feature)]

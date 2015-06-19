@@ -105,9 +105,10 @@
 (extend-protocol j/IResultSetReadColumn
   java.sql.Date
   (result-set-read-column [v _ _] (tc/from-sql-date v))
-
   java.sql.Timestamp
-  (result-set-read-column [v _ _] (tc/from-sql-time v)))
+  (result-set-read-column [v _ _] (tc/from-sql-time v))
+  java.sql.Array
+  (result-set-read-column [v _ _] (into [] (.getArray v))))
 
 (defn clj-to-pg-type [clj-type]
   (condp = clj-type
