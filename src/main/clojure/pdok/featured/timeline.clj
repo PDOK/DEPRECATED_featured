@@ -214,7 +214,12 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
 (defn- feature-key [feature]
   [(:dataset feature) (:collection feature) (:id feature)])
 
-;; TODO batches moeten gelinked zijn, want update moet na new. Als update eerder flushed gaat het mis
+(defn- flush-all [db new-current-batch update-current-batch new-history-batch]
+  "Used for flushing all batches, so update current is always performed after new current"
+  (flush-batch new-current-batch (partial new-current db))
+  (flush-batch update-current-batch (partial update-current db))
+  (flush-batch new-history-batch (partial new-history db)))
+
 (deftype Timeline [db root-fn path-fn
                    feature-cache load-cache?-fn
                    new-current-batch new-current-batch-size
@@ -226,15 +231,16 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
   (proj/new-feature [_ feature]
     (let [[dataset collection id] (feature-key feature)
           [root-col root-id] (root-fn dataset collection id)
+          after-flush #(flush-all db new-current-batch update-current-batch new-history-batch)
           path (path-fn dataset collection id)
           cache-store-key-fn (fn [f] [(:_dataset f) (:_collection f) (:_id f)])
           cache-value-fn (fn [_ f] f)
           cache-use-key-fn (fn [dataset collection id] [dataset collection id])
-          batched-new (with-batch new-current-batch new-current-batch-size (partial new-current db))
+          batched-new (with-batch new-current-batch new-current-batch-size (partial new-current db) after-flush)
           cache-batched-new (with-cache feature-cache batched-new cache-store-key-fn cache-value-fn)
-          batched-update (with-batch update-current-batch update-current-batch-size (partial update-current db))
+          batched-update (with-batch update-current-batch update-current-batch-size (partial update-current db) after-flush)
           cache-batched-update (with-cache feature-cache batched-update cache-store-key-fn cache-value-fn)
-          batched-history (with-batch new-history-batch new-history-batch-size (partial new-history db))
+          batched-history (with-batch new-history-batch new-history-batch-size (partial new-history db) after-flush)
           load-cache (fn [dataset collection id]
                        (when (load-cache?-fn dataset collection)
                          (load-current-feature-cache db dataset collection)))
@@ -257,9 +263,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
   (proj/close-feature [_ feature]
     (proj/new-feature _ feature))
   (proj/close [this]
-    (flush-batch new-current-batch (partial new-current db))
-    (flush-batch update-current-batch (partial update-current db))
-    (flush-batch new-history-batch (partial new-history db))
+    (flush-all db new-current-batch update-current-batch new-history-batch)
     this)
   )
 
