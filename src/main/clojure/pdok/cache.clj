@@ -8,14 +8,18 @@
   (when (not-empty records)
     (batched-fn records)))
 
-(defn with-batch [batch batch-size batched-fn]
-  (fn [& args]
-    (dosync
-     (if (= 1 (count args))
-       (alter batch #(conj % (first args)))
-       (alter batch #(conj % args))))
-    (if (<= batch-size (count @batch))
-      (flush-batch batch batched-fn))))
+(defn with-batch
+  ([batch batch-size batched-fn]
+   (with-batch batch batch-size batched-fn (fn [])))
+  ([batch batch-size batched-fn after-flush]
+   (fn [& args]
+     (dosync
+      (if (= 1 (count args))
+        (alter batch #(conj % (first args)))
+        (alter batch #(conj % args))))
+     (if (<= batch-size (count @batch))
+       (do (flush-batch batch batched-fn)
+           (after-flush))))))
 
 (defn with-cache [cache cached-fn key-fn value-fn]
   (fn [& args]
