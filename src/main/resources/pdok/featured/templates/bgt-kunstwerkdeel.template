@@ -26,8 +26,8 @@
 					<imgeo:lokaalID>{{lokaalID}}</imgeo:lokaalID>
 				</imgeo:NEN3610ID>
 			</imgeo:identificatie>
-			<imgeo:bgt-status codeSpace="{{status_codeSpace}}">{{status_leeg}}</imgeo:bgt-status>
-			<imgeo:plus-status codeSpace="{{plus-status_codeSpace}}"{{#plus-status_leeg}} nilReason="{{.}}"{{/plus-status_leeg}}>{{plus-status}}</imgeo:plus-status>
+			<imgeo:bgt-status codeSpace="{{status_codeSpace}}">{{status}}{{status_leeg}}</imgeo:bgt-status>
+			<imgeo:plus-status codeSpace="{{plus-status_codeSpace}}">{{plus-status}}{{plus-status_leeg}}</imgeo:plus-status>
 			<imgeo:geometrie2dOverigeConstructie>{{{geometry.gml}}}</imgeo:geometrie2dOverigeConstructie>
 			<imgeo:bgt-type codeSpace="{{bgt-type_codeSpace}}">{{bgt-type}}</imgeo:bgt-type>
 			<imgeo:plus-type codeSpace="{{type_codeSpace}}">{{type}}</imgeo:plus-type>
