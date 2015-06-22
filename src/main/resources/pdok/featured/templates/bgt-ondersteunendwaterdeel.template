@@ -1,0 +1,38 @@
+<CityModel xmlns:gml="http://www.opengis.net/gml"
+				xmlns:imgeo="http://www.geostandaarden.nl/imgeo/2.1"
+				xmlns:lu="http://www.opengis.net/citygml/landuse/2.0"
+				xmlns:tra="http://www.opengis.net/citygml/transportation/2.0"
+				xmlns:tun="http://www.opengis.net/citygml/tunnel/2.0"
+				xmlns:veg="http://www.opengis.net/citygml/vegetation/2.0"
+				xmlns:xlink="http://www.w3.org/1999/xlink"
+				xmlns:wat="http://www.opengis.net/citygml/waterbody/2.0"
+				xmlns:bri="http://www.opengis.net/citygml/bridge/2.0"
+				xmlns:bui="http://www.opengis.net/citygml/building/2.0"
+				xmlns:cif="http://www.opengis.net/citygml/cityfurniture/2.0"
+				xmlns="http://www.opengis.net/citygml/2.0"
+				xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+				xsi:schemaLocation="http://www.geostandaarden.nl/imgeo/2.1 http://schemas.geonovum.nl/imgeo/2.1/imgeo-2.1.1.xsd">
+	<cityObjectMember>
+		<imgeo:OndersteunendWaterdeel gml:id="_{{_version}}">
+			<creationDate xmlns="http://www.opengis.net/citygml/2.0">{{creationDate}}</creationDate>
+			<imgeo:identificatie>
+				<imgeo:NEN3610ID>
+					<imgeo:namespace>NL.IMGeo</imgeo:namespace>
+					<imgeo:lokaalID>{{lokaalID}}</imgeo:lokaalID>
+				</imgeo:NEN3610ID>
+			</imgeo:identificatie>
+			<imgeo:LV-publicatiedatum>{{LV-publicatiedatum}}</imgeo:LV-publicatiedatum>
+			<imgeo:relatieveHoogteligging>{{relatieveHoogteligging}}</imgeo:relatieveHoogteligging>
+			<imgeo:inOnderzoek>{{inOnderzoek}}</imgeo:inOnderzoek>
+			<imgeo:tijdstipRegistratie>{{tijdstipRegistratie}}</imgeo:tijdstipRegistratie>
+			<imgeo:bgt-status codeSpace="{{status_codeSpace}}">{{status}}{{status_leeg}}</imgeo:bgt-status>
+			<imgeo:plus-status codeSpace="{{plus-status_codeSpace}}">{{plus-status}}{{plus-status_leeg}}</imgeo:plus-status>	
+			<imgeo:bronhouder>{{bronhouder}}</imgeo:bronhouder>	
+			<class xmlns="http://www.opengis.net/citygml/waterbody/2.0" codeSpace="{{type_codeSpace}}">{{type}}</class>
+			<imgeo:plus-type codeSpace="{{plus-type_codeSpace}}">{{plus-type}}{[plus-type_leeg}}</imgeo:plus-type>
+			<imgeo:geometrie2dOndersteunendWaterdeel>
+				{{{geometry.gml}}}
+			</imgeo:geometrie2dOndersteunendWaterdeel>
+		</imgeo:OndersteunendWaterdeel>
+	</cityObjectMember>
+</CityModel>
