@@ -29,8 +29,8 @@
 			<imgeo:bgt-status codeSpace="{{status_codeSpace}}">{{status}}{{status_leeg}}</imgeo:bgt-status>
 			<imgeo:plus-status codeSpace="{{plus-status_codeSpace}}">{{plus-status}}{{plus-status_leeg}}</imgeo:plus-status>
 			<imgeo:geometrie2dOverigeConstructie>{{{geometry.gml}}}</imgeo:geometrie2dOverigeConstructie>
-			<imgeo:bgt-type codeSpace="{{bgt-type_codeSpace}}">{{bgt-type}}</imgeo:bgt-type>
-			<imgeo:plus-type codeSpace="{{type_codeSpace}}">{{type}}</imgeo:plus-type>
+			<imgeo:bgt-type codeSpace="{{type_codeSpace}}">{{type}}</imgeo:bgt-type>
+			<imgeo:plus-type codeSpace="{{plus-type_codeSpace}}">{{plus-type}}{{plus-type_leeg}}</imgeo:plus-type>
 		</imgeo:Kunstwerkdeel>
 	</cityObjectMember>
 </CityModel>
