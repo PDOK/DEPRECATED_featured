@@ -1,5 +1,6 @@
 (ns pdok.featured.mustache
-   (:require [clostache.parser :as clostache])
+   (:require [clostache.parser :as clostache]
+             [pdok.featured.mustache-functions])
    (:gen-class))
 
 (defn resolve-as-function [namespace function]
