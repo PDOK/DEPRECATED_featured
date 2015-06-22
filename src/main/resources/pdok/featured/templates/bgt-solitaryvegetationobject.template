@@ -27,8 +27,8 @@
 			<imgeo:tijdstipRegistratie>{{tijdstipRegistratie}}</imgeo:tijdstipRegistratie>
 			<imgeo:bgt-status codeSpace="{{status_codeSpace}}">{{status}}{{status_leeg}}</imgeo:bgt-status>
 			<imgeo:plus-status codeSpace="{{plus-status_codeSpace}}">{{plus-status}}{{plus-status_leeg}}</imgeo:plus-status>	
-			<imgeo:bronhouder>{{bronhouder}}</imgeo:bronhouder>									
-			<class codeSpace="http://www.geostandaarden.nl/imgeo/def/2.1#TypeVegetatieObject">niet-bgt</class>		
+			<imgeo:bronhouder>{{bronhouder}}</imgeo:bronhouder>												
+			<class codeSpace="{{type_codeSpace}}">{{type}}</class>		
 			<imgeo:geometrie2dVegetatieObject>
 				{{{geometry.gml}}}
 			</imgeo:geometrie2dVegetatieObject>		
