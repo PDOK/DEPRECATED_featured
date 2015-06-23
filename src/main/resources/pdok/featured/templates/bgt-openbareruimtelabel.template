@@ -1,0 +1,18 @@
+{{>city-model-start}}
+  <imgeo:OpenbareRuimteLabel gml:id="_{{_version}}">
+  	{{>start-bgt-feature-type}}
+  	<imgeo:identificatieBAGOPR>{{identificatieBAGOPR}}</imgeo:identificatieBAGOPR>
+  	<imgeo:openbareRuimteNaam>
+  		<imgeo:Label>
+         <imgeo:tekst>{{openbareRuimteNaam}}</imgeo:tekst>{{#positie}}
+         <imgeo:positie>
+              <imgeo:Labelpositie>
+                <imgeo:plaatsingspunt>{{#plaatsingspunt}}{{#geometry}}{{{gml}}}{{/geometry}}{{/plaatsingspunt}}</imgeo:plaatsingspunt>
+                  <imgeo:hoek>{{hoek}}</imgeo:hoek>
+              </imgeo:Labelpositie>
+          </imgeo:positie>{{/positie}}
+        </imgeo:Label>
+    </imgeo:openbareRuimteNaam>
+    <imgeo:openbareRuimteType codeSpace="{{openbareRuimteType_codeSpace}}">{{openbareRuimteType}}</imgeo:openbareRuimteType>
+  </imgeo:OpenbareRuimteLabel>
+{{>city-model-eind}}
