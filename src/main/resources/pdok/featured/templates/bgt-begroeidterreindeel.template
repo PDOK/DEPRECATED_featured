@@ -1,0 +1,40 @@
+<CityModel xmlns:gml="http://www.opengis.net/gml"
+				xmlns:imgeo="http://www.geostandaarden.nl/imgeo/2.1"
+				xmlns:lu="http://www.opengis.net/citygml/landuse/2.0"
+				xmlns:tra="http://www.opengis.net/citygml/transportation/2.0"
+				xmlns:tun="http://www.opengis.net/citygml/tunnel/2.0"
+				xmlns:veg="http://www.opengis.net/citygml/vegetation/2.0"
+				xmlns:xlink="http://www.w3.org/1999/xlink"
+				xmlns:wat="http://www.opengis.net/citygml/waterbody/2.0"
+				xmlns:bri="http://www.opengis.net/citygml/bridge/2.0"
+				xmlns:bui="http://www.opengis.net/citygml/building/2.0"
+				xmlns:cif="http://www.opengis.net/citygml/cityfurniture/2.0"
+				xmlns="http://www.opengis.net/citygml/2.0"
+				xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+				xsi:schemaLocation="http://www.geostandaarden.nl/imgeo/2.1 http://schemas.geonovum.nl/imgeo/2.1/imgeo-2.1.1.xsd">
+	<cityObjectMember>
+		<PlantCover xmlns="http://www.opengis.net/citygml/vegetation/2.0" gml:id="_{{_version}}">
+			<creationDate xmlns="http://www.opengis.net/citygml/2.0">{{creationDate}}</creationDate>
+			<imgeo:identificatie>
+				<imgeo:NEN3610ID>
+					<imgeo:namespace>NL.IMGeo</imgeo:namespace>
+					<imgeo:lokaalID>{{lokaalID}}</imgeo:lokaalID>
+				</imgeo:NEN3610ID>
+			</imgeo:identificatie>
+			<imgeo:relatieveHoogteligging>{{relatieveHoogteligging}}</imgeo:relatieveHoogteligging>
+			<imgeo:LV-publicatiedatum>{{LV-publicatiedatum}}</imgeo:LV-publicatiedatum>
+			<imgeo:tijdstipRegistratie>{{tijdstipRegistratie}}</imgeo:tijdstipRegistratie>			
+			<imgeo:inOnderzoek>{{inOnderzoek}}</imgeo:inOnderzoek>
+			<imgeo:bgt-status codeSpace="{{status_codeSpace}}">{{status}}{{status_leeg}}</imgeo:bgt-status>
+			<imgeo:plus-status codeSpace="{{plus-status_codeSpace}}">{{plus-status}}{{plus-status_leeg}}</imgeo:plus-status>	
+			<imgeo:bronhouder>{{bronhouder}}</imgeo:bronhouder>
+			<class codeSpace="{{fysiekVoorkomen_codeSpace}}">{{fysiekVoorkomen}}</class>			
+			<imgeo:geometrie2dBegroeidTerreindeel>
+				{{{geometry.gml}}}
+			</imgeo:geometrie2dBegroeidTerreindeel>
+			<imgeo:begroeidTerreindeelOpTalud{{#opTalud_leeg}} nilReason="{{.}}"{{/opTalud_leeg}}>{{opTalud}}</imgeo:begroeidTerreindeelOpTalud>	
+			<imgeo:kruinlijnBegroeidTerreindeel{{#kruinlijn_leeg}} nilReason="{{.}}"{{/kruinlijn_leeg}}>{{{kruinlijn.geometry.gml}}}</imgeo:kruinlijnBegroeidTerreindeel>	
+			<imgeo:plus-fysiekVoorkomen codeSpace="{{plus-fysiekVoorkomen_codeSpace}}">{{plus-fysiekVoorkomen}}{{plus-fysiekVoorkomen_leeg}}</imgeo:plus-fysiekVoorkomen>
+		</PlantCover>
+	</cityObjectMember>
+</CityModel>
