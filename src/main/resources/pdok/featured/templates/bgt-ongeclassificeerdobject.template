@@ -1,0 +1,6 @@
+{{>city-model-start}}
+	<imgeo:OngeclassificeerdObject gml:id="_{{_version}}">
+		{{>start-bgt-feature-type}}			
+			<imgeo:geometrie2d>{{{geometry.gml}}}</imgeo:geometrie2d>			
+	</imgeo:OngeclassificeerdObject>
+{{>city-model-eind}}
