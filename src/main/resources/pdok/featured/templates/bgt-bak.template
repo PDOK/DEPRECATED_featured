@@ -1,29 +1,8 @@
-<CityModel xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:imgeo="http://www.geostandaarden.nl/imgeo/2.1" xmlns:gml="http://www.opengis.net/gml" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:smil20="http://www.w3.org/2001/SMIL20/" xmlns:smil20lang="http://www.w3.org/2001/SMIL20/Language" xmlns="http://www.opengis.net/citygml/2.0" xsi:schemaLocation="http://www.geostandaarden.nl/imgeo/2.1 imgeo/2.1.1/imgeo-2.1.1.xsd">
-	<cityObjectMember>
-		<imgeo:Bak gml:id="_{{_version}}">
-			<creationDate>{{creationDate}}</creationDate>
-			<terminationDate>{{terminationDate}}{{terminationDate_leeg}}</terminationDate>
-			<imgeo:LV-publicatiedatum>{{LV-publicatiedatum}}</imgeo:LV-publicatiedatum>
-			<imgeo:relatieveHoogteligging>{{relatieveHoogteligging}}</imgeo:relatieveHoogteligging>
-			<imgeo:inOnderzoek>{{inOnderzoek}}{{inOnderzoek_leeg}}</imgeo:inOnderzoek>
-			<imgeo:eindRegistratie>{{eindRegistratie}}</imgeo:eindRegistratie>
-			<imgeo:tijdstipRegistratie>{{tijdstipRegistratie}}</imgeo:tijdstipRegistratie>
-			<imgeo:identificatie>
-				<imgeo:NEN3610ID>
-					<imgeo:namespace>NL.IMGeo</imgeo:namespace>
-					<imgeo:lokaalID>{{lokaalID}}</imgeo:lokaalID>
-				</imgeo:NEN3610ID>
-			</imgeo:identificatie>
-			<imgeo:bronhouder>{{bronhouder}}</imgeo:bronhouder>
-			<imgeo:bgt-status codeSpace="http://www.geostandaarden.nl/imgeo/def/2.1#Status">bestaand</imgeo:bgt-status>
-			<imgeo:plus-status codeSpace="http://www.geostandaarden.nl/imgeo/def/2.1#VoidReasonValue">geenWaarde</imgeo:plus-status>
-			<function xmlns="http://www.opengis.net/citygml/cityfurniture/2.0" codeSpace="http://www.geostandaarden.nl/imgeo/def/2.1#TypeBak">niet-bgt</function>
-			<imgeo:plus-type codeSpace="http://www.geostandaarden.nl/imgeo/def/2.1#TypeBakPlus">afvalbak</imgeo:plus-type>
-			<imgeo:geometrie2dBak>
-				<gml:Point srsName="urn:ogc:def:crs:EPSG::28992">
-					<gml:pos>178020.640 503553.411</gml:pos>
-				</gml:Point>
-			</imgeo:geometrie2dBak>
-		</imgeo:Bak>
-	</cityObjectMember>
-</CityModel>
+{{>city-model-start}}
+  <imgeo:Bak gml:id="_{{_version}}">
+  	{{>start-bgt-feature-type}}
+    <function xmlns="http://www.opengis.net/citygml/cityfurniture/2.0" codeSpace="{{type_codespace}}">{{type}}</function>
+    <imgeo:plus-type codeSpace="{{plus-type_codespace}}">{{plus-type}}{{plus-type_leeg}}</imgeo:plus-type>
+    <imgeo:geometrie2dBak>{{{geometry.gml}}}</imgeo:geometrie2dBak>
+  </imgeo:Bak>
+{{>city-model-eind}}
