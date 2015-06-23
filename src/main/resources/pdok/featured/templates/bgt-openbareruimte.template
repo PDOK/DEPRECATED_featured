@@ -1,0 +1,5 @@
+{{>city-model-start}}
+  <imgeo:OpenbareRuimte gml:id="_{{_version}}">
+  	{{>start-bgt-feature-type}}
+  </imgeo:OpenbareRuimte>
+{{>city-model-eind}}

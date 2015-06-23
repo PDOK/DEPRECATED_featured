@@ -1,0 +1,19 @@
+<CityModel xmlns:gml="http://www.opengis.net/gml" xmlns:imgeo="http://www.geostandaarden.nl/imgeo/2.1" xmlns:lu="http://www.opengis.net/citygml/landuse/2.0" xmlns:tra="http://www.opengis.net/citygml/transportation/2.0" xmlns:tun="http://www.opengis.net/citygml/tunnel/2.0" xmlns:veg="http://www.opengis.net/citygml/vegetation/2.0" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:wat="http://www.opengis.net/citygml/waterbody/2.0" xmlns:bri="http://www.opengis.net/citygml/bridge/2.0" xmlns:bui="http://www.opengis.net/citygml/building/2.0" xmlns:cif="http://www.opengis.net/citygml/cityfurniture/2.0" xmlns="http://www.opengis.net/citygml/2.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.geostandaarden.nl/imgeo/2.1 http://schemas.geonovum.nl/imgeo/2.1/imgeo-2.1.1.xsd">
+ <cityObjectMember>  <imgeo:OpenbareRuimte gml:id="_4c0996e9-19b5-11e5-b640-5dba25a4aec5">
+  	<creationDate>2013-05-31</creationDate>
+  	  <terminationDate>geenWaarde</terminationDate>
+  	  <imgeo:LV-publicatiedatum>2015-06-17T11:12:27.000Z</imgeo:LV-publicatiedatum>
+  	  <imgeo:relatieveHoogteligging>0</imgeo:relatieveHoogteligging>
+  	  <imgeo:inOnderzoek>geenWaarde</imgeo:inOnderzoek>
+  	  
+  	  <imgeo:tijdstipRegistratie>2013-05-31T12:38:00.000Z</imgeo:tijdstipRegistratie>
+  	  <imgeo:identificatie>
+  	    <imgeo:NEN3610ID>
+  	      <imgeo:namespace>NL.IMGeo</imgeo:namespace>
+  	        <imgeo:lokaalID>B0001.65d4f1f616314f2db018d14a046e4cae</imgeo:lokaalID>
+  	    </imgeo:NEN3610ID>
+  	  </imgeo:identificatie>
+  	  <imgeo:bronhouder>B0001</imgeo:bronhouder>
+  	  <imgeo:bgt-status codeSpace="">geenWaarde</imgeo:bgt-status>
+  	  <imgeo:plus-status codeSpace="">plan</imgeo:plus-status>  </imgeo:OpenbareRuimte>
+</cityObjectMember></CityModel>
