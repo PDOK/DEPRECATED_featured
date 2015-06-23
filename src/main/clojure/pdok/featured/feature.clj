@@ -18,7 +18,7 @@
 
 (deftype NilAttribute [class]
   Object
-  (toString [_] (str "nil "(.getName class)))
+  (toString [_] "")
   clojure.lang.IEditableCollection
   (asTransient [this] this)
   clojure.lang.ITransientAssociative
@@ -31,6 +31,8 @@
   (sql-value [v] nil)
   clojure.lang.IMeta
   (meta [_] {:type class})
+  clojure.lang.Seqable
+   (seq [_] nil)
   )
 
 (defn nilled [class]

@@ -4,16 +4,15 @@
              [pdok.featured.tiles :as tiles]
              [pdok.featured.core :as core]
              [pdok.featured.json-reader :as json-reader]
+             [clojure.edn :as edn]
              [clojure.java.jdbc :as j]))
-
-(defn- template-file [dataset feature-type template-dir]
-  (let [template-dir (if (empty? template-dir) "" (str template-dir "/"))]
-    (str template-dir dataset "-" feature-type ".template")))
 
 (defn features-for-extract [dataset feature-type features template-dir]
   "Returns the rendered representation of the collection of features for a the given feature-type inclusive tiles-set"
-  (let [template (template-file dataset feature-type template-dir)]
-    (map #(vector (tiles/nl (:geometry %)) (m/render-resource template %)) features)))
+  (let [template-dir (if (empty? template-dir) "" (str template-dir "/"))
+        template (str template-dir dataset "-" feature-type ".template")
+        partials (edn/read-string (slurp (str template-dir dataset ".partials")))]
+    (map #(vector (tiles/nl (:geometry %)) (m/render-resource template partials %)) features)))
 
 (defn create-extract-collection [db dataset feature-type]
   (let [table feature-type]
