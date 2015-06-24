@@ -1,0 +1,13 @@
+{{>city-model-start}}
+	<imgeo:Wijk gml:id="_{{_version}}">
+		{{>start-bgt-feature-type}}
+		<imgeo:naam>{{naam}}{{naam_leeg}}</imgeo:naam>
+		<imgeo:geometrie2d>{{{geometry.gml}}}</imgeo:geometrie2d>			
+		<imgeo:wijkcode>{{wijkcode}}</imgeo:wijkcode>
+		<imgeo:stadsdeel>
+			<imgeo:Stadsdeel>
+				<imgeo:naam>{{stadsdeel}}{{stadsdeel_leeg}}</imgeo:naam>
+			</imgeo:Stadsdeel>
+		</imgeo:stadsdeel>		
+	</imgeo:Wijk>
+{{>city-model-eind}}

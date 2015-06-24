@@ -1,0 +1,6 @@
+{{>city-model-start}}
+	<imgeo:Stadsdeel gml:id="_{{_version}}">
+		{{>start-bgt-feature-type}}
+		<imgeo:naam>{{naam}}{{naam_leeg}}</imgeo:naam>				
+	</imgeo:Stadsdeel>
+{{>city-model-eind}}
