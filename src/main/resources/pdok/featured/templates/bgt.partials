@@ -1,6 +1,6 @@
 {
  :city-model-start 
- "<CityModel xmlns:gml=\"http://www.opengis.net/gml\" xmlns:imgeo=\"http://www.geostandaarden.nl/imgeo/2.1\" xmlns:lu=\"http://www.opengis.net/citygml/landuse/2.0\" xmlns:tun=\"http://www.opengis.net/citygml/tunnel/2.0\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" xmlns:cif=\"http://www.opengis.net/citygml/cityfurniture/2.0\" xmlns=\"http://www.opengis.net/citygml/2.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://www.geostandaarden.nl/imgeo/2.1 http://schemas.geonovum.nl/imgeo/2.1/imgeo-2.1.1.xsd\">
+ "<CityModel xmlns:gml=\"http://www.opengis.net/gml\" xmlns:imgeo=\"http://www.geostandaarden.nl/imgeo/2.1\" xmlns:lu=\"http://www.opengis.net/citygml/landuse/2.0\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" xmlns=\"http://www.opengis.net/citygml/2.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://www.geostandaarden.nl/imgeo/2.1 http://schemas.geonovum.nl/imgeo/2.1/imgeo-2.1.1.xsd\">
  <cityObjectMember>" 
  
  :start-bgt-feature-type 
