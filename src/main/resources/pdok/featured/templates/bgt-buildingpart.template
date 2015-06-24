@@ -1,0 +1,24 @@
+{{>city-model-start}}
+	<bui:BuildingPart xmlns:bui="http://www.opengis.net/citygml/building/2.0" gml:id="_{{_version}}">
+		{{>start-bgt-feature-type}}
+			<imgeo:identificatieBAGPND>{{identificatieBAGPND}}</imgeo:identificatieBAGPND>
+			<imgeo:geometrie2dGrondvlak>{{{geometry.gml}}}</imgeo:geometrie2dGrondvlak>{{#nummeraanduidingreeks}}
+			<imgeo:nummeraanduidingreeks>
+				<imgeo:Nummeraanduidingreeks>
+					<imgeo:nummeraanduidingreeks>
+						<imgeo:Label>
+							<imgeo:tekst>{{tekst}}</imgeo:tekst>
+							<imgeo:positie>
+								<imgeo:Labelpositie>
+									<imgeo:plaatsingspunt>{{#positie}}{{#plaatsingspunt}}{{#geometry}}{{{gml}}}{{/geometry}}{{/plaatsingspunt}}{{/positie}}</imgeo:plaatsingspunt>
+									<imgeo:hoek>{{#positie}}{{hoek}}{{/positie}}</imgeo:hoek>
+								</imgeo:Labelpositie>
+							</imgeo:positie>
+						</imgeo:Label>
+					</imgeo:nummeraanduidingreeks>					
+					<imgeo:identificatieBAGVBOLaagsteHuisnummer>{{identificatieBAGVBOLaagsteHuisnummer}}</imgeo:identificatieBAGVBOLaagsteHuisnummer>
+					<imgeo:identificatieBAGVBOHoogsteHuisnummer>{{identificatieBAGVBOHoogsteHuisnummer}}{{identificatieBAGVBOHoogsteHuisnummer_leeg}}</imgeo:identificatieBAGVBOHoogsteHuisnummer>
+				</imgeo:Nummeraanduidingreeks>			
+			</imgeo:nummeraanduidingreeks>{{/nummeraanduidingreeks}}			
+	</bui:BuildingPart>
+{{>city-model-eind}}

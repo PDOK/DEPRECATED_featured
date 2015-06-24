@@ -1,0 +1,7 @@
+{{>city-model-start}}
+	<tra:Railway xmlns:tra="http://www.opengis.net/citygml/transportation/2.0" gml:id="_{{_version}}">
+		{{>start-bgt-feature-type}}
+			<tra:function codeSpace="{{type_codeSpace}}">{{type}}</tra:function>
+			<imgeo:geometrie2dSpoor>{{{geometry.gml}}}</imgeo:geometrie2dSpoor>					
+	</tra:Railway>
+{{>city-model-eind}}

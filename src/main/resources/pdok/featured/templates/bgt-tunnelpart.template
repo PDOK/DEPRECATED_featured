@@ -1,0 +1,6 @@
+{{>city-model-start}}
+	<tun:TunnelPart xmlns:tun="http://www.opengis.net/citygml/tunnel/2.0" gml:id="_{{_version}}">
+		{{>start-bgt-feature-type}}
+			<imgeo:geometrie2dTunneldeel>{{{geometry.gml}}}</imgeo:geometrie2dTunneldeel>	
+	</tun:TunnelPart>
+{{>city-model-eind}}

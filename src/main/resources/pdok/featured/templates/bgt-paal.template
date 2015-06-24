@@ -1,0 +1,9 @@
+{{>city-model-start}}
+	<imgeo:Paal gml:id="_{{_version}}">
+		{{>start-bgt-feature-type}}
+			<imgeo:geometrie2dPaal>{{{geometry.gml}}}</imgeo:geometrie2dPaal>					
+			<imgeo:plus-type codeSpace="{{plus-type_codeSpace}}">{{plus-type}}{{plus-type_leeg}}</imgeo:plus-type>	
+			<function codeSpace="{{type_codeSpace}}">{{type}}</function>
+			<imgeo:hectometeraanduiding>{{hectometeraanduiding}}{{hectometeraanduiding_leeg}}</imgeo:hectometeraanduiding>
+	</imgeo:Paal>
+{{>city-model-eind}}

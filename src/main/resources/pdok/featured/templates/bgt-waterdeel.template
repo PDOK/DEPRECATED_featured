@@ -1,0 +1,8 @@
+{{>city-model-start}}
+	<imgeo:Waterdeel gml:id="_{{_version}}">
+		{{>start-bgt-feature-type}}
+			<wat:class xmlns:wat="http://www.opengis.net/citygml/waterbody/2.0" codeSpace="{{type_codeSpace}}">{{type}}</wat:class>
+			<imgeo:plus-type codeSpace="{{plus-type_codeSpace}}">{{plus-type}}{{plus-type_leeg}}</imgeo:plus-type>	
+			<imgeo:geometrie2dWaterdeel>{{{geometry.gml}}}</imgeo:geometrie2dWaterdeel>	
+	</imgeo:Waterdeel>
+{{>city-model-eind}}

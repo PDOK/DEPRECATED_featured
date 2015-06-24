@@ -1,0 +1,8 @@
+{{>city-model-start}}
+	<imgeo:Scheiding gml:id="_{{_version}}">
+		{{>start-bgt-feature-type}}
+			<imgeo:geometrie2dOverigeConstructie>{{{geometry.gml}}}</imgeo:geometrie2dOverigeConstructie>	
+			<imgeo:bgt-type codeSpace="{{type_codeSpace}}">{{type}}</imgeo:bgt-type>			
+			<imgeo:plus-type codeSpace="{{plus-type_codeSpace}}">{{plus-type}}{{plus-type_leeg}}</imgeo:plus-type>	
+	</imgeo:Scheiding>
+{{>city-model-eind}}
