@@ -13,18 +13,18 @@ FIXME: explanation
     $ java -jar featured-0.1.0-standalone.jar [args]
 
 ## Options
-    -d dataset
-    -f file
     -Dprocessor_database_url
     -Dprocessor_database_user
     -Dprocessor_database_password
     -Ddata_database_url
     -Ddata_database_user
     -Ddata_database_password
+    -d dataset
+    -f file
 
 ## Examples
 
-    $ java -jar -d bgt -f .test-files\new-features-single-collection-10.json  -Dprocessor_database_url=//localhost:5432/pdok -Dprocessor_database_user=pdok_owner -Dprocessor_database_password=pdok_owner -Ddata_database_url=//localhost:5432/pdok -Ddata_database_user=pdok_owner -Ddata_database_password=pdok_owner target\uberjar\featured-0.1.0-SNAPSHOT-standalone.jar 
+    $ java -jar -Dprocessor_database_url=//localhost:5432/pdok -Dprocessor_database_user=pdok_owner -Dprocessor_database_password=pdok_owner -Ddata_database_url=//localhost:5432/pdok -Ddata_database_user=pdok_owner -Ddata_database_password=pdok_owner target\uberjar\featured-0.1.0-SNAPSHOT-standalone.jar -d bgt -f .test-files\new-features-single-collection-10.json
 ### Bugs
 
 ...
