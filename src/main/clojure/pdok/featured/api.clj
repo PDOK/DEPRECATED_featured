@@ -1,21 +1,21 @@
 (ns pdok.featured.api
-  (:require [pdok.featured
-             [config :as config]
-             [processor :as processor :refer [consume shutdown]]
-             [json-reader :as reader]]
-            [compojure.core :refer :all]
-            [compojure.handler :as handler]
-            [compojure.route :as route]
-            [ring.util.response :as r]
-            [cheshire.core :as json]
-            [clj-time.local :as tl]
+  (:require [cheshire.core :as json]
+            [clj-time [core :as t] [local :as tl]]
             [clojure.core.async :as a
              :refer [>! <! >!! <!! go chan buffer close! thread
                      alts! alts!! timeout]]
             [clojure.java.io :as io]
             [clojure.string :as string]
+            [compojure.core :refer :all]
+            [compojure.handler :as handler]
+            [compojure.route :as route]
             [environ.core :refer [env]]
-            [clojure.java.jdbc :as j]
+            [org.httpkit.client :as http]
+            [pdok.featured
+             [config :as config]
+             [processor :as processor :refer [consume shutdown]]
+             [json-reader :as reader]]
+            [ring.util.response :as r]
             [schema.core :as s]))
 
 (extend-protocol cheshire.generate/JSONable
@@ -35,20 +35,31 @@
 (def ProcessRequest
   "A schema for a JSON process request"
   {:dataset s/Str
-   :file URI})
+   :file URI
+   (s/optional-key :callback) URI})
 
-(defn- process* [stats request]
+(defn- callbacker [uri run-stats]
+  (http/post uri {:body (json/generate-string run-stats) :headers {"Content-Type" "application/json"}}))
+
+(defn- process* [stats callback-chan request]
   (swap! stats assoc-in [:processing] request)
   (let [persistence (config/persistence)
         projectors (config/projectors persistence)
-        processor (processor/create persistence projectors)]
+        processor (processor/create persistence projectors)
+        start-time (tl/local-now)]
     (with-open [in (io/input-stream (:file request))]
       (let [features (reader/features-from-stream in :dataset (:dataset request))
             consumed (consume processor features)
-            n-processed (count consumed)]
-        (shutdown processor)
-        (swap! stats update-in [:processed] #(conj % (assoc request :n-processed n-processed)))
-        (swap! stats assoc-in [:processing] nil))))
+            n-processed (count consumed)
+            _ (shutdown processor)
+            end-time (tl/local-now)
+            process-time (t/in-seconds (t/interval start-time end-time))
+            run-stats (assoc request :n-processed n-processed :start-time start-time :end-time end-time
+                             :process-time process-time)]
+        (swap! stats update-in [:processed] #(conj % run-stats))
+        (swap! stats assoc-in [:processing] nil)
+        (when (:callback request)
+          (go (>! callback-chan [(:callback request) (-> run-stats (dissoc :callback))]))))))
   )
 
 (defn- process [process-chan http-req]
@@ -58,18 +69,21 @@
       (r/status (r/response invalid) 400)
       (do (go (>! process-chan request)) (r/response {:result :ok})))))
 
-(defn api-routes [process-chan stats]
+(defn api-routes [process-chan callback-chan stats]
   (defroutes api-routes
     (context "/api" []
              (GET "/ping" [] (r/response {:pong (tl/local-now)}))
+             (POST "/ping" [] (fn [r] (println "!ping pong!" (:body r)) (r/response {:pong (tl/local-now)})))
              (GET "/stats" [] (r/response @stats))
              (POST "/process" [] (partial process process-chan) ))
     (route/not-found "NOT FOUND")))
 
 (defn rest-handler [args]
-  (let [c (chan)
+  (let [pc (chan)
+        cc (chan 10)
         stats (atom {:processing nil
                      :processed []})]
-    (go (while true (process* stats (<! c))))
-    (handler/api (api-routes c stats)))
+    (go (while true (process* stats cc (<! pc))))
+    (go (while true (apply callbacker (<! cc))))
+    (handler/api (api-routes pc cc stats)))
       )
