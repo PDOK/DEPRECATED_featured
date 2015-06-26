@@ -1,37 +1,27 @@
 (ns pdok.featured.core
-  (:require [pdok.featured.json-reader :refer [features-from-stream file-stream]]
-            [pdok.featured.processor :as processor :refer [consume shutdown]]
-            [pdok.featured.projectors :as proj]
-            [pdok.featured.timeline :as timeline]
-            [pdok.featured.persistence :as pers]
-            [pdok.featured.generator :refer [random-json-feature-stream]]
+  (:require [pdok.featured
+             [api :as api]
+             [config :as config]
+             [json-reader :refer [features-from-stream file-stream]]
+             [processor :as processor :refer [consume shutdown]]
+             [generator :refer [random-json-feature-stream]]]
             [clojure.tools.cli :refer [parse-opts]]
+            [compojure.core :refer [routes]]
+            [ring.middleware.json :as middleware]
             [environ.core :refer [env]])
   (:gen-class))
 
 (declare cli-options)
 
-(def ^:private processor-db {:subprotocol "postgresql"
-                     :subname (or (env :processor-database-url) "//localhost:5432/pdok")
-                     :user (or (env :processor-database-user) "postgres")
-                     :password (or (env :processor-database-password) "postgres")})
-
-(def data-db {:subprotocol "postgresql"
-                     :subname (or (env :data-database-url) "//localhost:5432/pdok")
-                     :user (or (env :data-database-user) "postgres")
-                     :password (or (env :data-database-password) "postgres")})
 
 (defn execute [{:keys [json-file
                        dataset-name
                        no-projectors]}]
   (println (str "start" (when dataset-name " dataset: " dataset-name) (when no-projectors " without projectors")))
-  (let [persistence (pers/cached-jdbc-processor-persistence
-                    {:db-config processor-db :batch-size 10000})
+  (let [persistence (config/persistence)
         processor (if no-projectors
                     (processor/create persistence)
-                    (processor/create persistence
-                      [(proj/geoserver-projector {:db-config data-db})
-                       (timeline/create {:db-config processor-db :persistence persistence})]))]
+                    (processor/create persistence (config/projectors persistence)))]
     (with-open [s (file-stream json-file)]
       (let [consumed (consume processor (features-from-stream s :dataset dataset-name))]
         (time (do (println "EVENTS PROCESSED: " (count consumed))
@@ -39,6 +29,10 @@
                   (shutdown processor))))))
   (println "done.")
 )
+
+(def app (->(routes (api/rest-handler nil))
+            (middleware/wrap-json-body {:keywords? true :bigdecimals? true})
+            (middleware/wrap-json-response)))
 
 (defn -main [& args]
   (let [parameters (parse-opts args cli-options)]
@@ -51,13 +45,10 @@
 
 (defn performance-test [n & args]
   (with-open [json (apply random-json-feature-stream "perftest" "col1" n args)]
-    (let [persistence (pers/cached-jdbc-processor-persistence {:db-config processor-db})
-          processor (processor/create persistence
-                      [(proj/geoserver-projector {:db-config data-db})
-                       (timeline/create {:db-config processor-db :persistence persistence})])
+    (let [persistence (config/persistence)
+          processor (processor/create persistence (config/projectors persistence))
           features (features-from-stream json)
           consumed (consume processor features)
-         ; _ (doseq [c consumed] ( println c))
           ]
       (time (do (println "EVENTS PROCESSED: " (count consumed))
                 (shutdown processor)

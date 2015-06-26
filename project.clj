@@ -14,11 +14,15 @@
                  [org.clojure/tools.cli "0.3.1"]
                  [com.fasterxml.jackson.core/jackson-core "2.4.4"]
                  [com.fasterxml.uuid/java-uuid-generator "3.1.3"]
+                 [compojure "1.3.4"]
+                 [ring/ring-defaults "0.1.2"]
+                 [ring/ring-json "0.3.1"]
                  [clj-time "0.9.0"]
                  [cheshire "5.4.0"]
                  [org.clojure/core.cache "0.6.4"]
                  [org.clojure/java.jdbc "0.3.6"]
                  [postgresql "9.3-1102.jdbc41"]
+                 [prismatic/schema "0.4.3"]
                  [com.cognitect/transit-clj "0.8.269"]
                  [org.geotools/gt-xml "13.0"]
                  [org.geotools/gt-epsg-extension "13.0"]
@@ -26,7 +30,9 @@
                  [org.codehaus.woodstox/woodstox-core-asl "4.4.1"]
                  [de.ubercode.clostache/clostache "1.4.0"]
                  [xalan/xalan "2.7.2"]]
-  :plugins [[lein-environ "1.0.0"]]
+  :plugins [[lein-environ "1.0.0"]
+            [lein-ring "0.8.13"]]
+  :ring {:handler pdok.featured.core/app}
   :main ^:skip-aot pdok.featured.core
   :target-path "target/%s"
   :source-paths ["src/main/clojure"]
@@ -34,4 +40,6 @@
   :resource-paths ["resources" "src/main/resources"]
   :test-paths ["src/test/clojure"]
   :aliases {"build" ["do" ["compile"] ["test"] ["uberjar"]]}
-  :profiles {:uberjar {:aot :all}})
+  :profiles {:uberjar {:aot :all}
+             :dev {:dependencies [[javax.servlet/servlet-api "2.5"]
+                                    [ring-mock "0.1.5"]]}})
