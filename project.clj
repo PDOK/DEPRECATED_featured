@@ -1,4 +1,11 @@
-(defproject featured "0.1.0-SNAPSHOT"
+(def feature-version "0.1")
+(def build-version (or (System/getenv "BUILD_NUMBER") "HANDBUILT"))
+(def release-version (str feature-version "." build-version))
+(def project-name "featured")
+
+(defproject featured feature-version
+  :uberjar-name ~(str project-name "-" release-version "-standalone.jar")
+  :manifest {"Implementation-Version" ~release-version}
   :description "PDOK - No FME"
   :url "http://github.so.kadaster.nl/PDOK/featured"
   :license {:name "Eclipse Public License"
@@ -32,15 +39,17 @@
                  [ring/ring-json "0.3.1"]
                  [xalan/xalan "2.7.2"]]
   :plugins [[lein-environ "1.0.0"]
-            [lein-ring "0.8.13"]]
-  :ring {:handler pdok.featured.core/app}
+            [lein-ring "0.9.6" ]]
+  :ring {:handler pdok.featured.core/app
+         :uberwar-name ~(str project-name "-" release-version "-standalone.war")}
   :main ^:skip-aot pdok.featured.core
   :target-path "target/%s"
   :source-paths ["src/main/clojure"]
   :java-source-paths ["src/main/java"]
   :resource-paths ["resources" "src/main/resources"]
   :test-paths ["src/test/clojure"]
-  :aliases {"build" ["do" ["compile"] ["test"] ["uberjar"]]}
+  :aliases {"build" ["do" ["compile"] ["test"]
+                     ["ring" "uberwar"]]}
   :profiles {:uberjar {:aot :all}
              :dev {:dependencies [[javax.servlet/servlet-api "2.5"]
                                   [ring-mock "0.1.5"]]}})
