@@ -1,4 +1,4 @@
-(def feature-version "0.1")
+(def feature-version (or (System/getenv "FEATURE_VERSION") "0.1"))
 (def build-version (or (System/getenv "BUILD_NUMBER") "HANDBUILT"))
 (def release-version (str feature-version "." build-version))
 (def project-name "featured")
