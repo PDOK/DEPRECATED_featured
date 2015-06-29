@@ -3,7 +3,7 @@
 (def release-version (str feature-version "." build-version))
 (def project-name "featured")
 
-(defproject featured feature-version
+(defproject featured release-version
   :uberjar-name ~(str project-name "-" release-version "-standalone.jar")
   :manifest {"Implementation-Version" ~release-version}
   :description "PDOK - No FME"
