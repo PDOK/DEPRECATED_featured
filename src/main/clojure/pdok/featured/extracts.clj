@@ -2,7 +2,7 @@
    (:require [pdok.featured.mustache  :as m]
              [pdok.postgres :as pg]
              [pdok.featured.tiles :as tiles]
-             [pdok.featured.core :as core]
+             [pdok.featured.config :as config]
              [pdok.featured.json-reader :as json-reader]
              [clojure.edn :as edn]
              [clojure.java.jdbc :as j]))
@@ -48,9 +48,9 @@
   "Inserts the xml-features and tile-set in an extract schema based on dataset and feature-type,
    if schema or table doesn't exists it will be created."
   (do
-   (create-extract-collection core/data-db (str dataset "extract") feature-type)
+   (create-extract-collection config/data-db (str dataset "extract") feature-type)
    (doseq [[tiles xml-feature] rendered-features]
-     (jdbc-insert core/data-db feature-type nil nil (vec tiles) xml-feature nil))))
+     (jdbc-insert config/data-db feature-type nil nil (vec tiles) xml-feature nil))))
 
 
 (defn file-to-features [path dataset]
