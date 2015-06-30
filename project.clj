@@ -1,10 +1,24 @@
 (def feature-version (or (System/getenv "FEATURE_VERSION") "0.1"))
-(def build-version (or (System/getenv "BUILD_NUMBER") "HANDBUILT"))
-(def release-version (str feature-version "." build-version))
+(def build-number (or (System/getenv "BUILD_NUMBER") "HANDBUILT"))
+(def release-version (str feature-version "." build-number))
 (def project-name "featured")
+(def uberjar-name (str project-name "-" release-version "-standalone.jar"))
+(def uberwar-name (str project-name ".war"))
+
+(create-ns 'pdok.lein)
+(defn key->placeholder [k]
+  (re-pattern (str "\\$\\{" (name k) "\\}")))
+
+(defn generate-from-template [template-file replacement-map]
+  (let [template (slurp template-file)
+        replacements (map (fn [[k v]] [(key->placeholder k) (str v)]) replacement-map)]
+    (reduce (fn [acc [k v]] (clojure.string/replace acc k v)) template replacements)))
+
+(intern 'pdok.lein 'key->placeholder key->placeholder)
+(intern 'pdok.lein 'generate-from-template generate-from-template)
 
 (defproject featured release-version
-  :uberjar-name ~(str project-name "-" release-version "-standalone.jar")
+  :uberjar-name ~uberjar-name
   :manifest {"Implementation-Version" ~release-version}
   :description "PDOK - No FME"
   :url "http://github.so.kadaster.nl/PDOK/featured"
@@ -39,17 +53,21 @@
                  [ring/ring-json "0.3.1"]
                  [xalan/xalan "2.7.2"]]
   :plugins [[lein-environ "1.0.0"]
-            [lein-ring "0.9.6" ]]
+            [lein-ring "0.9.6" ]
+            [lein-filegen "0.1.0-SNAPSHOT"]]
   :ring {:handler pdok.featured.core/app
-         :uberwar-name ~(str project-name "-" release-version "-standalone.war")}
+         :uberwar-name ~uberwar-name}
   :main ^:skip-aot pdok.featured.core
   :target-path "target/%s"
   :source-paths ["src/main/clojure"]
   :java-source-paths ["src/main/java"]
   :resource-paths ["resources" "src/main/resources"]
   :test-paths ["src/test/clojure"]
+  :filegen [{:data {:RELEASE_VERSION ~release-version}
+             :template-fn (partial pdok.lein/generate-from-template "deployit-manifest.xml.template")
+             :target "target/deployit-manifest.xml"}]
   :aliases {"build" ["do" ["compile"] ["test"]
-                     ["ring" "uberwar"]]}
+                     ["ring" "uberwar"] ["filegen"]]}
   :profiles {:uberjar {:aot :all}
              :dev {:dependencies [[javax.servlet/servlet-api "2.5"]
                                   [ring-mock "0.1.5"]]}})
