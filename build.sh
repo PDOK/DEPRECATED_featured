@@ -1,3 +1,3 @@
 #!/bin/bash
 
-lein build && make-dar.sh
+lein build && ./make-dar.sh
