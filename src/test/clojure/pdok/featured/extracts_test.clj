@@ -18,10 +18,10 @@
                              (test-feature "name2" "C" "D")))
 
 (deftest test-two-rendered-features
-  (is (= 2 )(count (features-for-extract "test" "dummy" (two-features) "src/main/resources/pdok/featured/templates"))))
+  (is (= 2 )(count (features-for-extract "test" "dummy" (two-features) "src/test/resources/templates"))))
 
 (deftest test-rendered-feature-gml
-  (let [[tiles result-feature] (first (features-for-extract "test" "dummy" (one-feature) "src/main/resources/pdok/featured/templates"))]
+  (let [[tiles result-feature] (first (features-for-extract "test" "dummy" (one-feature) "src/test/resources/templates"))]
     (is (boolean (re-find #"<geo><gml:Polygon" result-feature)))
     (is (boolean (re-find #"<naam>PDOK</naam>" result-feature)))))
 

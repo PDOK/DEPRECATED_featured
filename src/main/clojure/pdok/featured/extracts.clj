@@ -7,12 +7,21 @@
              [clojure.edn :as edn]
              [clojure.java.jdbc :as j]))
 
+
+(defn- template [template-dir dataset feature-type]
+  (let [template-dir (if (empty? template-dir) "" (str template-dir "/"))]
+    (str template-dir dataset "-" feature-type ".template")))
+
+(defn- partials [template-dir dataset]
+  (let [partials-file (str template-dir dataset ".partials")
+        partials-file-exists? (.exists (clojure.java.io/as-file partials-file))]
+    (if partials-file-exists? (edn/read-string (slurp partials-file)) nil)))
+
 (defn features-for-extract [dataset feature-type features template-dir]
   "Returns the rendered representation of the collection of features for a the given feature-type inclusive tiles-set"
-  (let [template-dir (if (empty? template-dir) "" (str template-dir "/"))
-        template (str template-dir dataset "-" feature-type ".template")
-        partials (edn/read-string (slurp (str template-dir dataset ".partials")))]
-    (map #(vector (tiles/nl (:geometry %)) (m/render-resource template partials %)) features)))
+  (let [template (template template-dir dataset feature-type)
+        partials (partials template-dir dataset)]
+    (map #(vector (tiles/nl (:geometry %)) (m/render-resource template % partials)) features)))
 
 (defn create-extract-collection [db dataset feature-type]
   (let [table feature-type]
@@ -29,7 +38,6 @@
                      [:created_on "timestamp without time zone"]
                      )
           ))))
-
 
 (defn- jdbc-insert
   ([db feature-type valid-from valid-to tiles xml created_on]

@@ -37,10 +37,9 @@
 (defn example-bgt-features [n] (repeat n example-feature-bgt-wegdeel))
 
 (defn render-wegdeel-with-bgt-example [n] 
-   (map (partial m/render-resource "src/main/resources/pdok/featured/templates/bgt-wegdeel.template") 
+   (map (partial m/render-resource "src/test/resources/templates/test-wegdeel.template") 
       (example-bgt-features n)))
 
-  
  (deftest test-features-mapping
    (is (= 5 (count(filter #(re-find #"G0303.0979f33001fd319ae05332a1e90a5e0b" %) (render-wegdeel-with-bgt-example 5)))))
    (is (= 5 (count(filter #(re-find #"<imgeo:inOnderzoek>false</imgeo:inOnderzoek>" %) (render-wegdeel-with-bgt-example 5))))))
@@ -51,7 +50,7 @@
  
 
  (defn render-wegdeel-with-sets-with-bgt-example [n]   
-   (map (partial m/render-resource "src/main/resources/pdok/featured/templates/test-dummy-set.template") 
+   (map (partial m/render-resource "src/test/resources/templates/test-dummy-set.template") 
       (example-bgt-features n)))
  
  (deftest test-features-mapping-with-sets

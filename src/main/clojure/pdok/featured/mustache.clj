@@ -42,12 +42,17 @@
     Object
       (toString [_] (str obj))))
 
-(defn render [template partials feature]
-  (clostache/render template (lookup-proxy feature) partials))
+(defn render [template feature partials]
+   (if (nil? partials)
+     (clostache/render template (lookup-proxy feature))
+     (clostache/render template (lookup-proxy feature) partials)))
 
-(defn render-resource [path partials feature] 
-  (let [template (slurp path)]
-    (render template partials feature)))
+(defn render-resource 
+  ([path feature] 
+     (render-resource path feature nil))
+  ([path feature partials]
+     (let [template (slurp path)] 
+       (render template feature partials))))
 
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))
