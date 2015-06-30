@@ -4,7 +4,7 @@
   <satisfiesApprovalByChangemanager>true</satisfiesApprovalByChangemanager>
   <satisfiesChangeTicketNumber>000666</satisfiesChangeTicketNumber>
   <deployables>
-    <tomcat.JavaPropsSpec name="javaProps">
+    <tomcat.JavaPropsSpec name="featuredProps">
       <tags />
       <properties>
         <entry key="processor-database-url">{{featured.processor.database.url}}</entry>
@@ -20,7 +20,7 @@
         <entry key="http--nonProxyHosts">{{http.nonProxyHosts}}</entry>
       </properties>
     </tomcat.JavaPropsSpec>
-    <tomcat.LoggingSpec name="logging">
+    <tomcat.LoggingSpec name="featuredLogging">
       <tags />
       <logging>
         <entry key="IGNORE-ERROR">{{logging.ignore-ERROR}}</entry>
