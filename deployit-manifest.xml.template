@@ -39,8 +39,7 @@
     </tomcat.LoggingSpec>
     <tomcat.War name="featured-war" file="uberjar/featured.war">
       <tags />
-      <scanPlaceholders>true</scanPlaceholders>
-      <excludeFileNamesRegex>^(?!.*featured.*\.jar)(.*\.(jar|xsl))</excludeFileNamesRegex>
+      <scanPlaceholders>false</scanPlaceholders>
       <checksum>${RELEASE_VERSION}</checksum>
       <contextRoot>featured</contextRoot>
     </tomcat.War>
