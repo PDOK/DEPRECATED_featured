@@ -1,0 +1,5 @@
+{{>city-model-start}}
+  <imgeo:Put gml:id="_{{version}}">
+  	{{>start-bgt-feature-type}}
+  	<function codeSpace="{{type_codeSpace}}">{{type}}</function><imgeo:plus-type codeSpace="{{plus-type_codeSpace}}">{{plus-type}}{{plus-type_leeg}}</imgeo:plus-type><imgeo:geometrie2dPut>{{geometry.gml}}</imgeo:geometrie2dPut></imgeo:Put>
+{{>city-model-eind}}
