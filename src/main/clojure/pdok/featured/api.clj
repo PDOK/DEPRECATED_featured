@@ -1,6 +1,7 @@
 (ns pdok.featured.api
   (:require [cheshire.core :as json]
             [clj-time [core :as t] [local :as tl]]
+            [clojure.tools.logging :as log]
             [clojure.core.async :as a
              :refer [>! <! >!! <!! go chan buffer close! thread
                      alts! alts!! timeout]]
@@ -46,7 +47,8 @@
   (let [persistence (config/persistence)
         projectors (config/projectors persistence)
         processor (processor/create persistence projectors)
-        start-time (tl/local-now)]
+        start-time (tl/local-now)
+        _ (log/info "start-time: " start-time)]
     (with-open [in (io/input-stream (:file request))]
       (let [features (reader/features-from-stream in :dataset (:dataset request))
             consumed (consume processor features)
