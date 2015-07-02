@@ -24,7 +24,15 @@ FIXME: explanation
 
 ## Examples
 
+### Aanroep jar
     $ java -jar -Dprocessor_database_url=//localhost:5432/pdok -Dprocessor_database_user=pdok_owner -Dprocessor_database_password=pdok_owner -Ddata_database_url=//localhost:5432/pdok -Ddata_database_user=pdok_owner -Ddata_database_password=pdok_owner target\uberjar\featured-0.1.0-SNAPSHOT-standalone.jar -d bgt -f .test-files\new-features-single-collection-10.json
+
+### Aanroep REST-call    
+Op ../featured/api/process een POST uitvoeren met request:
+    
+    {"dataset": "bgt", "file": "file://D:/Development/PDOK/featured/.test-files/change-features-single-collection-1000.json", "callback": "http://localhost:3000/api/ping"}
+    
+    
 ### Bugs
 
 ...
