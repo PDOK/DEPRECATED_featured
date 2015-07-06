@@ -14,11 +14,6 @@
 
 (declare cli-options)
 
-(Thread/setDefaultUncaughtExceptionHandler
- (reify Thread$UncaughtExceptionHandler
-   (uncaughtException [_ thread throwable]
-     (log/error throwable))))
-
 (defn execute [{:keys [json-file
                        dataset-name
                        no-projectors]}]

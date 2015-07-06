@@ -43,12 +43,12 @@
   (http/post uri {:body (json/generate-string run-stats) :headers {"Content-Type" "application/json"}}))
 
 (defn- process* [stats callback-chan request]
+  (log/trace "Processsing: " request)
   (swap! stats assoc-in [:processing] request)
-  (let [persistence (config/persistence)
+  (let [start-time (tl/local-now)
+        persistence (config/persistence)
         projectors (config/projectors persistence)
-        processor (processor/create persistence projectors)
-        start-time (tl/local-now)
-        _ (log/info "start-time: " start-time)]
+        processor (processor/create persistence projectors)]
     (with-open [in (io/input-stream (:file request))]
       (let [features (reader/features-from-stream in :dataset (:dataset request))
             consumed (consume processor features)
