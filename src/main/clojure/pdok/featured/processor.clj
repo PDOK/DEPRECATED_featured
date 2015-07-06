@@ -121,6 +121,13 @@
           multi-features (filter #(sequential? (second %)) attributes)]
       (concat single-features (mapcat flat-multi multi-features)))))
 
+(defn nested-action [action]
+  (if-not action
+    nil
+    (if (.startsWith (name action) "nested-")
+      action
+      (keyword (str "nested-" (name action))))))
+
 (defn- link-parent [[child-collection-key child] parent]
   (let [{:keys [dataset collection action id validity]} parent
         child-id (str (java.util.UUID/randomUUID))
@@ -129,7 +136,7 @@
                   (assoc! :parent-collection collection)
                   (assoc! :parent-id id)
                   (assoc! :parent-field (name child-collection-key))
-                  (assoc! :action  (keyword (str "nested-" (name (:action parent)))))
+                  (assoc! :action  (nested-action (:action parent)))
                   (assoc! :id child-id)
                   (assoc! :validity validity)
                   (assoc! :collection (str collection "$" (name child-collection-key))))]

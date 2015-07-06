@@ -1,9 +1,11 @@
 (ns pdok.featured.processor-test
   (:require [clj-time.local :as tl]
+            [pdok.featured.json-reader :as reader]
             [pdok.featured.processor :as processor :refer [consume shutdown]]
             [pdok.featured.persistence :as pers]
             [pdok.featured.projectors :as proj]
-            [clojure.test :refer :all]))
+            [clojure.test :refer :all]
+            [clojure.java.io :as io]))
 
 (defrecord MockedPersistence [streams streams-n state events-n]
   pers/ProcessorPersistence
@@ -21,6 +23,8 @@
     (second (get @state [dataset collection id] nil)))
   (last-action [this dataset collection id]
     (first (get @state [dataset collection id] nil)))
+  (childs [this dataset parent-collection parent-id collection]
+    [])
   (close [this] (assoc this :closed true)))
 
 (defrecord MockedProjector [features-n changes-n]
@@ -172,3 +176,13 @@
         (is (= 0 @(-> processor :projectors first :features-n))) ; no new features
         (is (= 0 @(-> processor :projectors first :changes-n))))
       )))
+
+(def extreme-nested (io/resource "processor/extreme-nested.json"))
+
+(deftest extreme-nested-should-work
+  (with-open [in (io/input-stream extreme-nested)]
+    (let [features (reader/features-from-stream in :dataset "extreme-test")
+          processor (create-processor)
+          processed (into '() (consume processor features))]
+      (is (= 4 (count processed)))
+      (is (= 0 (count (filter #(:invalid? %) processed)))))))

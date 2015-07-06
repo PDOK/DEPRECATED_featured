@@ -63,7 +63,7 @@
   :target-path "target/%s"
   :source-paths ["src/main/clojure"]
   :java-source-paths ["src/main/java"]
-  :resource-paths ["resources" "src/main/resources"]
+  :resource-paths ["resources" "src/main/resources" "src/test/resources"]
   :test-paths ["src/test/clojure"]
   :filegen [{:data {:RELEASE_VERSION ~release-version}
              :template-fn (partial pdok.lein/generate-from-template "deployit-manifest.xml.template")
