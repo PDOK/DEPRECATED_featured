@@ -43,7 +43,7 @@ Op ../featured/api/process een POST uitvoeren met request:
 
 For use with the REPL add the file _profiles.clj_ to your project and add the map:
 
-       {:dev  {:env {:processor-database_url "//localhost:5432/pdok"
+       {:dev  {:env {:processor-database-url "//localhost:5432/pdok"
               :processor-database-user "pdok_owner"
               :processor-database-password "pdok_owner"
               :data-database-url "//localhost:5432/pdok"

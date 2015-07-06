@@ -7,12 +7,12 @@
     <tomcat.JavaPropsSpec name="featuredProps">
       <tags />
       <properties>
-        <entry key="processor-database-url">{{featured.processor.database.url}}</entry>
-        <entry key="processor-database-user">{{featured.processor.database.user}}</entry>
-        <entry key="processor-database-password">{{featured.processor.database.password}}</entry>
-        <entry key="data-database-url">{{featured.data.database.url}}</entry>
-        <entry key="data-database-user">{{featured.data.database.user}}</entry>
-        <entry key="data-database-password">{{featured.data.database.password}}</entry>
+        <entry key="processor_database_url">{{featured.processor.database.url}}</entry>
+        <entry key="processor_database_user">{{featured.processor.database.user}}</entry>
+        <entry key="processor_database_password">{{featured.processor.database.password}}</entry>
+        <entry key="data_database_url">{{featured.data.database.url}}</entry>
+        <entry key="data_database_user">{{featured.data.database.user}}</entry>
+        <entry key="data_database_password">{{featured.data.database.password}}</entry>
         <entry key="http--proxyHost">www-proxy.cs.kadaster.nl</entry>
         <entry key="http--proxyPort">8082</entry>
         <entry key="https--proxyHost">www-proxy.cs.kadaster.nl</entry>
