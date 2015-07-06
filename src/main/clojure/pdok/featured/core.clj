@@ -6,6 +6,7 @@
              [processor :as processor :refer [consume shutdown]]
              [generator :refer [random-json-feature-stream]]]
             [clojure.tools.cli :refer [parse-opts]]
+            [clojure.tools.logging :as log]
             [compojure.core :refer [routes]]
             [ring.middleware.json :as middleware]
             [environ.core :refer [env]])
@@ -13,6 +14,10 @@
 
 (declare cli-options)
 
+(Thread/setDefaultUncaughtExceptionHandler
+ (reify Thread$UncaughtExceptionHandler
+   (uncaughtException [_ thread throwable]
+     (log/error throwable))))
 
 (defn execute [{:keys [json-file
                        dataset-name

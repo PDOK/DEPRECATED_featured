@@ -25,14 +25,15 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :repositories [["osgeo" {:url "http://download.osgeo.org/webdav/geotools/"
-                           :snapshots false}]]
+                           :snapshots falogse}]]
   :mirrors {"*" {:name "kadaster"
                  :url "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/public/"}}
   :dependencies [[cheshire "5.4.0"]
                  [clj-time "0.9.0"]
                  [com.cognitect/transit-clj "0.8.269"]
                  [com.fasterxml.jackson.core/jackson-core "2.5.4"]
-                 [com.fasterxml.uuid/java-uuid-generator "3.1.3"]
+                 [com.fasterxml.uuid/java-uuid-generator "3.1.3"
+                  :exclusions [[log4j]]]
                  [compojure "1.3.4"]
                  [de.ubercode.clostache/clostache "1.4.0"]
                  [environ "1.0.0"]
