@@ -63,7 +63,7 @@
   :target-path "target/%s"
   :source-paths ["src/main/clojure"]
   :java-source-paths ["src/main/java"]
-  :resource-paths ["resources" "src/main/resources" "src/test/resources"]
+  :resource-paths ["resources" "src/main/resources"]
   :test-paths ["src/test/clojure"]
   :filegen [{:data {:RELEASE_VERSION ~release-version}
              :template-fn (partial pdok.lein/generate-from-template "deployit-manifest.xml.template")
@@ -72,4 +72,5 @@
                      ["ring" "uberwar"] ["filegen"]]}
   :profiles {:uberjar {:aot :all}
              :dev {:dependencies [[javax.servlet/servlet-api "2.5"]
-                                  [ring-mock "0.1.5"]]}})
+                                  [ring-mock "0.1.5"]]
+                   :resource-paths ["src/test/resources"]}})
