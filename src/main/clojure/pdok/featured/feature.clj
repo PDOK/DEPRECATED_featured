@@ -53,9 +53,7 @@
                             (map str/reverse x)
                             (reverse x))
            ns (create-ns (symbol ns))
-           _ (println ns)
-           class (ns-resolve ns (symbol class))
-           _ (println class)]
+            class (ns-resolve ns (symbol class))]
        (->NilAttribute class)))))
 
 (pg/register-transit-write-handler pdok.featured.feature.NilAttribute nil-attribute-writer)
