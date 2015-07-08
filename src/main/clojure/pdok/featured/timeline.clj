@@ -93,7 +93,7 @@
      (init-root dataset (:collection feature) (:id feature))
      (init-root (:collection feature) (:id feature))))
   ([collection id]
-   {:_collection collection :_id id :_tiles #{}})
+   {:_collection collection :_id id })
   ([dataset collection id]
    (assoc (init-root collection id) :_dataset dataset)))
 
@@ -144,7 +144,7 @@
          merger (path->merge-fn target keyworded-path)
          merged (merger mustafied)
          merged (assoc merged :_version (:version feature))
-         merged (update merged :_tiles #(clojure.set/union % (tiles/nl (:geometry feature))) )]
+         merged (update merged :_tiles #((fnil clojure.set/union #{}) % (tiles/nl (:geometry feature))))]
      merged)))
 
 (defn- sync-valid-from [acc feature]

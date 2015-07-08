@@ -4,6 +4,8 @@
 
 (defn nl [geometry]
   "Returns a set with NL tiles (numbers) based on the geometry."
-  (when geometry
-    (let [coordinates (.getCoordinates (f/as-jts geometry))]
-      (into #{} (filter #(not= -1 %) (map (fn [coordinate] (NLTile/getTileFromRD (.x coordinate) (.y coordinate))) coordinates))))))
+  (if-let [tiles (:nl-tiles geometry)]
+    tiles
+    (when-let [jts-geom (f/as-jts geometry)]
+      (let [coordinates (.getCoordinates jts-geom)]
+        (into #{} (filter #(not= -1 %) (map (fn [coordinate] (NLTile/getTileFromRD (.x coordinate) (.y coordinate))) coordinates)))))))
