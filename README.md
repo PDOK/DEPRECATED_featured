@@ -1,4 +1,4 @@
-# featured
+# featured [![Build Status](http://sou592.so.kadaster.nl:8084/buildStatus/icon?job=featured)](http://sou592.so.kadaster.nl:8084/job/featured/)
 
 FIXME: description
 
