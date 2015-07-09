@@ -38,7 +38,7 @@
                  [de.ubercode.clostache/clostache "1.4.0"]
                  [environ "1.0.0"]
                  [http-kit "2.1.18"]
-                 [org.clojure/clojure "1.7.0-alpha5"]
+                 [org.clojure/clojure "1.7.0"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [org.clojure/core.cache "0.6.4"]
                  [org.clojure/java.jdbc "0.3.6"]
