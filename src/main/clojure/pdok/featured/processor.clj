@@ -192,12 +192,23 @@
                               :current-validity validity
                               :validity end-time}))))
 
+(defn- close-nested-meta [persistence dataset parent-collection parent-id end-time]
+  (let [nested (pers/childs persistence dataset parent-collection parent-id)
+        metas (map (fn [[col id]] {:dataset dataset
+                                  :collection col
+                                  :parent-collection parent-collection
+                                  :parent-id parent-id
+                                  :end-time end-time}) nested)]
+    metas))
+
 (defn- close-all [processor meta-record]
   (let [{:keys [dataset collection parent-collection parent-id end-time]} meta-record
         persistence (:persistence processor)
-        ids (pers/childs persistence dataset parent-collection parent-id collection )
+        ids (pers/childs persistence dataset parent-collection parent-id collection)
+        nested-metas (mapcat #(close-nested-meta persistence dataset collection % end-time) ids)
+        closed-nesteds (doall (mapcat #(close-all processor %) nested-metas))
         closed (doall (mapcat #(close-all* processor dataset collection % end-time) ids))]
-    closed))
+    (concat closed-nesteds closed)))
 
 (defn make-seq [obj]
   (if (seq? obj) obj (list obj)))
