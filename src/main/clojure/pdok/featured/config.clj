@@ -6,14 +6,14 @@
              [projectors :as proj]
              [timeline :as timeline]]
             [environ.core :refer [env]]))
-;;LogManager.getLogManager().getLogger(Logger.GLOBAL_LOGGER_NAME).setLevel(Level.FINE);
 
 (-> (java.util.logging.LogManager/getLogManager) (.readConfiguration (io/input-stream (io/resource "logging.properties"))))
 
 (Thread/setDefaultUncaughtExceptionHandler
  (reify Thread$UncaughtExceptionHandler
    (uncaughtException [_ thread throwable]
-     (log/error throwable))))
+     (log/error throwable "Stacktrace:"
+                (print-str (clojure.stacktrace/print-stack-trace throwable))))))
 
 (def processor-db {:subprotocol "postgresql"
                      :subname (or (env :processor-database-url) "//localhost:5432/pdok")
