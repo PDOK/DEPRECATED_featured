@@ -47,14 +47,7 @@
 (def nil-attribute-reader
   (transit/read-handler
    (fn [v]
-     (let [[ns class] (as-> v x
-                            (str/reverse x)
-                            (str/split x #"\." 2)
-                            (map str/reverse x)
-                            (reverse x))
-           ns (create-ns (symbol ns))
-            class (ns-resolve ns (symbol class))]
-       (->NilAttribute class)))))
+     (->NilAttribute (symbol v)))))
 
 (pg/register-transit-write-handler pdok.featured.feature.NilAttribute nil-attribute-writer)
 (pg/register-transit-read-handler "x" nil-attribute-reader)
