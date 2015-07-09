@@ -26,11 +26,9 @@
                      :password (or (env :data-database-password) "postgres")})
 
 (defn persistence []
-  (log/trace "Creating persistence. DB: " processor-db)
   (pers/cached-jdbc-processor-persistence
                     {:db-config processor-db :batch-size 10000}))
 
 (defn projectors [persistence]
-  (log/trace "Creating projectors. DB: " data-db)
   [(proj/geoserver-projector {:db-config data-db})
    (timeline/create {:db-config processor-db :persistence persistence})])

@@ -49,6 +49,7 @@
                  [org.geotools/gt-epsg-extension "13.0"]
                  [org.geotools/gt-shapefile "13.0"]
                  [org.geotools/gt-xml "13.0"]
+                 [log4j/log4j "1.2.17"]
                  [postgresql "9.3-1102.jdbc41"]
                  [prismatic/schema "0.4.3"]
                  [ring/ring-defaults "0.1.2"]
