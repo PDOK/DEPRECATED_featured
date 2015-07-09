@@ -24,8 +24,10 @@
                 <xsl:otherwise>
                     <gml:exterior>
                         <gml:LinearRing>
-                            <gml:posList>
-                                <xsl:value-of select=".//gml:exterior//gml:posList"/>
+                            <gml:posList> 
+                                <xsl:for-each select="//gml:exterior/gml:Ring/gml:curveMember/gml:Curve/gml:segments/*">
+                                    <xsl:value-of select=".//gml:posList" />
+                                </xsl:for-each>
                             </gml:posList>
                         </gml:LinearRing>
                     </gml:exterior>

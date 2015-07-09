@@ -69,14 +69,17 @@
 (defmethod as-gml "gml" [obj] (get obj "gml"))
 (defmethod as-gml :default [obj] nil)
 
-(def xsl-curve2linearring (TransformXSLT. (io/input-stream (io/resource "pdok/featured/xslt/curve2linearring.xsl"))))
+(def ^{:private true} xsl-curve2linearring (TransformXSLT. (io/input-stream (io/resource "pdok/featured/xslt/curve2linearring.xsl"))))
+
+(defn ^{:private false} transform [xslt gml] 
+  (.transform xslt gml))
 
 (defmulti as-jts (fn [obj] lower-case (get obj "type")))
 (defmethod as-jts :default [_] nil)
 (defmethod as-jts "gml" [obj]
   (let [gml (get obj "gml")
         gml (if (re-find #"curve|Curve" gml)
-              (.transform xsl-curve2linearring gml)
+              (transform xsl-curve2linearring gml)
               gml)
         gml (-> gml strip-gml-ns (.getBytes "UTF-8"))
         in (io/input-stream gml)]
