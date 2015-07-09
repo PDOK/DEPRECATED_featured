@@ -3,6 +3,7 @@
             [pdok.postgres :as pg]
             [clojure.core.cache :as cache]
             [clojure.java.jdbc :as j]
+            [clojure.tools.logging :as log]
             [clj-time [coerce :as tc]]
             [cognitect.transit :as transit])
   (:import [java.io ByteArrayOutputStream]))
@@ -122,7 +123,7 @@ WHERE dataset = ? AND collection = ?  AND feature_id = ?")]
                            " WHERE dataset = ? AND collection = ?")
                       dataset collection] :as-arrays? true)
           for-cache (map (fn [[feature-id parent-collection parent-id parent-field]]
-                           [dataset collection feature-id] [parent-collection parent-id parent-field])
+                           [[dataset collection feature-id] [parent-collection parent-id parent-field]])
                          (drop 1 results))]
       for-cache)))
 
