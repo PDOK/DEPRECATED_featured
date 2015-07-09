@@ -7,8 +7,6 @@
              [timeline :as timeline]]
             [environ.core :refer [env]]))
 
-(-> (java.util.logging.LogManager/getLogManager) (.readConfiguration (io/input-stream (io/resource "logging.properties"))))
-
 (Thread/setDefaultUncaughtExceptionHandler
  (reify Thread$UncaughtExceptionHandler
    (uncaughtException [_ thread throwable]
