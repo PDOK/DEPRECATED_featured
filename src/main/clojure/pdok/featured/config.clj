@@ -27,7 +27,7 @@
       (into {} (for [[k v] props
                      ;; no mustaches, for local use
                      :when (not (re-find #"^\{\{.*\}\}$" v))]
-                 [(keywordize k) (read-string v)])))))
+                 [(keywordize k) v])))))
 
 (defonce env
   (merge environ/env
