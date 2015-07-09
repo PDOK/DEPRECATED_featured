@@ -24,10 +24,10 @@
                     (processor/create persistence (config/projectors persistence)))]
     (with-open [s (file-stream json-file)]
       (let [consumed (consume processor (features-from-stream s :dataset dataset-name))]
-        (time (do (println "EVENTS PROCESSED: " (count consumed))
-                  (println "flushing.")
+        (time (do (log/info "Events processed:" (count consumed))
+                  (log/info "Shutting down.")
                   (shutdown processor))))))
-  (println "done.")
+  (log/info "done")
 )
 
 (def app (->(routes (api/rest-handler nil))
@@ -50,7 +50,7 @@
           features (features-from-stream json)
           consumed (consume processor features)
           ]
-      (time (do (println "EVENTS PROCESSED: " (count consumed))
+      (time (do (log/info "Events processed:" (count consumed))
                 (shutdown processor)
                 ))
       )))
