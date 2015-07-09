@@ -183,7 +183,7 @@
 (defn- close-all* [processor dataset collection id end-time]
   (let [persistence (:persistence processor)
         validity (pers/current-validity persistence dataset collection id)
-            state (pers/last-action persistence dataset collection id)]
+        state (pers/last-action persistence dataset collection id)]
         (when-not (= state :close)
           (consume processor {:action :close
                               :dataset dataset

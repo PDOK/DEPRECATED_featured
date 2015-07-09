@@ -62,15 +62,14 @@
                      [:feature_id "varchar(50)"]
                      [:parent_collection "varchar(255)"]
                      [:parent_id "varchar(50)"]
-                     [:parent_field "varchar(255)"]
-                     [:closed "boolean" "default false"])
+                     [:parent_field "varchar(255)"])
     (pg/create-index db *jdbc-schema* *jdbc-features* :dataset :collection :feature_id)
     (pg/create-index db *jdbc-schema* *jdbc-features* :dataset :parent_collection :parent_id))
   (when-not (pg/table-exists? db *jdbc-schema* *jdbc-feature-stream*)
     (pg/create-table db *jdbc-schema* *jdbc-feature-stream*
                      [:id "bigserial" :primary :key]
                      [:version "uuid"]
-                     [:action "character(12)"]
+                     [:action "varchar(12)"]
                      [:dataset "varchar(100)"]
                      [:collection "varchar(255)"]
                      [:feature_id "varchar(50)"]
@@ -88,19 +87,11 @@
                       [:dataset :collection :feature_id :parent_collection :parent_id :parent_field])
             entries))))
 
-(defn- jdbc-close-stream
-  ([db dataset collection id]
-   (jdbc-create-stream db (list [dataset collection id])))
-  ([db entries]
-   (let [sql (str "UPDATE " (qualified-features) " SET closed = true
-WHERE dataset = ? AND collection = ?  AND feature_id = ?")]
-     (j/execute! db (cons sql entries) :multi? true :transaction? false))))
-
 (defn- jdbc-load-childs-cache [db dataset parent-collection child-collection]
   (j/with-db-connection [c db]
     (let [results
           (j/query c [(str "SELECT parent_id, feature_id FROM " (qualified-features)
-                           " WHERE dataset = ?  AND parent_collection = ? AND collection = ? AND closed = false ")
+                           " WHERE dataset = ?  AND parent_collection = ? AND collection = ?")
                       dataset parent-collection child-collection])
           per-id (group-by :parent_id results)
           for-cache (map (fn [[parent-id values]]
@@ -112,7 +103,7 @@ WHERE dataset = ? AND collection = ?  AND feature_id = ?")]
   (j/with-db-connection [c db]
     (let [results
           (j/query c [(str "SELECT feature_id FROM " (qualified-features)
-" WHERE dataset = ? AND parent_collection = ?  AND parent_id = ? AND collection = ?  AND closed = false")
+" WHERE dataset = ? AND parent_collection = ?  AND parent_id = ? AND collection = ?")
                       dataset parent-collection parent-id child-collection] :as-arrays? true)]
       results)))
 
@@ -158,7 +149,8 @@ WHERE dataset = ? AND collection = ?  AND feature_id = ?")]
 " WHERE dataset = ? AND collection = ?) a
 WHERE rn = 1")
                       dataset collection] :as-arrays? true))]
-    (map (fn [f] (split-at 3 f)) (drop 1 results))
+    (map (fn [[dataset collection id validity action]] [[dataset collection id] [validity (keyword action)]] )
+         (drop 1 results))
     ))
 
 (defn- jdbc-last-stream-validity-and-action [db dataset collection id]
