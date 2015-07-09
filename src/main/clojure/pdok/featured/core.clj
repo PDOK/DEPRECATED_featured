@@ -8,8 +8,7 @@
             [clojure.tools.cli :refer [parse-opts]]
             [clojure.tools.logging :as log]
             [compojure.core :refer [routes]]
-            [ring.middleware.json :as middleware]
-            [environ.core :refer [env]])
+            [ring.middleware.json :as middleware])
   (:gen-class))
 
 (declare cli-options)
@@ -28,13 +27,14 @@
                   (log/info "Shutting down.")
                   (shutdown processor))))))
   (log/info "done")
-)
+  )
 
 (def app (->(routes (api/rest-handler nil))
             (middleware/wrap-json-body {:keywords? true :bigdecimals? true})
             (middleware/wrap-json-response)))
 
 (defn -main [& args]
+;  (println "ENV-test" (config/env :pdok-test))
   (let [parameters (parse-opts args cli-options)]
     (execute (:options parameters))))
 

@@ -6,7 +6,6 @@
             [pdok.featured.json-reader :refer :all]
             [pdok.featured.projectors :as proj]
             [clj-time [core :as t] [local :as tl] [coerce :as tc]]
-            [environ.core :refer [env]]
             [clojure.string :as str])
   (:import  [pdok.featured.projectors GeoserverProjector]))
 

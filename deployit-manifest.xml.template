@@ -4,22 +4,6 @@
   <satisfiesApprovalByChangemanager>true</satisfiesApprovalByChangemanager>
   <satisfiesChangeTicketNumber>000666</satisfiesChangeTicketNumber>
   <deployables>
-    <tomcat.JavaPropsSpec name="featuredProps">
-      <tags />
-      <properties>
-        <entry key="processor_database_url">{{featured.processor.database.url}}</entry>
-        <entry key="processor_database_user">{{featured.processor.database.user}}</entry>
-        <entry key="processor_database_password">{{featured.processor.database.password}}</entry>
-        <entry key="data_database_url">{{featured.data.database.url}}</entry>
-        <entry key="data_database_user">{{featured.data.database.user}}</entry>
-        <entry key="data_database_password">{{featured.data.database.password}}</entry>
-        <entry key="http--proxyHost">www-proxy.cs.kadaster.nl</entry>
-        <entry key="http--proxyPort">8082</entry>
-        <entry key="https--proxyHost">www-proxy.cs.kadaster.nl</entry>
-        <entry key="https--proxyPort">8082</entry>
-        <entry key="http--nonProxyHosts">{{http.nonProxyHosts}}</entry>
-      </properties>
-    </tomcat.JavaPropsSpec>
     <tomcat.LoggingSpec name="featuredLogging">
       <tags />
       <logging>
@@ -39,7 +23,8 @@
     </tomcat.LoggingSpec>
     <tomcat.War name="featured-war" file="uberjar/featured.war">
       <tags />
-      <scanPlaceholders>false</scanPlaceholders>
+      <scanPlaceholders>true</scanPlaceholders>
+      <excludeFileNamesRegex>.*\.(jar|xsl|template)</excludeFileNamesRegex>
       <checksum>${RELEASE_VERSION}</checksum>
       <contextRoot>featured</contextRoot>
     </tomcat.War>

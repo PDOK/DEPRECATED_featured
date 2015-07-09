@@ -10,7 +10,6 @@
             [compojure.core :refer :all]
             [compojure.handler :as handler]
             [compojure.route :as route]
-            [environ.core :refer [env]]
             [org.httpkit.client :as http]
             [pdok.featured
              [config :as config]

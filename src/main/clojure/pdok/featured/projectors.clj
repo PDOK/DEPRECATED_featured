@@ -4,8 +4,7 @@
             [pdok.postgres :as pg]
             [clojure.core.cache :as cache]
             [clojure.java.jdbc :as j]
-            [clojure.string :as str]
-            [environ.core :refer [env]]))
+            [clojure.string :as str]))
 
 (defprotocol Projector
   (init [_])
