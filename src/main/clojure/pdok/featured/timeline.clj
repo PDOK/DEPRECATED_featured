@@ -262,6 +262,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
     (proj/new-feature _ feature))
   (proj/close-feature [_ feature]
     (proj/new-feature _ feature))
+  (proj/delete-feature [_ feature]
+    nil)
   (proj/close [this]
     (flush-all db new-current-batch update-current-batch new-history-batch)
     this)

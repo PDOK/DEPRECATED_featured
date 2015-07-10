@@ -7,7 +7,7 @@
              [generator :refer [random-json-feature-stream]]]
             [clojure.tools.cli :refer [parse-opts]]
             [clojure.tools.logging :as log]
-            [compojure.core :refer [routes]]
+            [compojure.core :as compojure]
             [ring.middleware.json :as middleware])
   (:gen-class))
 
@@ -29,7 +29,7 @@
   (log/info "done")
   )
 
-(def app (->(routes (api/rest-handler nil))
+(def app (->(compojure/routes (api/rest-handler))
             (middleware/wrap-json-body {:keywords? true :bigdecimals? true})
             (middleware/wrap-json-response)))
 
@@ -49,6 +49,7 @@
           processor (processor/create persistence (config/projectors persistence))
           features (features-from-stream json)
           consumed (consume processor features)
+          _ (println (map :invalid-reasons consumed))
           ]
       (time (do (log/info "Events processed:" (count consumed))
                 (shutdown processor)

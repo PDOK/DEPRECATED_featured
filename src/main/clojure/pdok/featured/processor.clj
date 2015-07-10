@@ -20,27 +20,33 @@
     (-> feature (assoc :invalid? true) (assoc :invalid-reasons new-reasons))))
 
 (defn- apply-all-features-validation [_ feature]
-  (let [{:keys [dataset collection id validity geometry attributes]} feature]
-    (if (or (some str/blank? [dataset collection id]) (nil? validity))
+  (let [{:keys [dataset collection id action validity geometry attributes]} feature]
+    (if (or (some str/blank? [dataset collection id]) (and (not= action :delete) (nil? validity)))
       (make-invalid feature "All feature require: dataset collection id validity")
       feature)))
 
+(defn- stream-exists? [persistence {:keys [dataset collection id]}]
+  (and (pers/stream-exists? persistence dataset collection id)
+       (not= :delete (pers/last-action persistence dataset collection id))))
+
 (defn- apply-new-feature-requires-non-existing-stream-validation [persistence feature]
   (let [{:keys [dataset collection id]} feature]
-    (if (and (not (:invalid? feature)) (pers/stream-exists? persistence dataset collection id))
+    (if (and (not (:invalid? feature))
+             (stream-exists? persistence feature))
       (make-invalid feature (str "Stream already exists: " dataset ", " collection ", " id))
       feature))
   )
 
 (defn- apply-non-new-feature-requires-existing-stream-validation [persistence feature]
   (let [{:keys [dataset collection id]} feature]
-    (if-not (or (:invalid? feature) (pers/stream-exists? persistence dataset collection id))
+    (if (and  (not (:invalid? feature))
+              (not (stream-exists? persistence feature)))
       (make-invalid feature (str "Stream does not exist yet: " dataset ", " collection ", " id))
       feature)))
 
 (defn- apply-non-new-feature-current-validity<=validity-validation [feature]
   (let [{:keys [validity current-validity]} feature]
-    (if (t/before? validity current-validity)
+    (if (and validity (t/before? validity current-validity))
       (make-invalid feature "Validity should >= current-validity")
       feature)))
 
@@ -114,6 +120,16 @@
                          (assoc :current-validity validity))]
     (list nw (process-close-feature processor no-update-nw))))
 
+(defn- process-delete-feature [{:keys [persistence projectors]} feature]
+  (let [validated (->> feature
+                       (apply-all-features-validation persistence)
+                       (apply-non-new-feature-requires-existing-stream-validation persistence)
+                       (apply-non-new-feature-current-validity-validation persistence))]
+    (when-not (:invalid? validated)
+      (append-feature persistence validated)
+      (doseq [p projectors] (proj/delete-feature p validated)))
+    validated))
+
 (defn- nested-features [attributes]
   (letfn [( flat-multi [[key values]] (map #(vector key %) values))]
     (let [single-features (filter #(map? (second %)) attributes)
@@ -141,6 +157,12 @@
                   (assoc! :collection (str collection "$" (name child-collection-key))))]
     (persistent! with-parent)))
 
+(defn- meta-delete-childs [{:keys [dataset collection id]}]
+  {:action :delete-childs
+   :dataset dataset
+   :parent-collection collection
+   :parent-id id})
+
 (defn- meta-close-all-features [features]
   "{:action :close-all :dataset _ :collection _ :parent-collection _ :parent-id _ :end-time _"
   (let [grouped (group-by #(select-keys % [:dataset :collection :parent-collection :parent-id :validity]) features)]
@@ -156,16 +178,18 @@
       )))
 
 (defn- flatten [feature]
-  (let [attributes (:attributes feature)
-        nested (nested-features attributes)
-        without-nested (apply dissoc attributes (map #(first %) nested))
-        flat (assoc feature :attributes without-nested)
-        linked-nested (map #(link-parent % feature) nested)
-        close-all (meta-close-all-features linked-nested)]
-    (if (empty? linked-nested)
-      (list flat)
-      (cons flat (concat close-all (mapcat pre-process linked-nested))))
-    )
+  (if (= :delete (:action feature))
+    (list feature (meta-delete-childs feature))
+    (let [attributes (:attributes feature)
+          nested (nested-features attributes)
+          without-nested (apply dissoc attributes (map #(first %) nested))
+          flat (assoc feature :attributes without-nested)
+          linked-nested (map #(link-parent % feature) nested)
+          close-all (meta-close-all-features linked-nested)]
+      (if (empty? linked-nested)
+        (list flat)
+        (cons flat (concat close-all (mapcat pre-process linked-nested))))
+      ))
   )
 
 (defn- attributes [obj]
@@ -209,6 +233,26 @@
         closed (doall (mapcat #(close-all* processor dataset collection % end-time) ids))]
     (concat closed-nesteds closed)))
 
+(defn- delete-child* [processor dataset collection id]
+  (let [persistence (:persistence processor)
+        validity (pers/current-validity persistence dataset collection id)]
+    (consume processor (list
+                        {:action :delete-childs
+                         :dataset dataset
+                         :parent-collection collection
+                         :parent-id id}
+                        {:action :delete
+                         :dataset dataset
+                         :collection collection
+                         :id id
+                         :current-validity validity}))))
+
+(defn- delete-childs [processor {:keys [dataset parent-collection parent-id]}]
+  (let [persistence (:persistence processor)
+        ids (pers/childs persistence dataset parent-collection parent-id)
+        deleted (doall (mapcat (fn [[col id]] (delete-child* processor dataset col id)) ids))]
+    deleted))
+
 (defn make-seq [obj]
   (if (seq? obj) obj (list obj)))
 
@@ -220,12 +264,13 @@
           :new (process-new-feature processor vf)
           :change (process-change-feature processor vf)
           :close (process-close-feature processor vf)
+          :delete (process-delete-feature processor vf)
           :nested-new (process-nested-new-feature processor vf)
           :nested-change (process-nested-new-feature processor vf)
           :nested-close  (process-nested-close-feature processor vf)
           :close-all (close-all processor vf);; should save this too... So we can backtrack actions. Right?
-          :drop nil ;; Not sure if we need the drop at all?
-          (make-invalid vf "Unknown action"))]
+          :delete-childs (delete-childs processor vf)
+          (make-invalid vf (str "Unknown action:" (:action vf))))]
     processed))
 
 

@@ -11,6 +11,7 @@
   (new-feature [proj feature])
   (change-feature [proj feature])
   (close-feature [proj feature])
+  (delete-feature [proj feature])
   (close [proj]))
 
 (defn- remove-keys [map keys]
@@ -213,6 +214,8 @@
           batched-delete-feature (with-batch delete-batch delete-batch-size
                                    (partial gs-delete-feature db))]
       (batched-delete-feature feature)))
+  (delete-feature [_ feature]
+    nil)
   (close [this]
     (let [cached-collection-attributes (cached cache gs-collection-attributes db)]
       (flush-batch insert-batch (partial gs-add-feature db cached-collection-attributes))

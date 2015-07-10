@@ -104,10 +104,10 @@
                  (conj result (change feature))
                  result)
         result (if close?
-                 (conj result (close feature))
+                 (conj result (close (last result)))
                  result)
         result (if delete?
-                 (conj result (delete feature))
+                 (conj result (delete (last result)))
                  result)]
     result))
 

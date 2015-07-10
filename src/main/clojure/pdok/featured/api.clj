@@ -79,7 +79,7 @@
              (POST "/process" [] (partial process process-chan) ))
     (route/not-found "NOT FOUND")))
 
-(defn rest-handler [args]
+(defn rest-handler [& more]
   (let [pc (chan)
         cc (chan 10)
         stats (atom {:processing nil
