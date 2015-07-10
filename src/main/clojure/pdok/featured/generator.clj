@@ -47,6 +47,12 @@
       (assoc :_current_validity (:_validity feature))
       (assoc :_validity (tf/unparse date-time-formatter (t/plus (local-now) (t/minutes 1))))))
 
+(defn transform-to-delete [{:keys [_dataset _collection _id _validity]}]
+  {:_action "delete"
+   :_collection _collection
+   :_id _id
+   :_current_validity _validity})
+
 (defn transform-to-nested [feature]
   (apply dissoc feature [:_action :_collection :_id :_validity :_current_validity]))
 
@@ -64,7 +70,7 @@
                        [:_action :_collection :_id :_validity :_current_validity]))
 
 (defn nillify-an-attribute [feature]
-  (update-an-attribute feature #(assoc %1 %2 nil)
+  (update-an-attribute feature #(if %2 (assoc %1 %2 nil) %1)
                        [:_action :_collection :_id :_validity :_current_validity :_geometry]))
 
 (defn random-new-feature
@@ -89,15 +95,19 @@
       1 (assoc base attr (first nested-features))
       (assoc base attr (into [] nested-features)))))
 
-(defn followed-by [feature change? close?]
+(defn followed-by [feature change? close? delete?]
   (let [change (fn [f] (selective-feature (transform-to-change f)))
         close  (fn [f] (selective-feature (transform-to-close f)))
+        delete (fn [f] (selective-feature (transform-to-delete f)))
         result [feature]
         result (if change?
                  (conj result (change feature))
                  result)
         result (if close?
                  (conj result (close feature))
+                 result)
+        result (if delete?
+                 (conj result (delete feature))
                  result)]
     result))
 
@@ -108,12 +118,13 @@
     attributes))
 
 (defn random-json-features [out-stream dataset collection total & args]
-  (let [{:keys [change? close? nested geometry?] :or {change? false close? false nested 0 geometry? true}} args
+  (let [{:keys [change? close? delete? nested geometry?]
+         :or {change? false close? false delete? false nested 0 geometry? true}} args
         validity (tf/unparse date-time-formatter (local-now))
         attributes (create-attributes 3)
         new-features (repeatedly #(random-new-feature collection attributes))
         with-nested (map #(combine-to-nested-feature % "nested" geometry?) (partition (+ 1 nested) new-features))
-        with-extra (mapcat #(followed-by % change? close?) with-nested)
+        with-extra (mapcat #(followed-by % change? close? delete?) with-nested)
         package {:_meta {}
                  :dataset dataset
                  :features (take total with-extra)}]
@@ -144,6 +155,11 @@
   (doseq [c [10 100 1000 10000 100000]]
     (with-open [w (clojure.java.io/writer (str ".test-files/close-features-single-collection-" c ".json"))]
       (random-json-features w "closeset" "collection1" c :close? true))))
+
+(defn generate-test-files-with-deletes []
+  (doseq [c [10 100 1000 10000 100000]]
+    (with-open [w (clojure.java.io/writer (str ".test-files/delete-features-single-collection-" c ".json"))]
+      (random-json-features w "deleteset" "collection1" c :delete? true))))
 
 (defn generate-test-files-with-nested-feature []
   (doseq [c [5 50 500 5000 50000]]
