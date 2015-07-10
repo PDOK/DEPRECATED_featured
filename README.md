@@ -4,9 +4,44 @@ FIXME: description
 
 ## Installation
 
-Download from http://example.com/FIXME.
+### Windows-Installer
+	Download from http://leiningen-win-installer.djpowell.net/ the installer and execute.
+
+### Windows-manual
+	Example
+		Download lein.bat from https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein.bat
+		set PATH %USERHOME%\.lein\bin		
+	
+### Linux
+
+## Issues
+
+### Proxy & Certificates
+	Multiple applications need proxy parameters these are best set through ENV_VAR
+	- LEIN_JAVA_CMD = D:\Programs\Java\jdk1.8.0_25\bin\java.exe
+	- http_proxy = www-proxy.cs.kadaster.nl:8082
+	- https_proxy = www-proxy.cs.kadaster.nl:8082
+	- MAVEN_OPTS = -Xmx512m -XX:MaxPermSize=2048m -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true
+	- JAVA_OPTS = -Dhttp.proxyHost=http://www-proxy.cs.kadaster.nl -Dhttp.proxyPort=8082 -Dhttps.proxyHost=http://www-proxy.cs.kadaster.nl -Dhttps.proxyPort=8082 -Dhttp.nonProxyHosts="localhost|127.0.0.1|*.SO.kadaster.nl|*.so.kadaster.nl|orchestration-plp.cs.kadaster.nl|10.*|fme*"
+	
+	Because we are behind a proxy we need to add certificates to the java keystore
+	To check which certificates are need can be done through a internet browser.
+		- load the page https://github.com 
+		- click the https symbol in the addressbar
+		- click on something like check certificate 
+		- select the Certification Path, a path will be show (something like Kadaster CA, www-proxy.cs.kadaster.nl, github.com) 
+		- we will need the all the certificates with the exception of the last one (github.com)
+		- for each certificate select it and view the certificate, a option for downloading(/saving) the certificate will be show,... so do that!
+		- when the certificates are saved they need to be added/imported to the java keystore.
+		- first we need to check which keystore we are going to update, that can be done by checking the 'active' java installation
+		- then the certificates can be added to the keystore
+		Example
+		keytool -keystore "C:\Program Files\Java\jre1.8.0_31\lib\security\cacerts" -importcert -alias kadaster_proxy -file kadaster_proxy.cer
+		keytool -keystore "C:\Program Files\Java\jre1.8.0_31\lib\security\cacerts" -importcert -alias kadaster_ca -file kadaster_ca.cer
 
 ## Usage
+
+https://github.com/technomancy/leiningen
 
 FIXME: explanation
 
