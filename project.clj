@@ -74,4 +74,5 @@
   :profiles {:uberjar {:aot :all}
              :test {:resource-paths ["src/test/resources"]}
              :dev {:dependencies [[javax.servlet/servlet-api "2.5"]
-                                  [ring-mock "0.1.5"]]}})
+                                  [ring-mock "0.1.5"]]
+                   :resource-paths ["src/test/resources"]}})

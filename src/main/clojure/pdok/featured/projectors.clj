@@ -7,7 +7,7 @@
             [clojure.string :as str]))
 
 (defprotocol Projector
-  (init [_])
+  (init [proj])
   (new-feature [proj feature])
   (change-feature [proj feature])
   (close-feature [proj feature])
@@ -50,6 +50,7 @@
       (pg/create-table db dataset table
                 [:gid "serial" :primary :key]
                 [:_id "varchar(100)"]
+                [:_version "uuid"]
                 [:_geometry_point "geometry"]
                 [:_geometry_line "geometry"]
                 [:_geometry_polygon "geometry"]
@@ -67,6 +68,7 @@
         columns (pg/table-columns db dataset table)
         no-defaults (filter #(not (some #{(:column_name %)} ["gid"
                                                              "_id"
+                                                             "_version"
                                                              "_geometry_point"
                                                              "_geometry_line"
                                                              "_geometry_polygon"
@@ -81,21 +83,23 @@
       (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
 
 (defn- feature-to-sparse-record [feature all-fields-constructor]
-   (let [id (:id feature)
-         sparse-attributes (all-fields-constructor (:attributes feature))
-         geometry (-> feature (:geometry) (f/as-jts))
-         geo-group (f/geometry-group (:geometry feature))
-         record (concat [id
-                         (when (= :point geo-group)  geometry)
-                         (when (= :line geo-group)  geometry)
-                         (when (= :polygon geo-group)  geometry)
-                         geo-group]
-                        sparse-attributes)]
+  (let [id (:id feature)
+        version (:version feature)
+        sparse-attributes (all-fields-constructor (:attributes feature))
+        geometry (-> feature (:geometry) (f/as-jts))
+        geo-group (f/geometry-group (:geometry feature))
+        record (concat [id
+                        version
+                        (when (= :point geo-group)  geometry)
+                        (when (= :line geo-group)  geometry)
+                        (when (= :polygon geo-group)  geometry)
+                        geo-group]
+                       sparse-attributes)]
       record))
 
 (defn- feature-keys [feature]
   (let [geometry (:geometry feature)
-         attributes (:attributes feature)]
+        attributes (:attributes feature)]
      (cond-> (transient [])
              geometry (conj!-coll :_geometry_point :_geometry_line :_geometry_polygon :_geo_group)
              attributes (conj!-coll (keys attributes))
@@ -105,7 +109,7 @@
    (let [attributes (:attributes feature)
          geometry (:geometry feature)
          geo-group (when geometry (f/geometry-group geometry))]
-     (cond-> (transient [])
+     (cond-> (transient [(:version feature)])
              geometry (conj!-coll
                        (when (= :point geo-group) (f/as-jts geometry))
                        (when (= :line geo-group) (f/as-jts geometry))
@@ -113,6 +117,7 @@
                        geo-group)
              attributes (conj!-coll (vals attributes))
              true (conj! (:id feature))
+             true (conj! (:current-version feature))
              true (persistent!))))
 
 (defn- all-fields-constructor [attributes]
@@ -130,7 +135,7 @@
          (j/with-db-connection [c db]
            (let [all-attributes (all-attributes-fn dataset collection)
                  records (map #(feature-to-sparse-record % (all-fields-constructor all-attributes)) grouped-features)]
-              (let [fields (concat [:_id :_geometry_point :_geometry_line :_geometry_polygon :_geo_group]
+              (let [fields (concat [:_id :_version :_geometry_point :_geometry_line :_geometry_polygon :_geo_group]
                                    (map pg/quoted all-attributes))]
                 (apply (partial j/insert! c (str dataset "." (pg/quoted (visualization dataset collection))) fields)
                        records))))))
@@ -139,8 +144,8 @@
 
 (defn- gs-update-sql [schema table columns]
   (str "UPDATE " (pg/quoted schema) "." (pg/quoted table)
-       " SET " (str/join "," (map #(str (pg/quoted %) " = ?") columns))
-       " WHERE \"_id\" = ?;"))
+       " SET \"_version\" = ?, " (str/join "," (map #(str (pg/quoted %) " = ?") columns))
+       " WHERE \"_id\" = ? and \"_version\" = ?;"))
 
 (defn- execute-update-sql [db dataset collection columns update-vals]
   (try
@@ -164,7 +169,7 @@
 
 (defn- gs-delete-sql [schema table]
   (str "DELETE FROM " (pg/quoted schema) "." (pg/quoted table)
-       " WHERE \"_id\" = ?"))
+       " WHERE \"_id\" = ? and \"_version\" = ?"))
 
 (defn- gs-delete-feature [db features]
   (try
@@ -172,7 +177,7 @@
           per-dataset-collection (group-by selector features)]
        (doseq [[[dataset collection] collection-features] per-dataset-collection]
         (let [sql (gs-delete-sql dataset (visualization dataset collection))
-              ids (map #(vector (:id %)) collection-features)]
+              ids (map #(vector (:id %1) (:current-version %1)) collection-features)]
           (j/execute! db (cons sql ids) :multi? true :transaction? false))))))
 
 (defn- flush-all [db cache insert-batch update-batch delete-batch]

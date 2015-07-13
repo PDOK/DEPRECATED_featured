@@ -10,18 +10,19 @@
 
 (defprotocol ProcessorPersistence
   (init [this])
-  (stream-exists? [this dataset collection id])
+  (stream-exists? [persistence dataset collection id])
   (create-stream
-    [this dataset collection id]
-    [this dataset collection id parent-collection parent-id parent-field])
-  (append-to-stream [this version action dataset collection id validity geometry attributes])
-  (current-validity [this dataset collection id])
-  (last-action [this dataset collection id])
+    [persistence dataset collection id]
+    [persistence dataset collection id parent-collection parent-id parent-field])
+  (append-to-stream [persistence version action dataset collection id validity geometry attributes])
+  (current-validity [persistence dataset collection id])
+  (last-action [persistence dataset collection id])
+  (current-version [persistence dataset collection id])
   (childs
-    [this dataset parent-collection parent-id child-collection]
-    [this dataset parent-collection parent-id])
-  (parent [this dataset collection id] "Returns [collection id field] tuple or nil")
-  (close [_])
+    [persistence dataset parent-collection parent-id child-collection]
+    [persistence dataset parent-collection parent-id])
+  (parent [persistence dataset collection id] "Returns [collection id field] tuple or nil")
+  (close [persistence])
   )
 
 (defn path [persistence dataset collection id]
@@ -152,21 +153,24 @@
 (defn- jdbc-load-cache [db dataset collection]
   (let [results
         (j/with-db-connection [c db]
-          (j/query c [(str "SELECT dataset, collection, feature_id, validity as cur_val, action as last_action FROM (
- SELECT dataset, collection, feature_id, action, validity,
+          (j/query c [(str "SELECT dataset, collection, feature_id, validity, action, version FROM (
+ SELECT dataset, collection, feature_id, action, validity, version,
  row_number() OVER (PARTITION BY dataset, collection, feature_id ORDER BY id DESC) AS rn
  FROM " (qualified-feature-stream)
 " WHERE dataset = ? AND collection = ?) a
 WHERE rn = 1")
                       dataset collection] :as-arrays? true))]
-    (map (fn [[dataset collection id validity action]] [[dataset collection id] [validity (keyword action)]] )
+    (map (fn [[dataset collection id validity action version]] [[dataset collection id]
+                                                               [validity (keyword action) version]] )
          (drop 1 results))
     ))
 
-(defn- jdbc-last-stream-validity-and-action [db dataset collection id]
+(defn- jdbc-current-stream-state
+  [db dataset collection id]
+  "Returns the last action, validity and version"
    (j/with-db-connection [c db]
      (let [results
-           (j/query c ["SELECT action, validity FROM (
+           (j/query c ["SELECT action, validity, version FROM (
  SELECT action, validity,
  row_number() OVER (PARTITION BY dataset, collection, feature_id ORDER BY id DESC) AS rn
  FROM " (qualified-feature-stream)
@@ -179,7 +183,7 @@ WHERE rn = 1"
   ProcessorPersistence
   (init [this] (jdbc-init db) this)
   (stream-exists? [_ dataset collection id]
-    (let [current-validity (partial jdbc-last-stream-validity-and-action db)]
+    (let [current-validity (partial jdbc-current-stream-state db)]
       (not (nil? (current-validity dataset collection id)))))
   (create-stream [this dataset collection id]
     (create-stream this dataset collection id nil nil nil))
@@ -190,9 +194,11 @@ WHERE rn = 1"
     (jdbc-insert db version action dataset collection id validity geometry attributes)
     nil)
   (current-validity [_ dataset collection id]
-    (-> (jdbc-last-stream-validity-and-action db dataset collection id) first))
+    (-> (jdbc-current-stream-state db dataset collection id) (get 0)))
   (last-action [_ dataset collection id]
-    (-> (jdbc-last-stream-validity-and-action db dataset collection id) second))
+    (-> (jdbc-current-stream-state db dataset collection id) (get 1)))
+  (current-version [_ dataset collection id]
+    (-> (jdbc-current-stream-state db dataset collection id) (get 2)))
   (childs
     [_ dataset parent-collection parent-id child-collection]
     (jdbc-get-childs-for-collection db dataset parent-collection parent-id child-collection))
@@ -207,6 +213,14 @@ WHERE rn = 1"
 (defn- append-cached-child [acc _ collection id _ _ _]
   (let [acc (if acc acc [])]
     (conj acc [collection id])))
+
+(defn- current-state [persistence dataset collection id]
+    (let [key-fn (fn [dataset collectioni id] [dataset collection id])
+          load-cache (fn [dataset collection id]
+                       (when ((.stream-load-cache? persistence) dataset collection)
+                         (jdbc-load-cache (.db persistence) dataset collection)))
+          cached (use-cache (.stream-cache persistence) key-fn load-cache)]
+      (cached dataset collection id)))
 
 (deftype CachedJdbcProcessorPersistence [db stream-batch stream-batch-size stream-cache stream-load-cache?
                                          link-batch link-batch-size childs-cache childs-load-cache?
@@ -228,22 +242,16 @@ WHERE rn = 1"
       (double-cache-batched dataset collection id parent-collection parent-id parent-field)))
   (append-to-stream [_ version action dataset collection id validity geometry attributes]
     (let [key-fn   (fn [_ _ dataset collection id _ _ _] [dataset collection id])
-          value-fn (fn [_ _ action _ _ _ validity _ _] [validity action])
+          value-fn (fn [_ version action _ _ _ validity _ _] [validity action version])
           batched (with-batch stream-batch stream-batch-size (partial jdbc-insert db))
           cache-batched (with-cache stream-cache batched key-fn value-fn)]
       (cache-batched version action dataset collection id validity geometry attributes)))
-  (current-validity [_ dataset collection id]
-    (let [key-fn (fn [dataset collection id] [dataset collection id])
-          load-cache (fn [dataset collection id]
-                       (when (stream-load-cache? dataset collection) (jdbc-load-cache db dataset collection)))
-          cached (use-cache stream-cache key-fn load-cache)]
-      (first (cached dataset collection id))))
-  (last-action [_ dataset collection id]
-    (let [key-fn (fn [dataset collectioni id] [dataset collection id])
-          load-cache (fn [dataset collection id]
-                       (when (stream-load-cache? dataset collection) (jdbc-load-cache db dataset collection)))
-          cached (use-cache stream-cache key-fn load-cache)]
-      (second (cached dataset collection id))))
+  (current-validity [this dataset collection id]
+    (get (current-state this dataset collection id) 0))
+  (last-action [this dataset collection id]
+    (get (current-state this dataset collection id) 1))
+  (current-version [this dataset collection id]
+    (get (current-state this dataset collection id) 2))
   (childs [_ dataset parent-collection parent-id child-collection]
     (let [key-fn (fn [dataset parent-collection parent-id _]
                    [dataset parent-collection parent-id])

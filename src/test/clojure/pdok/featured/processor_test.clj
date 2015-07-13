@@ -23,6 +23,8 @@
     (second (get @state [dataset collection id] nil)))
   (last-action [this dataset collection id]
     (first (get @state [dataset collection id] nil)))
+  (current-version [this dataset collection id]
+    nil)
   (childs [this dataset parent-collection parent-id collection]
     [])
   (close [this] (assoc this :closed true)))

@@ -67,6 +67,12 @@
       feature))
   )
 
+(defn- with-current-version [persistence feature]
+  (if-not (:invalid? feature)
+    (let [{:keys [dataset collection id]} feature]
+      (assoc feature :current-version (pers/current-version persistence dataset collection id)))
+    feature))
+
 (defn- process-new-feature [{:keys [persistence projectors]} feature]
   (let [validated (->> feature
                        (apply-all-features-validation persistence)
@@ -87,7 +93,8 @@
                        (apply-all-features-validation persistence)
                        (apply-non-new-feature-requires-existing-stream-validation persistence)
                        (apply-closed-feature-cannot-be-changed-validation persistence)
-                       (apply-non-new-feature-current-validity-validation persistence))]
+                       (apply-non-new-feature-current-validity-validation persistence)
+                       (with-current-version persistence))]
     (when-not (:invalid? validated)
       (append-feature persistence validated)
       (let [{:keys [dataset collection id current-validity validity geometry attributes]} validated]
@@ -103,7 +110,8 @@
                        (apply-all-features-validation persistence)
                        (apply-closed-feature-cannot-be-changed-validation persistence)
                        (apply-non-new-feature-requires-existing-stream-validation persistence)
-                       (apply-non-new-feature-current-validity-validation persistence))]
+                       (apply-non-new-feature-current-validity-validation persistence)
+                       (with-current-version persistence))]
     (when-not (:invalid? validated)
       (append-feature persistence validated)
       (let [{:keys [dataset collection id current-validity validity geometry attributes]} validated]
@@ -124,7 +132,8 @@
   (let [validated (->> feature
                        (apply-all-features-validation persistence)
                        (apply-non-new-feature-requires-existing-stream-validation persistence)
-                       (apply-non-new-feature-current-validity-validation persistence))]
+                       (apply-non-new-feature-current-validity-validation persistence)
+                       (with-current-version persistence))]
     (when-not (:invalid? validated)
       (append-feature persistence validated)
       (doseq [p projectors] (proj/delete-feature p validated)))
