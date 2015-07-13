@@ -224,12 +224,13 @@
         (when (not-empty new-attributes) (cached-collection-attributes :reload dataset collection)))
       (batched-update-feature feature)))
   (close-feature [_ feature]
-    (let [{:keys [dataset collection]} feature
-          batched-delete-feature (with-batch delete-batch delete-batch-size
+    (let [batched-delete-feature (with-batch delete-batch delete-batch-size
                                    (partial gs-delete-feature db) flush-fn)]
       (batched-delete-feature feature)))
   (delete-feature [_ feature]
-    nil)
+    (let [batched-delete-feature (with-batch delete-batch delete-batch-size
+                                   (partial gs-delete-feature db) flush-fn)]
+      (batched-delete-feature feature)))
   (close [this]
     (flush-fn)
     this))
