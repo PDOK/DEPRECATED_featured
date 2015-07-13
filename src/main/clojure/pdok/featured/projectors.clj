@@ -175,8 +175,17 @@
               ids (map #(vector (:id %)) collection-features)]
           (j/execute! db (cons sql ids) :multi? true :transaction? false))))))
 
+(defn- flush-all [db cache insert-batch update-batch delete-batch]
+  "Used for flushing all batches, so entry order is alway new change close"
+  (let [cached-collection-attributes (cached cache gs-collection-attributes db)]
+    (flush-batch insert-batch (partial gs-add-feature db cached-collection-attributes))
+    (flush-batch update-batch (partial gs-update-feature db))
+    (flush-batch delete-batch (partial gs-delete-feature db))))
+
 (deftype GeoserverProjector [db cache insert-batch insert-batch-size
-                             update-batch update-batch-size delete-batch delete-batch-size]
+                             update-batch update-batch-size
+                             delete-batch delete-batch-size
+                             flush-fn]
   Projector
   (init [this] this)
   (new-feature [_ feature]
@@ -185,7 +194,7 @@
           cached-collection-exists? (cached cache gs-collection-exists? db)
           cached-collection-attributes (cached cache gs-collection-attributes db)
           batched-add-feature
-          (with-batch insert-batch insert-batch-size (partial gs-add-feature db cached-collection-attributes))]
+          (with-batch insert-batch insert-batch-size (partial gs-add-feature db cached-collection-attributes) flush-fn)]
       (do (when (not (cached-dataset-exists? dataset))
             (gs-create-dataset db dataset)
             (cached-dataset-exists? :reload dataset))
@@ -202,7 +211,7 @@
     (let [{:keys [dataset collection attributes]} feature
           cached-collection-attributes (cached cache gs-collection-attributes db)
           batched-update-feature (with-batch update-batch update-batch-size
-                                   (partial gs-update-feature db))]
+                                   (partial gs-update-feature db) flush-fn)]
       (let [current-attributes (cached-collection-attributes dataset collection)
             new-attributes (filter #(not (some #{(first %)} current-attributes)) attributes)]
         (doseq [a new-attributes]
@@ -212,15 +221,12 @@
   (close-feature [_ feature]
     (let [{:keys [dataset collection]} feature
           batched-delete-feature (with-batch delete-batch delete-batch-size
-                                   (partial gs-delete-feature db))]
+                                   (partial gs-delete-feature db) flush-fn)]
       (batched-delete-feature feature)))
   (delete-feature [_ feature]
     nil)
   (close [this]
-    (let [cached-collection-attributes (cached cache gs-collection-attributes db)]
-      (flush-batch insert-batch (partial gs-add-feature db cached-collection-attributes))
-      (flush-batch update-batch (partial gs-update-feature db))
-      (flush-batch delete-batch (partial gs-delete-feature db)))
+    (flush-fn)
     this))
 
 
@@ -232,6 +238,9 @@
         update-batch-size (or (:update-batch-size config) (:batch-size config) 10000)
         update-batch (ref (clojure.lang.PersistentQueue/EMPTY))
         delete-batch-size (or (:delete-batch-size config) (:batch-size config) 10000)
-        delete-batch (ref (clojure.lang.PersistentQueue/EMPTY))]
+        delete-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+        flush-fn #(flush-all db cache insert-batch update-batch delete-batch)]
     (->GeoserverProjector db cache insert-batch insert-batch-size
-                         update-batch update-batch-size delete-batch delete-batch-size)))
+                          update-batch update-batch-size
+                          delete-batch delete-batch-size
+                          flush-fn)))

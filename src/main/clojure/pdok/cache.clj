@@ -10,16 +10,15 @@
 
 (defn with-batch
   ([batch batch-size batched-fn]
-   (with-batch batch batch-size batched-fn (fn [])))
-  ([batch batch-size batched-fn after-flush]
+   (with-batch batch batch-size batched-fn #(flush-batch batch batched-fn)))
+  ([batch batch-size batched-fn flush-fn]
    (fn [& args]
      (dosync
       (if (= 1 (count args))
         (alter batch #(conj % (first args)))
         (alter batch #(conj % args))))
      (if (<= batch-size (count @batch))
-       (do (flush-batch batch batched-fn)
-           (after-flush))))))
+       (flush-fn)))))
 
 (defn with-cache [cache cached-fn key-fn value-fn]
   (fn [& args]
