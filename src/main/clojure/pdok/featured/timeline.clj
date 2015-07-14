@@ -42,7 +42,6 @@
                [:collection "varchar(255)"]
                [:feature_id "varchar(100)"]
                [:version "uuid"]
-               [:all_versions "uuid[]"]
                [:valid_from "timestamp without time zone"]
                [:valid_to "timestamp without time zone"]
                [:feature "text"]
@@ -158,13 +157,13 @@
 
 (defn- new-current-sql []
   (str "INSERT INTO " (qualified-current)
-       " (dataset, collection, feature_id, version, all_versions, valid_from, valid_to, feature, tiles)
-VALUES (?, ?, ? ,?, ?, ?, ?, ?, ?)"))
+       " (dataset, collection, feature_id, version, valid_from, valid_to, feature, tiles)
+VALUES (?, ?, ? ,?, ?, ?, ?, ?)"))
 
 (defn- new-current
   ([db features]
    (try
-     (let [transform-fn (juxt :_dataset :_collection :_id :_version :_all_versions
+     (let [transform-fn (juxt :_dataset :_collection :_id :_version
                               :_valid_from :_valid_to pg/to-json :_tiles)
            records (map transform-fn features)]
        (j/execute! db (cons (new-current-sql) records) :multi? true :transaction? false))
@@ -192,24 +191,6 @@ VALUES (?, ?, ? ,?, ?, ?, ?, ?, ?)"))
           for-cache
           (map (fn [[ds col fid f]] [ [ds col fid]] (pg/from-json f) ) (drop 1 results))]
       for-cache)))
-
-(defn- update-current-sql []
-  (str "UPDATE " (qualified-current) "
-SET feature = ?,
-    version = ?,
-    all_versions = ?,
-    valid_from = ?,
-    valid_to = ?,
-    tiles = ?
-WHERE dataset = ? AND collection = ? AND  feature_id = ?"))
-
-(defn- update-current [db features]
-  (try
-    (let [transform-fn (juxt pg/to-json :_version :_all_versions :_valid_from :_valid_to
-                             :_tiles :_dataset :_collection :_id)
-          records (map transform-fn features)]
-      (j/execute! db (cons (update-current-sql) records) :multi? true :transaction? false))
-    (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
 
 (defn- delete-current-sql []
   (str "DELETE FROM " (qualified-current)
@@ -342,7 +323,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
                          (load-current-feature-cache db dataset collection)))
         new-current-batch-size (or (:new-current-batch-size config) (:batch-size config) 10000)
         new-current-batch (ref (clojure.lang.PersistentQueue/EMPTY))
-        delete-current-batch-size (or (:update-current-batch-size config) (:batch-size config) 10000)
+        delete-current-batch-size (or (:delete-current-batch-size config) (:batch-size config) 10000)
         delete-current-batch (ref (clojure.lang.PersistentQueue/EMPTY))
         new-history-batch-size (or (:new-history-batch-size config) (:batch-size config) 10000)
         new-history-batch (ref (clojure.lang.PersistentQueue/EMPTY))
