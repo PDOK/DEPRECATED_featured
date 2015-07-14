@@ -215,9 +215,9 @@ WHERE dataset = ? AND collection = ? AND  feature_id = ?"))
   (str "DELETE FROM " (qualified-current)
        " WHERE version = ?"))
 
-(defn- delete-current [db features]
+(defn- delete-current [db versions]
   (try
-    (let [records (map (juxt #(first (rest (:_all_versions %)))) features)]
+    (let [records (map #(vector %) versions)]
       (j/execute! db (cons (delete-current-sql) records) :multi? true :transaction? false))
     (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
 
@@ -232,19 +232,32 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
       (j/execute! db (cons (new-history-sql) records) :multi? true :transaction? false))
     (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
 
+(defn- delete-history-sql []
+  (str "DELETE FROM " (qualified-history)
+       " WHERE ARRAY[version] <@ ?"))
+
+(defn- delete-history [db features]
+  (try
+    (let [records (map (juxt :_all_versions) features)]
+      (j/execute! db (cons (delete-history-sql) records) :multi? true :transaction? false))
+    (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
+
 (defn- feature-key [feature]
   [(:dataset feature) (:collection feature) (:id feature)])
 
-(defn- flush-all [db new-current-batch delete-current-batch new-history-batch]
+(defn- flush-all [db new-current-batch delete-current-batch new-history-batch delete-history-batch]
   "Used for flushing all batches, so update current is always performed after new current"
   (flush-batch new-current-batch (partial new-current db))
   (flush-batch delete-current-batch (partial delete-current db))
-  (flush-batch new-history-batch (partial new-history db)))
+  (flush-batch new-history-batch (partial new-history db))
+  (flush-batch delete-history-batch (partial delete-history db)))
 
 (defn- cache-store-key [f]
   [(:_dataset f) (:_collection f) (:_id f)])
 
 (defn- cache-value [_ f] f)
+
+(defn- cache-invalidate [_ f])
 
 (defn- cache-use-key [dataset collection id]
   [dataset collection id])
@@ -256,32 +269,38 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
         batched-delete (with-batch dcb dcb-size (partial new-current db) flush-fn)]
     (fn [f]
       (cache-batched-new f)
-      (batched-delete f))))
+      (batched-delete (first (rest (:_all_versions f)))))))
+
+(defn- batched-deleter [db dcb dcb-size dhb dhb-size flush-fn feature-cache]
+  "Cache batched deleter (thrasher) of current and history"
+  (let [batched-delete-cur (with-batch dcb dcb-size (partial delete-current db) flush-fn)
+        cache-batched-delete-cur (with-cache feature-cache batched-delete-cur cache-store-key cache-invalidate)
+        batched-delete-his (with-batch dhb dhb-size (partial delete-history db) flush-fn)]
+    (fn [f]
+      (cache-batched-delete-cur (:_version f))
+      (batched-delete-his f))))
 
 (deftype Timeline [db root-fn path-fn
-                   feature-cache load-cache?-fn
+                   feature-cache cache-loader
                    new-current-batch new-current-batch-size
                    delete-current-batch delete-current-batch-size
-                   new-history-batch new-history-batch-size]
+                   new-history-batch new-history-batch-size
+                   delete-history-batch delete-history-batch-size
+                   flush-fn]
   proj/Projector
   (init [this]
     (init db) this)
   (proj/new-feature [_ feature]
     (let [[dataset collection id] (feature-key feature)
           [root-col root-id] (root-fn dataset collection id)
-          flush-fn #(flush-all db new-current-batch delete-current-batch new-history-batch)
           path (path-fn dataset collection id)
-          cache-use-key-fn (fn [dataset collection id] [dataset collection id])
           batched-new (with-batch new-current-batch new-current-batch-size (partial new-current db) flush-fn)
           cache-batched-new (with-cache feature-cache batched-new cache-store-key cache-value)
           cache-batched-update (batched-updater db new-current-batch new-current-batch-size
                                           delete-current-batch delete-current-batch-size
                                           flush-fn feature-cache)
           batched-history (with-batch new-history-batch new-history-batch-size (partial new-history db) flush-fn)
-          load-cache (fn [dataset collection id]
-                       (when (load-cache?-fn dataset collection)
-                         (load-current-feature-cache db dataset collection)))
-          cached-get-current (use-cache feature-cache cache-use-key-fn load-cache)]
+          cached-get-current (use-cache feature-cache cache-use-key cache-loader)]
       (if-let [current (cached-get-current dataset root-col root-id)]
         (let [new-current (merge current path feature)]
           (if (= (:action feature) :close)
@@ -300,9 +319,16 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
   (proj/close-feature [_ feature]
     (proj/new-feature _ feature))
   (proj/delete-feature [_ feature]
-    nil)
+    (let [[dataset collection id] (feature-key feature)
+          [root-col root-id] (root-fn dataset collection id)
+          cache-batched-delete (batched-deleter db delete-current-batch delete-current-batch-size
+                                                delete-history-batch delete-history-batch-size
+                                                flush-fn feature-cache)
+          cached-get-current (use-cache feature-cache cache-use-key cache-loader)]
+      (when-let [current (cached-get-current dataset root-col root-id)]
+        (cache-batched-delete current))))
   (proj/close [this]
-    (flush-all db new-current-batch delete-current-batch new-history-batch)
+    (flush-fn)
     this)
   )
 
@@ -311,14 +337,22 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
         persistence (or (:persistence config) (pers/cached-jdbc-processor-persistence config))
         cache (ref (cache/basic-cache-factory {}))
         load-cache?-fn (once-true-fn)
+        cache-loader (fn [dataset collection id]
+                       (when (load-cache?-fn dataset collection)
+                         (load-current-feature-cache db dataset collection)))
         new-current-batch-size (or (:new-current-batch-size config) (:batch-size config) 10000)
         new-current-batch (ref (clojure.lang.PersistentQueue/EMPTY))
         delete-current-batch-size (or (:update-current-batch-size config) (:batch-size config) 10000)
         delete-current-batch (ref (clojure.lang.PersistentQueue/EMPTY))
         new-history-batch-size (or (:new-history-batch-size config) (:batch-size config) 10000)
-        new-history-batch (ref (clojure.lang.PersistentQueue/EMPTY))]
+        new-history-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+        delete-history-batch-size (or (:delete-history-batch-size config) (:batch-size config) 10000)
+        delete-history-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+        flush-fn #(flush-all db new-current-batch delete-current-batch new-history-batch delete-history-batch)]
     (->Timeline db (partial pers/root persistence) (partial pers/path persistence)
-                cache load-cache?-fn
+                cache cache-loader
                 new-current-batch new-current-batch-size
                 delete-current-batch delete-current-batch-size
-                new-history-batch new-history-batch-size)))
+                new-history-batch new-history-batch-size
+                delete-history-batch delete-history-batch-size
+                flush-fn)))
