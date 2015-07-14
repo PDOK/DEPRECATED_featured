@@ -84,6 +84,11 @@
     (if (empty? v)
       (.setObject s i nil java.sql.Types/OTHER)
       (j/set-parameter (into-array v) s i)))
+  clojure.lang.IPersistentList
+  (set-parameter [v ^java.sql.PreparedStatement s ^long i]
+    (if (empty? v)
+      (.setObject s i nil java.sql.Types/OTHER)
+      (j/set-parameter (into-array v) s i)))
   clojure.lang.IPersistentSet
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
     (j/set-parameter (into [] v) s i)))
@@ -100,6 +105,13 @@
    (set-parameter [v ^java.sql.PreparedStatement s ^long i]
       (let [con (.getConnection s)
             postgres-array (.createArrayOf con "integer" v)]
+        (.setObject s i postgres-array java.sql.Types/OTHER))))
+
+(extend-protocol j/ISQLParameter
+  (Class/forName "[Ljava.util.UUID;")
+   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
+      (let [con (.getConnection s)
+            postgres-array (.createArrayOf con "uuid" v)]
         (.setObject s i postgres-array java.sql.Types/OTHER))))
 
 (extend-protocol j/IResultSetReadColumn

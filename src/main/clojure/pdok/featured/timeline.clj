@@ -31,7 +31,9 @@
                [:valid_from "timestamp without time zone"]
                [:valid_to "timestamp without time zone"]
                [:feature "text"]
-               [:tiles "integer[]"]))
+               [:tiles "integer[]"])
+  (pg/create-index db *timeline-schema* *history-table* :dataset :collection :feature_id)
+  (pg/create-index db *timeline-schema* *history-table* :version))
 
 (defn- create-current-table [db]
   (pg/create-table db *timeline-schema* *current-table*
@@ -40,11 +42,13 @@
                [:collection "varchar(255)"]
                [:feature_id "varchar(100)"]
                [:version "uuid"]
+               [:all_versions "uuid[]"]
                [:valid_from "timestamp without time zone"]
                [:valid_to "timestamp without time zone"]
                [:feature "text"]
                [:tiles "integer[]"])
-  (pg/create-index db *timeline-schema* *current-table* :dataset :collection :feature_id))
+  (pg/create-index db *timeline-schema* *current-table* :dataset :collection :feature_id)
+  (pg/create-index db *timeline-schema* *current-table* :version))
 
 (defn- init [db]
   (when-not (pg/schema-exists? db *timeline-schema*)
@@ -135,8 +139,6 @@
     #(clojure.core/merge target %))
   )
 
-(comment (merge {:a 1 :b [{:_id 1 :c 2} {:_id 2 :c 3}]} [["a" 1] [:G 2]] {:dataset "DD" :collection "test" :id 12 :attributes {"ZZ" 12}}))
-
 (defn- merge
   ([target path feature]
    (let [keyworded-path (map (fn [[_ id field]] [(keyword field) id]) path)
@@ -144,6 +146,7 @@
          merger (path->merge-fn target keyworded-path)
          merged (merger mustafied)
          merged (assoc merged :_version (:version feature))
+         merged (update-in merged [:_all_versions] (fnil conj '()) (:version feature))
          merged (update merged :_tiles #((fnil clojure.set/union #{}) % (tiles/nl (:geometry feature))))]
      merged)))
 
@@ -154,40 +157,47 @@
   (assoc acc :_valid_to (:validity feature)))
 
 (defn- new-current-sql []
-  (str "INSERT INTO " (qualified-current) " (dataset, collection, feature_id, version, valid_from, valid_to, feature, tiles)
-VALUES (?, ?, ? ,?, ?, ?, ?, ?)"))
+  (str "INSERT INTO " (qualified-current)
+       " (dataset, collection, feature_id, version, all_versions, valid_from, valid_to, feature, tiles)
+VALUES (?, ?, ? ,?, ?, ?, ?, ?, ?)"))
 
 (defn- new-current
   ([db features]
    (try
-     (let [transform-fn (juxt :_dataset :_collection :_id :_version :_valid_from :_valid_to pg/to-json :_tiles)
+     (let [transform-fn (juxt :_dataset :_collection :_id :_version :_all_versions
+                              :_valid_from :_valid_to pg/to-json :_tiles)
            records (map transform-fn features)]
        (j/execute! db (cons (new-current-sql) records) :multi? true :transaction? false))
       (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
   )
 
-(defn- get-current [db dataset collection id]
-  (j/with-db-connection [c db]
-    (let [results
-          (j/query c [(str "SELECT  FROM " (qualified-current)
-                           " WHERE dataset = ? AND collection = ?  AND feature_id = ?")
-                      dataset collection id])]
-      (pg/from-json (:feature (first results))))))
+;; (defn- get-current [db dataset collection id]
+;;   (j/with-db-connection [c db]
+;;     (let [results
+;;           (j/query c [(str "SELECT  FROM " (qualified-current)
+;;                            " WHERE dataset = ? AND collection = ?  AND feature_id = ?")
+;;                       dataset collection id])]
+;;       (pg/from-json (:feature (first results))))))
+
+(defn- load-current-feature-cache-sql []
+  (str "SELECT dataset, collection, feature_id, feature  FROM " (qualified-current)
+   " WHERE dataset = ? AND collection = ?")
+  )
 
 (defn- load-current-feature-cache [db dataset collection]
   (j/with-db-connection [c db]
     (let [results
-          (j/query c [(str "SELECT dataset, collection,  feature_id, feature FROM " (qualified-current)
-                           " WHERE dataset = ? AND collection = ?")
+          (j/query c [(load-current-feature-cache-sql)
                       dataset collection] :as-arrays? true)
           for-cache
-          (map #(vector (take 3 %1) (pg/from-json (last %1)) ) (drop 1 results))]
+          (map (fn [[ds col fid f]] [ [ds col fid]] (pg/from-json f) ) (drop 1 results))]
       for-cache)))
 
 (defn- update-current-sql []
   (str "UPDATE " (qualified-current) "
 SET feature = ?,
     version = ?,
+    all_versions = ?,
     valid_from = ?,
     valid_to = ?,
     tiles = ?
@@ -195,9 +205,20 @@ WHERE dataset = ? AND collection = ? AND  feature_id = ?"))
 
 (defn- update-current [db features]
   (try
-    (let [transform-fn (juxt pg/to-json :_version :_valid_from :_valid_to :_tiles :_dataset :_collection :_id)
+    (let [transform-fn (juxt pg/to-json :_version :_all_versions :_valid_from :_valid_to
+                             :_tiles :_dataset :_collection :_id)
           records (map transform-fn features)]
       (j/execute! db (cons (update-current-sql) records) :multi? true :transaction? false))
+    (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
+
+(defn- delete-current-sql []
+  (str "DELETE FROM " (qualified-current)
+       " WHERE version = ?"))
+
+(defn- delete-current [db features]
+  (try
+    (let [records (map (juxt #(first (rest (:_all_versions %)))) features)]
+      (j/execute! db (cons (delete-current-sql) records) :multi? true :transaction? false))
     (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
 
 (defn- new-history-sql []
@@ -214,16 +235,33 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
 (defn- feature-key [feature]
   [(:dataset feature) (:collection feature) (:id feature)])
 
-(defn- flush-all [db new-current-batch update-current-batch new-history-batch]
+(defn- flush-all [db new-current-batch delete-current-batch new-history-batch]
   "Used for flushing all batches, so update current is always performed after new current"
   (flush-batch new-current-batch (partial new-current db))
-  (flush-batch update-current-batch (partial update-current db))
+  (flush-batch delete-current-batch (partial delete-current db))
   (flush-batch new-history-batch (partial new-history db)))
+
+(defn- cache-store-key [f]
+  [(:_dataset f) (:_collection f) (:_id f)])
+
+(defn- cache-value [_ f] f)
+
+(defn- cache-use-key [dataset collection id]
+  [dataset collection id])
+
+(defn- batched-updater [db ncb ncb-size dcb dcb-size flush-fn feature-cache]
+  "Cache batched updater consisting of insert and delete"
+  (let [batched-new (with-batch ncb ncb-size (partial new-current db) flush-fn)
+        cache-batched-new (with-cache feature-cache batched-new cache-store-key cache-value)
+        batched-delete (with-batch dcb dcb-size (partial new-current db) flush-fn)]
+    (fn [f]
+      (cache-batched-new f)
+      (batched-delete f))))
 
 (deftype Timeline [db root-fn path-fn
                    feature-cache load-cache?-fn
                    new-current-batch new-current-batch-size
-                   update-current-batch update-current-batch-size
+                   delete-current-batch delete-current-batch-size
                    new-history-batch new-history-batch-size]
   proj/Projector
   (init [this]
@@ -231,15 +269,14 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
   (proj/new-feature [_ feature]
     (let [[dataset collection id] (feature-key feature)
           [root-col root-id] (root-fn dataset collection id)
-          flush-fn #(flush-all db new-current-batch update-current-batch new-history-batch)
+          flush-fn #(flush-all db new-current-batch delete-current-batch new-history-batch)
           path (path-fn dataset collection id)
-          cache-store-key-fn (fn [f] [(:_dataset f) (:_collection f) (:_id f)])
-          cache-value-fn (fn [_ f] f)
           cache-use-key-fn (fn [dataset collection id] [dataset collection id])
           batched-new (with-batch new-current-batch new-current-batch-size (partial new-current db) flush-fn)
-          cache-batched-new (with-cache feature-cache batched-new cache-store-key-fn cache-value-fn)
-          batched-update (with-batch update-current-batch update-current-batch-size (partial update-current db) flush-fn)
-          cache-batched-update (with-cache feature-cache batched-update cache-store-key-fn cache-value-fn)
+          cache-batched-new (with-cache feature-cache batched-new cache-store-key cache-value)
+          cache-batched-update (batched-updater db new-current-batch new-current-batch-size
+                                          delete-current-batch delete-current-batch-size
+                                          flush-fn feature-cache)
           batched-history (with-batch new-history-batch new-history-batch-size (partial new-history db) flush-fn)
           load-cache (fn [dataset collection id]
                        (when (load-cache?-fn dataset collection)
@@ -265,7 +302,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
   (proj/delete-feature [_ feature]
     nil)
   (proj/close [this]
-    (flush-all db new-current-batch update-current-batch new-history-batch)
+    (flush-all db new-current-batch delete-current-batch new-history-batch)
     this)
   )
 
@@ -276,12 +313,12 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
         load-cache?-fn (once-true-fn)
         new-current-batch-size (or (:new-current-batch-size config) (:batch-size config) 10000)
         new-current-batch (ref (clojure.lang.PersistentQueue/EMPTY))
-        update-current-batch-size (or (:update-current-batch-size config) (:batch-size config) 10000)
-        update-current-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+        delete-current-batch-size (or (:update-current-batch-size config) (:batch-size config) 10000)
+        delete-current-batch (ref (clojure.lang.PersistentQueue/EMPTY))
         new-history-batch-size (or (:new-history-batch-size config) (:batch-size config) 10000)
         new-history-batch (ref (clojure.lang.PersistentQueue/EMPTY))]
     (->Timeline db (partial pers/root persistence) (partial pers/path persistence)
                 cache load-cache?-fn
                 new-current-batch new-current-batch-size
-                update-current-batch update-current-batch-size
+                delete-current-batch delete-current-batch-size
                 new-history-batch new-history-batch-size)))
