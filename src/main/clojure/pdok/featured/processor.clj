@@ -173,7 +173,7 @@
    :parent-id id})
 
 (defn- meta-close-childs [features]
-  "{:action :close-childs :dataset _ :collection _ :parent-collection _ :parent-id _ :end-time _"
+  "{:action :close-childs :dataset _ :collection _ :parent-collection _ :parent-id _ :validity _"
   (let [grouped (group-by #(select-keys % [:dataset :collection :parent-collection :parent-id :validity]) features)]
     (letfn [(meta [dataset collection parent-collection parent-id validity]
               {:action :close-childs
@@ -181,7 +181,7 @@
                :collection collection
                :parent-collection parent-collection
                :parent-id parent-id
-               :end-time validity})]
+               :validity validity})]
       (map (fn [[{:keys [dataset collection parent-collection parent-id validity]} _]]
              (meta dataset collection parent-collection parent-id validity)) grouped)
       )))
@@ -212,35 +212,32 @@
         collected (assoc no-attributes :attributes collected)]
     collected))
 
-(defn- close-childs* [processor dataset collection id end-time]
+(defn- close-child [processor dataset collection id close-time]
   (let [persistence (:persistence processor)
+        childs-of-child (pers/childs persistence dataset collection id)
+        metas (map (fn [[child-col child-id]] {:action :close-childs
+                                  :dataset dataset
+                                  :collection child-col
+                                  :parent-collection collection
+                                  :parent-id id
+                                  :validity close-time}) childs-of-child)
         validity (pers/current-validity persistence dataset collection id)
         state (pers/last-action persistence dataset collection id)]
-        (when-not (= state :close)
-          (consume processor {:action :close
-                              :dataset dataset
-                              :collection collection
-                              :id id
-                              :current-validity validity
-                              :validity end-time}))))
-
-(defn- close-nested-childs-meta [persistence dataset parent-collection parent-id end-time]
-  (let [nested (pers/childs persistence dataset parent-collection parent-id)
-        metas (map (fn [[col id]] {:dataset dataset
-                                  :collection col
-                                  :parent-collection parent-collection
-                                  :parent-id parent-id
-                                  :end-time end-time}) nested)]
-    metas))
+        (if-not (= state :close)
+          (consume processor (conj metas {:action :close
+                                            :dataset dataset
+                                            :collection collection
+                                            :id id
+                                            :current-validity validity
+                                            :validity close-time}))
+          (consume processor metas))))
 
 (defn- close-childs [processor meta-record]
-  (let [{:keys [dataset collection parent-collection parent-id end-time]} meta-record
+  (let [{:keys [dataset collection parent-collection parent-id validity]} meta-record
         persistence (:persistence processor)
         ids (pers/childs persistence dataset parent-collection parent-id collection)
-        nested-metas (mapcat #(close-nested-childs-meta persistence dataset collection % end-time) ids)
-        closed-nesteds (doall (mapcat #(close-childs processor %) nested-metas))
-        closed (doall (mapcat #(close-childs* processor dataset collection % end-time) ids))]
-    (concat closed-nesteds closed)))
+        closed (doall (mapcat #(close-child processor dataset collection % validity) ids))]
+     closed))
 
 (defn- delete-child* [processor dataset collection id]
   (let [persistence (:persistence processor)
