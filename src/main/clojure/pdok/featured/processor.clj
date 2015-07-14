@@ -172,11 +172,11 @@
    :parent-collection collection
    :parent-id id})
 
-(defn- meta-close-all-features [features]
-  "{:action :close-all :dataset _ :collection _ :parent-collection _ :parent-id _ :end-time _"
+(defn- meta-close-childs [features]
+  "{:action :close-childs :dataset _ :collection _ :parent-collection _ :parent-id _ :end-time _"
   (let [grouped (group-by #(select-keys % [:dataset :collection :parent-collection :parent-id :validity]) features)]
     (letfn [(meta [dataset collection parent-collection parent-id validity]
-              {:action :close-all
+              {:action :close-childs
                :dataset dataset
                :collection collection
                :parent-collection parent-collection
@@ -194,10 +194,10 @@
           without-nested (apply dissoc attributes (map #(first %) nested))
           flat (assoc feature :attributes without-nested)
           linked-nested (map #(link-parent % feature) nested)
-          close-all (meta-close-all-features linked-nested)]
+          meta-close-childs (meta-close-childs linked-nested)]
       (if (empty? linked-nested)
         (list flat)
-        (cons flat (concat close-all (mapcat pre-process linked-nested))))
+        (cons flat (concat meta-close-childs (mapcat pre-process linked-nested))))
       ))
   )
 
@@ -212,7 +212,7 @@
         collected (assoc no-attributes :attributes collected)]
     collected))
 
-(defn- close-all* [processor dataset collection id end-time]
+(defn- close-childs* [processor dataset collection id end-time]
   (let [persistence (:persistence processor)
         validity (pers/current-validity persistence dataset collection id)
         state (pers/last-action persistence dataset collection id)]
@@ -224,7 +224,7 @@
                               :current-validity validity
                               :validity end-time}))))
 
-(defn- close-nested-meta [persistence dataset parent-collection parent-id end-time]
+(defn- close-nested-childs-meta [persistence dataset parent-collection parent-id end-time]
   (let [nested (pers/childs persistence dataset parent-collection parent-id)
         metas (map (fn [[col id]] {:dataset dataset
                                   :collection col
@@ -233,13 +233,13 @@
                                   :end-time end-time}) nested)]
     metas))
 
-(defn- close-all [processor meta-record]
+(defn- close-childs [processor meta-record]
   (let [{:keys [dataset collection parent-collection parent-id end-time]} meta-record
         persistence (:persistence processor)
         ids (pers/childs persistence dataset parent-collection parent-id collection)
-        nested-metas (mapcat #(close-nested-meta persistence dataset collection % end-time) ids)
-        closed-nesteds (doall (mapcat #(close-all processor %) nested-metas))
-        closed (doall (mapcat #(close-all* processor dataset collection % end-time) ids))]
+        nested-metas (mapcat #(close-nested-childs-meta persistence dataset collection % end-time) ids)
+        closed-nesteds (doall (mapcat #(close-childs processor %) nested-metas))
+        closed (doall (mapcat #(close-childs* processor dataset collection % end-time) ids))]
     (concat closed-nesteds closed)))
 
 (defn- delete-child* [processor dataset collection id]
@@ -277,7 +277,7 @@
           :nested-new (process-nested-new-feature processor vf)
           :nested-change (process-nested-new-feature processor vf)
           :nested-close  (process-nested-close-feature processor vf)
-          :close-all (close-all processor vf);; should save this too... So we can backtrack actions. Right?
+          :close-childs (close-childs processor vf);; should save this too... So we can backtrack actions. Right?
           :delete-childs (delete-childs processor vf)
           (make-invalid vf (str "Unknown action:" (:action vf))))]
     processed))
