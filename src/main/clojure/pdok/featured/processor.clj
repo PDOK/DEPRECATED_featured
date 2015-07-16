@@ -67,6 +67,33 @@
       feature))
   )
 
+(defn- validate [{:keys [persistence]} feature]
+  (condp contains? (:action feature)
+    #{:new :nested-new}
+    (let [validated  (->> feature
+                          (apply-all-features-validation persistence)
+                          (apply-new-feature-requires-non-existing-stream-validation persistence))]
+      validated)
+    #{:change :nested-change}
+    (->> feature
+         (apply-all-features-validation persistence)
+         (apply-non-new-feature-requires-existing-stream-validation persistence)
+         (apply-closed-feature-cannot-be-changed-validation persistence)
+         (apply-non-new-feature-current-validity-validation persistence))
+    #{:close :nested-close}
+    (->> feature
+         (apply-all-features-validation persistence)
+         (apply-closed-feature-cannot-be-changed-validation persistence)
+         (apply-non-new-feature-requires-existing-stream-validation persistence)
+         (apply-non-new-feature-current-validity-validation persistence))
+    #{:delete}
+    (->> feature
+         (apply-all-features-validation persistence)
+         (apply-non-new-feature-requires-existing-stream-validation persistence)
+         (apply-non-new-feature-current-validity-validation persistence))
+    feature
+    ))
+
 (defn- with-current-version [persistence feature]
   (if-not (:invalid? feature)
     (let [{:keys [dataset collection id]} feature]
@@ -74,49 +101,33 @@
     feature))
 
 (defn- process-new-feature [{:keys [persistence projectors]} feature]
-  (let [validated (->> feature
-                       (apply-all-features-validation persistence)
-                       (apply-new-feature-requires-non-existing-stream-validation persistence))]
-    (when-not (:invalid? validated)
-      (let [{:keys [dataset collection id validity geometry attributes]} validated]
-        (pers/create-stream persistence dataset collection id
-                            (:parent-collection feature) (:parent-id feature) (:parent-field feature))
-        (append-feature persistence validated)
-        (doseq [p projectors] (proj/new-feature p validated))))
-    validated))
+  (let [{:keys [dataset collection id validity geometry attributes]} feature]
+      (pers/create-stream persistence dataset collection id
+                          (:parent-collection feature) (:parent-id feature) (:parent-field feature))
+      (append-feature persistence feature)
+      (doseq [p projectors] (proj/new-feature p feature)))
+  feature)
 
 (defn- process-nested-new-feature [processor feature]
   (process-new-feature processor (assoc feature :action :new)))
 
 (defn- process-change-feature [{:keys [persistence projectors]} feature]
-  (let [validated (->> feature
-                       (apply-all-features-validation persistence)
-                       (apply-non-new-feature-requires-existing-stream-validation persistence)
-                       (apply-closed-feature-cannot-be-changed-validation persistence)
-                       (apply-non-new-feature-current-validity-validation persistence)
-                       (with-current-version persistence))]
-    (when-not (:invalid? validated)
-      (append-feature persistence validated)
-      (let [{:keys [dataset collection id current-validity validity geometry attributes]} validated]
-        (doseq [p projectors] (proj/change-feature p validated))))
-    validated))
+  (let [enriched-feature (->> feature
+                                  (with-current-version persistence))]
+    (append-feature persistence enriched-feature)
+    (doseq [p projectors] (proj/change-feature p enriched-feature))
+    enriched-feature))
 
 (defn- process-nested-change-feature [processor feature]
   "Nested change is the same a nested new"
   (process-new-feature processor (assoc feature :action :change)))
 
 (defn- process-close-feature [{:keys [persistence projectors]} feature]
-  (let [validated (->> feature
-                       (apply-all-features-validation persistence)
-                       (apply-closed-feature-cannot-be-changed-validation persistence)
-                       (apply-non-new-feature-requires-existing-stream-validation persistence)
-                       (apply-non-new-feature-current-validity-validation persistence)
-                       (with-current-version persistence))]
-    (when-not (:invalid? validated)
-      (append-feature persistence validated)
-      (let [{:keys [dataset collection id current-validity validity geometry attributes]} validated]
-        (doseq [p projectors] (proj/close-feature p validated))))
-    validated))
+  (let [enriched-feature (->> feature
+              (with-current-version persistence))]
+    (append-feature persistence enriched-feature)
+    (doseq [p projectors] (proj/close-feature p enriched-feature))
+    enriched-feature))
 
 (defn- process-nested-close-feature [processor feature]
   (let [nw (process-new-feature processor (assoc feature :action :new))
@@ -129,15 +140,11 @@
     (list nw (process-close-feature processor no-update-nw))))
 
 (defn- process-delete-feature [{:keys [persistence projectors]} feature]
-  (let [validated (->> feature
-                       (apply-all-features-validation persistence)
-                       (apply-non-new-feature-requires-existing-stream-validation persistence)
-                       (apply-non-new-feature-current-validity-validation persistence)
+  (let [enriched-feature (->> feature
                        (with-current-version persistence))]
-    (when-not (:invalid? validated)
-      (append-feature persistence validated)
-      (doseq [p projectors] (proj/delete-feature p validated)))
-    validated))
+    (append-feature persistence enriched-feature)
+    (doseq [p projectors] (proj/delete-feature p enriched-feature))
+    enriched-feature))
 
 (defn- nested-features [attributes]
   (letfn [( flat-multi [[key values]] (map #(vector key %) values))]
@@ -186,7 +193,7 @@
              (meta dataset collection parent-collection parent-id validity)) grouped)
       )))
 
-(defn- flatten [feature]
+(defn- flatten [processor feature]
   (if (= :delete (:action feature))
     (list feature (meta-delete-childs feature))
     (let [attributes (:attributes feature)
@@ -197,7 +204,7 @@
           meta-close-childs (meta-close-childs linked-nested)]
       (if (empty? linked-nested)
         (list flat)
-        (cons flat (concat meta-close-childs (mapcat pre-process linked-nested))))
+        (cons flat (concat meta-close-childs (mapcat (partial pre-process processor) linked-nested))))
       ))
   )
 
@@ -264,20 +271,22 @@
 
 (defn process [processor feature]
   "Processes feature event. Should return the feature, possibly with added data"
-  (let [vf (assoc feature :version (random/UUID))
-        processed
-        (condp = (:action vf)
-          :new (process-new-feature processor vf)
-          :change (process-change-feature processor vf)
-          :close (process-close-feature processor vf)
-          :delete (process-delete-feature processor vf)
-          :nested-new (process-nested-new-feature processor vf)
-          :nested-change (process-nested-new-feature processor vf)
-          :nested-close  (process-nested-close-feature processor vf)
-          :close-childs (close-childs processor vf);; should save this too... So we can backtrack actions. Right?
-          :delete-childs (delete-childs processor vf)
-          (make-invalid vf (str "Unknown action:" (:action vf))))]
-    processed))
+  (if (:invalid? feature)
+    feature
+    (let [vf (assoc feature :version (random/UUID))
+          processed
+          (condp = (:action vf)
+            :new (process-new-feature processor vf)
+            :change (process-change-feature processor vf)
+            :close (process-close-feature processor vf)
+            :delete (process-delete-feature processor vf)
+            :nested-new (process-nested-new-feature processor vf)
+            :nested-change (process-nested-new-feature processor vf)
+            :nested-close  (process-nested-close-feature processor vf)
+            :close-childs (close-childs processor vf);; should save this too... So we can backtrack actions. Right?
+            :delete-childs (delete-childs processor vf)
+            (make-invalid vf (str "Unknown action:" (:action vf))))]
+      processed)))
 
 
 (defn rename-keys [src-map change-key]
@@ -292,8 +301,11 @@
       feature-lower-case
       (update-in feature-lower-case [:collection] str/lower-case))))
 
-(defn pre-process [feature]
-   ((comp flatten lower-case collect-attributes) feature))
+(defn pre-process [processor feature]
+  (let [validated ((comp (partial validate processor) lower-case collect-attributes) feature)]
+    (if (:invalid? validated)
+      (vector validated)
+      (flatten processor validated))))
 
 (defmulti consume (fn [_ features] (type features)))
 
@@ -303,7 +315,7 @@
     feature))
 
 (defmethod consume clojure.lang.IPersistentMap [processor feature]
-  (let [pre-processed (pre-process feature)
+  (let [pre-processed (pre-process processor feature)
         consumed (filter (complement nil?) (mapcat #(make-seq (process processor %)) pre-processed))]
     consumed))
 
