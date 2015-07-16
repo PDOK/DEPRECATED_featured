@@ -297,9 +297,11 @@
 (defn lower-case [feature]
   (let [attributes-lower-case (rename-keys (:attributes feature) clojure.string/lower-case)
         feature-lower-case (assoc feature :attributes attributes-lower-case)]
-    (if (str/blank? (:collection feature-lower-case))
-      feature-lower-case
-      (update-in feature-lower-case [:collection] str/lower-case))))
+    (cond-> feature-lower-case
+            ((complement str/blank?) (:collection feature-lower-case))
+            (update-in [:collection] str/lower-case)
+            ((complement str/blank?) (:dataset feature-lower-case))
+            (update-in [:dataset] str/lower-case))))
 
 (defn pre-process [processor feature]
   (let [validated ((comp (partial validate processor) lower-case collect-attributes) feature)]

@@ -4,7 +4,8 @@
             [pdok.postgres :as pg]
             [clojure.core.cache :as cache]
             [clojure.java.jdbc :as j]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [clojure.tools.logging :as log]))
 
 (defprotocol Projector
   (init [proj])
@@ -80,7 +81,8 @@
   (let [table (visualization dataset collection)]
     (try
       (pg/add-column db dataset table attribute-name attribute-type)
-      (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
+      (catch java.sql.SQLException e
+        (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e))))))
 
 (defn- feature-to-sparse-record [feature all-fields-constructor]
   (let [id (:id feature)
@@ -139,7 +141,8 @@
                                    (map pg/quoted all-attributes))]
                 (apply (partial j/insert! c (str dataset "." (pg/quoted (visualization dataset collection))) fields)
                        records))))))
-      (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
+     (catch java.sql.SQLException e
+       (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e))))))
 
 
 (defn- gs-update-sql [schema table columns]
@@ -151,7 +154,8 @@
   (try
     (let [sql (gs-update-sql dataset (visualization dataset collection) (map name columns))]
       (j/execute! db (cons sql update-vals) :multi? true :transaction? false))
-      (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
+    (catch java.sql.SQLException e
+      (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e)))))
 
 (defn- gs-update-feature [db features]
     (let [selector (juxt :dataset :collection)
