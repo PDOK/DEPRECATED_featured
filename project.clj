@@ -52,13 +52,13 @@
                  [log4j/log4j "1.2.17"]
                  [postgresql "9.3-1102.jdbc41"]
                  [prismatic/schema "0.4.3"]
-                 [ring/ring-defaults "0.1.2"]
+                 [ring/ring-defaults "0.1.5"]
                  [ring/ring-json "0.3.1"]
                  [xalan/xalan "2.7.2"]]
   :plugins [[lein-environ "1.0.0"]
             [lein-ring "0.9.6" ]
             [lein-filegen "0.1.0-SNAPSHOT"]]
-  :ring {:handler pdok.featured.core/app
+  :ring {:handler pdok.featured.api/app
          :uberwar-name ~uberwar-name}
   :main ^:skip-aot pdok.featured.core
   :target-path "target/%s"

@@ -6,9 +6,7 @@
              [processor :as processor :refer [consume shutdown]]
              [generator :refer [random-json-feature-stream]]]
             [clojure.tools.cli :refer [parse-opts]]
-            [clojure.tools.logging :as log]
-            [compojure.core :as compojure]
-            [ring.middleware.json :as middleware])
+            [clojure.tools.logging :as log])
   (:gen-class))
 
 (declare cli-options)
@@ -28,10 +26,6 @@
                   (shutdown processor))))))
   (log/info "done")
   )
-
-(def app (->(compojure/routes (api/rest-handler))
-            (middleware/wrap-json-body {:keywords? true :bigdecimals? true})
-            (middleware/wrap-json-response)))
 
 (defn -main [& args]
 ;  (println "ENV-test" (config/env :pdok-test))

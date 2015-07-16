@@ -8,13 +8,14 @@
             [clojure.java.io :as io]
             [clojure.string :as string]
             [compojure.core :refer :all]
-            [compojure.handler :as handler]
             [compojure.route :as route]
             [org.httpkit.client :as http]
             [pdok.featured
              [config :as config]
              [processor :as processor :refer [consume shutdown]]
              [json-reader :as reader]]
+            [ring.middleware.defaults :refer :all]
+            [ring.middleware.json :refer :all]
             [ring.util.response :as r]
             [schema.core :as s]))
 
@@ -86,5 +87,9 @@
                      :processed []})]
     (go (while true (process* stats cc (<! pc))))
     (go (while true (apply callbacker (<! cc))))
-    (handler/api (api-routes pc cc stats)))
-      )
+    (-> (api-routes pc cc stats)
+        (wrap-json-body {:keywords? true :bigdecimals? true})
+        (wrap-json-response)
+        (wrap-defaults api-defaults))))
+
+(def app (routes (rest-handler)))
