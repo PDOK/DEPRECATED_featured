@@ -182,7 +182,9 @@
        (doseq [[[dataset collection] collection-features] per-dataset-collection]
         (let [sql (gs-delete-sql dataset (visualization dataset collection))
               ids (map #(vector (:id %1) (:current-version %1)) collection-features)]
-          (j/execute! db (cons sql ids) :multi? true :transaction? false))))))
+          (j/execute! db (cons sql ids) :multi? true :transaction? false))))
+    (catch java.sql.SQLException e
+      (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e)))))
 
 (defn- flush-all [db cache insert-batch update-batch delete-batch]
   "Used for flushing all batches, so entry order is alway new change close"

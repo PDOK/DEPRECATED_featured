@@ -85,38 +85,46 @@
   ([db dataset collection id parent-collection parent-id parent-field]
    (jdbc-create-stream db (list [dataset collection id parent-collection parent-id parent-field])))
   ([db entries]
-   (j/with-db-connection [c db]
-     (apply ( partial j/insert! c (qualified-features) :transaction? false?
-                      [:dataset :collection :feature_id :parent_collection :parent_id :parent_field])
-            entries))))
+   (try (j/with-db-connection [c db]
+          (apply ( partial j/insert! c (qualified-features) :transaction? false?
+                           [:dataset :collection :feature_id :parent_collection :parent_id :parent_field])
+                 entries))
+        (catch java.sql.SQLException e
+          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))))))
 
 (defn- jdbc-load-childs-cache [db dataset parent-collection]
-  (j/with-db-connection [c db]
-    (let [results
-          (j/query c [(str "SELECT parent_id, collection, feature_id FROM " (qualified-features)
-                           " WHERE dataset = ?  AND parent_collection = ?")
-                      dataset parent-collection])
-          per-id (group-by :parent_id results)
-          for-cache (map (fn [[parent-id values]]
-                           [[dataset parent-collection parent-id]
-                            (map (juxt :collection :feature_id) values)]) per-id)]
-      for-cache)))
+  (try (j/with-db-connection [c db]
+         (let [results
+               (j/query c [(str "SELECT parent_id, collection, feature_id FROM " (qualified-features)
+                                " WHERE dataset = ?  AND parent_collection = ?")
+                           dataset parent-collection])
+               per-id (group-by :parent_id results)
+               for-cache (map (fn [[parent-id values]]
+                                [[dataset parent-collection parent-id]
+                                 (map (juxt :collection :feature_id) values)]) per-id)]
+           for-cache))
+       (catch java.sql.SQLException e
+          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
 
 (defn- jdbc-get-childs-for-collection [db dataset parent-collection parent-id child-collection]
-  (j/with-db-connection [c db]
-    (let [results
-          (j/query c [(str "SELECT feature_id FROM " (qualified-features)
-" WHERE dataset = ? AND parent_collection = ?  AND parent_id = ? AND collection = ?")
-                      dataset parent-collection parent-id child-collection] :as-arrays? true)]
-      (drop 1 results))))
+  (try (j/with-db-connection [c db]
+         (let [results
+               (j/query c [(str "SELECT feature_id FROM " (qualified-features)
+                                " WHERE dataset = ? AND parent_collection = ?  AND parent_id = ? AND collection = ?")
+                           dataset parent-collection parent-id child-collection] :as-arrays? true)]
+           (drop 1 results)))
+       (catch java.sql.SQLException e
+          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
 
 (defn- jdbc-get-childs [db dataset parent-collection parent-id]
-  (j/with-db-connection [c db]
-    (let [results
-          (j/query c [(str "SELECT feature_id FROM " (qualified-features)
-" WHERE dataset = ? AND parent_collection = ?  AND parent_id = ?")
-                      dataset parent-collection parent-id] :as-arrays? true)]
-      (drop 1 results))))
+  (try (j/with-db-connection [c db]
+         (let [results
+               (j/query c [(str "SELECT feature_id FROM " (qualified-features)
+                                " WHERE dataset = ? AND parent_collection = ?  AND parent_id = ?")
+                           dataset parent-collection parent-id] :as-arrays? true)]
+           (drop 1 results)))
+       (catch java.sql.SQLException e
+          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
 
 (defn- jdbc-load-parent-cache [db dataset collection]
   (j/with-db-connection [c db]
@@ -130,13 +138,15 @@
       for-cache)))
 
 (defn- jdbc-get-parent [db dataset collection id]
-  (j/with-db-connection [c db]
-    (let [result
-          (j/query c [(str "SELECT parent_collection, parent_id FROM " (qualified-features)
-                           " WHERE dataset = ? AND collection = ? AND feature_id = ?"
-                           " AND parent_collection is not null")
-                      dataset collection id] :as-arrays? true)]
-      (first result))))
+  (try (j/with-db-connection [c db]
+         (let [result
+               (j/query c [(str "SELECT parent_collection, parent_id FROM " (qualified-features)
+                                " WHERE dataset = ? AND collection = ? AND feature_id = ?"
+                                " AND parent_collection is not null")
+                           dataset collection id] :as-arrays? true)]
+           (first result)))
+       (catch java.sql.SQLException e
+          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
 
 (defn- jdbc-insert
   ([db version action dataset collection id validity geometry attributes]
@@ -148,36 +158,41 @@
                     [:version :action :dataset :collection :feature_id :validity :geometry :attributes])
            entries)
             )
-        (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
+        (catch java.sql.SQLException e
+          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))))))
 
 (defn- jdbc-load-cache [db dataset collection]
-  (let [results
-        (j/with-db-connection [c db]
-          (j/query c [(str "SELECT dataset, collection, feature_id, validity, action, version FROM (
+  (try (let [results
+             (j/with-db-connection [c db]
+               (j/query c [(str "SELECT dataset, collection, feature_id, validity, action, version FROM (
  SELECT dataset, collection, feature_id, action, validity, version,
  row_number() OVER (PARTITION BY dataset, collection, feature_id ORDER BY id DESC) AS rn
  FROM " (qualified-feature-stream)
-" WHERE dataset = ? AND collection = ?) a
+ " WHERE dataset = ? AND collection = ?) a
 WHERE rn = 1")
-                      dataset collection] :as-arrays? true))]
-    (map (fn [[dataset collection id validity action version]] [[dataset collection id]
-                                                               [validity (keyword action) version]] )
-         (drop 1 results))
-    ))
+                           dataset collection] :as-arrays? true))]
+         (map (fn [[dataset collection id validity action version]] [[dataset collection id]
+                                                                    [validity (keyword action) version]] )
+              (drop 1 results))
+         )
+       (catch java.sql.SQLException e
+          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
 
 (defn- jdbc-current-stream-state
   [db dataset collection id]
   "Returns the last action, validity and version"
-   (j/with-db-connection [c db]
-     (let [results
-           (j/query c ["SELECT action, validity, version FROM (
+  (try (j/with-db-connection [c db]
+         (let [results
+               (j/query c ["SELECT action, validity, version FROM (
  SELECT action, validity,
  row_number() OVER (PARTITION BY dataset, collection, feature_id ORDER BY id DESC) AS rn
  FROM " (qualified-feature-stream)
-" WHERE dataset = ? AND collection = ? AND feature_id = ?) a
+ " WHERE dataset = ? AND collection = ? AND feature_id = ?) a
 WHERE rn = 1"
-                       dataset collection id] :as-arrays? true)]
-       (first (drop 1 results)))))
+ dataset collection id] :as-arrays? true)]
+           (first (drop 1 results))))
+       (catch java.sql.SQLException e
+          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
 
 (deftype JdbcProcessorPersistence [db]
   ProcessorPersistence

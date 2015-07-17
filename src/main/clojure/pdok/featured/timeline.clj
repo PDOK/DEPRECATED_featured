@@ -8,6 +8,7 @@
             [clojure.java.jdbc :as j]
             [clojure.core.cache :as cache]
             [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [clj-time.core :as t]))
 
 (defn indices-of [f coll]
@@ -64,31 +65,37 @@
   (str (name *timeline-schema*) "." (name *current-table*)))
 
 (defn current [db dataset collection]
-  (j/with-db-connection [c db]
-    (let [results
-          (j/query c [(str "SELECT tiles, feature FROM " (qualified-current)
-                           " WHERE dataset = ? AND collection = ? AND valid_to is null")
-                      dataset collection] :as-arrays? true)
-          current (map (fn [[t f]] (vector t (pg/from-json f))) (drop 1 results))]
-      current)))
+  (try (j/with-db-connection [c db]
+         (let [results
+               (j/query c [(str "SELECT tiles, feature FROM " (qualified-current)
+                                " WHERE dataset = ? AND collection = ? AND valid_to is null")
+                           dataset collection] :as-arrays? true)
+               current (map (fn [[t f]] (vector t (pg/from-json f))) (drop 1 results))]
+           current))
+       (catch java.sql.SQLException e
+          (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
 (defn closed [db dataset collection]
-  (j/with-db-connection [c db]
-    (let [results
-          (j/query c [(str "SELECT tiles, feature FROM " (qualified-current)
-                           " WHERE dataset = ? AND collection = ? AND valid_to is not null")
-                      dataset collection] :as-arrays? true)
-          current (map (fn [[t f]] (vector t (pg/from-json f))) (drop 1 results))]
-      current)))
+  (try (j/with-db-connection [c db]
+         (let [results
+               (j/query c [(str "SELECT tiles, feature FROM " (qualified-current)
+                                " WHERE dataset = ? AND collection = ? AND valid_to is not null")
+                           dataset collection] :as-arrays? true)
+               current (map (fn [[t f]] (vector t (pg/from-json f))) (drop 1 results))]
+           current))
+       (catch java.sql.SQLException e
+          (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
 (defn history [db dataset collection]
-  (j/with-db-connection [c db]
-    (let [results
-          (j/query c [(str "SELECT tiles, feature FROM " (qualified-history)
-                           " WHERE dataset = ? AND collection = ?")
-                      dataset collection] :as-arrays? true)
-          current (map (fn [[t f]] (vector t (pg/from-json f))) (drop 1 results))]
-      current)))
+  (try (j/with-db-connection [c db]
+         (let [results
+               (j/query c [(str "SELECT tiles, feature FROM " (qualified-history)
+                                " WHERE dataset = ? AND collection = ?")
+                           dataset collection] :as-arrays? true)
+               current (map (fn [[t f]] (vector t (pg/from-json f))) (drop 1 results))]
+           current))
+       (catch java.sql.SQLException e
+          (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
 (defn- init-root
   ([feature]
@@ -167,7 +174,8 @@ VALUES (?, ?, ? ,?, ?, ?, ?, ?)"))
                               :_valid_from :_valid_to pg/to-json :_tiles)
            records (map transform-fn features)]
        (j/execute! db (cons (new-current-sql) records) :multi? true :transaction? false))
-      (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
+     (catch java.sql.SQLException e
+       (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
   )
 
 ;; (defn- get-current [db dataset collection id]
@@ -184,13 +192,15 @@ VALUES (?, ?, ? ,?, ?, ?, ?, ?)"))
   )
 
 (defn- load-current-feature-cache [db dataset collection]
-  (j/with-db-connection [c db]
-    (let [results
-          (j/query c [(load-current-feature-cache-sql)
-                      dataset collection] :as-arrays? true)
-          for-cache
-          (map (fn [[ds col fid f]] [ [ds col fid]] (pg/from-json f) ) (drop 1 results))]
-      for-cache)))
+  (try (j/with-db-connection [c db]
+         (let [results
+               (j/query c [(load-current-feature-cache-sql)
+                           dataset collection] :as-arrays? true)
+               for-cache
+               (map (fn [[ds col fid f]] [ [ds col fid]] (pg/from-json f) ) (drop 1 results))]
+           for-cache))
+       (catch java.sql.SQLException e
+          (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
 (defn- delete-current-sql []
   (str "DELETE FROM " (qualified-current)
@@ -200,7 +210,8 @@ VALUES (?, ?, ? ,?, ?, ?, ?, ?)"))
   (try
     (let [records (map #(vector %) versions)]
       (j/execute! db (cons (delete-current-sql) records) :multi? true :transaction? false))
-    (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
+     (catch java.sql.SQLException e
+       (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
 (defn- new-history-sql []
   (str "INSERT INTO " (qualified-history) " (dataset, collection, feature_id, version, valid_from, valid_to, feature, tiles)
@@ -211,7 +222,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
     (let [transform-fn (juxt :_dataset :_collection :_id :_version :_valid_from :_valid_to pg/to-json :_tiles)
           records (map transform-fn features)]
       (j/execute! db (cons (new-history-sql) records) :multi? true :transaction? false))
-    (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
+     (catch java.sql.SQLException e
+       (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
 (defn- delete-history-sql []
   (str "DELETE FROM " (qualified-history)
@@ -221,7 +233,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
   (try
     (let [records (map (juxt :_all_versions) features)]
       (j/execute! db (cons (delete-history-sql) records) :multi? true :transaction? false))
-    (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
+     (catch java.sql.SQLException e
+       (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
 (defn- feature-key [feature]
   [(:dataset feature) (:collection feature) (:id feature)])
