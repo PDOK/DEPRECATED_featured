@@ -36,7 +36,7 @@
 
 (def gml-object-with-hole {"type" "gml" "gml" gml-with-hole})
 
-(def gml-without-curves "<gml:Polygon xmlns:xlink=\"http://www.w3.org/1999/xlink\" xmlns:imgeo-s=\"http://www.geostandaarden.nl/imgeo/2.1/simple/gml31\" xmlns:gml=\"http://www.opengis.net/gml\"><gml:exterior><gml:LinearRing><gml:posList> 45000.0 65000.0 40000.0 65000.0 40000.0 60000.0 45000.0 60000.0 45000.0 65000.0 </gml:posList></gml:LinearRing></gml:exterior><gml:interior><gml:LinearRing><gml:posList> 43000.0 63000.0 42000.0 63000.0 42000.0 62000.0 43000.0 62000.0 43000.0 63000.0 </gml:posList></gml:LinearRing></gml:interior></gml:Polygon>")
+(def gml-without-curves "<gml:Polygon xmlns:xlink=\"http://www.w3.org/1999/xlink\" xmlns:imgeo-s=\"http://www.geostandaarden.nl/imgeo/2.1/simple/gml31\" xmlns:gml=\"http://www.opengis.net/gml\"><gml:exterior><gml:LinearRing><gml:posList> 45000.0 65000.0 40000.0 65000.0 40000.0 60000.0 45000.0 60000.0 45000.0 65000.0 </gml:posList></gml:LinearRing></gml:exterior><gml:interior><gml:LinearRing><gml:posList> 43000.0 63000.0 42000.0 63000.0 42000.0 62000.0 43000.0 62000.0 43000.0 63000.0 </gml:posList></gml:LinearRing></gml:interior><gml:interior><gml:LinearRing><gml:posList> 44000.0 63000.0 42000.0 63000.0 42000.0 62000.0 43000.0 62000.0 44000.0 63000.0 </gml:posList></gml:LinearRing></gml:interior></gml:Polygon>")
 (def gml-object-without-curves {"type" "gml" "gml" gml-without-curves})
 
 (defn test-transform [xsl] (transform xsl  gml-with-arc))
