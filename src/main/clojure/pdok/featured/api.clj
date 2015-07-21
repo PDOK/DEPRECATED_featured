@@ -43,7 +43,7 @@
   (http/post uri {:body (json/generate-string run-stats) :headers {"Content-Type" "application/json"}}))
 
 (defn- process* [stats callback-chan request]
-  (log/trace "Processsing: " request)
+  (log/info "Processsing: " request)
   (swap! stats assoc-in [:processing] request)
   (let [persistence (config/persistence)
         projectors (config/projectors persistence)
