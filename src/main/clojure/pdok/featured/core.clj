@@ -20,10 +20,9 @@
                     (processor/create persistence)
                     (processor/create persistence (config/projectors persistence)))]
     (with-open [s (file-stream json-file)]
-      (let [consumed (consume processor (features-from-stream s :dataset dataset-name))]
-        (time (do (log/info "Events processed:" (count consumed))
-                  (log/info "Shutting down.")
-                  (shutdown processor))))))
+      (dorun (consume processor (features-from-stream s :dataset dataset-name)))
+      (time (do (log/info "Shutting down.")
+                (shutdown processor)))))
   (log/info "done")
   )
 

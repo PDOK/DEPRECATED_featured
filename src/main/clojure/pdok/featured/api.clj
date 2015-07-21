@@ -45,30 +45,25 @@
 (defn- process* [stats callback-chan request]
   (log/trace "Processsing: " request)
   (swap! stats assoc-in [:processing] request)
-  (let [start-time (tl/local-now)
-        persistence (config/persistence)
+  (let [persistence (config/persistence)
         projectors (config/projectors persistence)
         processor (processor/create persistence projectors)]
     (try (with-open [in (io/input-stream (:file request))]
            (let [features (reader/features-from-stream in :dataset (:dataset request))
-                 consumed (consume processor features)
-                 n-processed (count consumed)
-                 _ (shutdown processor)
-                 end-time (tl/local-now)
-                 process-time (t/in-seconds (t/interval start-time end-time))
-                 run-stats (assoc request :n-processed n-processed :start-time start-time :end-time end-time
-                                  :process-time process-time)]
+                 _ (dorun (consume processor features))
+                 processor (shutdown processor)
+                 run-stats (assoc (:statistics processor) :request request)]
              (swap! stats update-in [:processed] #(conj % run-stats))
              (swap! stats assoc-in [:processing] nil)
              (when (:callback request)
-               (go (>! callback-chan [(:callback request) (-> run-stats (dissoc :callback))])))))
+               (go (>! callback-chan [(:callback request) run-stats])))))
          (catch Exception e
            (let [error-stats (assoc request :error (str e))]
              (log/warn error-stats)
              (swap! stats update-in [:errored] #(conj % error-stats))
              (swap! stats assoc-in [:processing] nil)
              (when (:callback request)
-               (go (>! callback-chan [(:callback request) (-> error-stats (dissoc :callback))])))))))
+               (go (>! callback-chan [(:callback request) error-stats])))))))
   )
 
 (defn- process [process-chan http-req]

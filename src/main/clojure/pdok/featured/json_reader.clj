@@ -59,7 +59,7 @@
 
 (defn- read-features [^JsonParser jp]
   (if (and (.nextToken jp) (not= (.getCurrentToken jp) JsonToken/END_ARRAY))
-    (lazy-seq (cons (parse-object jp) (read-features jp)))
+    (lazy-seq (cons (assoc (parse-object jp) :src :json) (read-features jp)))
     [])
   )
 

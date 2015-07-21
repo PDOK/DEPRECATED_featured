@@ -6,11 +6,12 @@
             [pdok.featured.json-reader :refer :all]
             [pdok.featured.projectors :as proj]
             [clj-time [core :as t] [local :as tl] [coerce :as tc]]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [clojure.tools.logging :as log])
   (:import  [pdok.featured.projectors GeoserverProjector]))
 
 (def ^:private pdok-fields [:action :id :dataset :collection :validity :version :geometry :current-validity
-                            :parent-id :parent-collection :parent-field :attributes])
+                            :parent-id :parent-collection :parent-field :attributes :src])
 
 (declare consume process pre-process append-feature)
 
@@ -316,20 +317,34 @@
     (pers/append-to-stream persistence version action dataset collection id validity geometry attributes)
     feature))
 
+(defn- update-statistics [{:keys [statistics]} feature]
+  (when statistics
+    (swap! statistics update :n-processed inc)
+    (when (:src feature) (swap! statistics update :n-src inc))
+    (when (:invalid? feature)
+      (swap! statistics update :n-errored inc)
+      (swap! statistics update :errored #(conj % (:id feature)))))
+  )
+
 (defmethod consume clojure.lang.IPersistentMap [processor feature]
   (let [pre-processed (pre-process processor feature)
         consumed (filter (complement nil?) (mapcat #(make-seq (process processor %)) pre-processed))]
+    (doseq [f consumed]
+      (if (:invalid? f) (log/warn (:id f) (:invalid-reasons f)))
+      (update-statistics processor f))
     consumed))
 
 (defmethod consume clojure.lang.ISeq [processor features]
   (mapcat #(consume processor %) features))
 
-(defn shutdown [{:keys [persistence projectors]}]
+(defn shutdown [{:keys [persistence projectors statistics]}]
   "Shutdown feature store. Make sure all data is processed and persisted"
   (let [closed-persistence (pers/close persistence)
-        closed-projectors (doall (map proj/close projectors))]
+        closed-projectors (doall (map proj/close projectors))
+        _ (when statistics (log/info @statistics))]
     {:persistence closed-persistence
-     :projectors closed-projectors}))
+     :projectors closed-projectors
+     :statistics (if statistics @statistics {})}))
 
 (defn add-projector [processor projector]
   (let [initialized-projector (proj/init projector)]
@@ -341,6 +356,7 @@
    (let [initialized-persistence (pers/init persistence)
          initialized-projectors (doall (map proj/init projectors))]
      {:persistence initialized-persistence
-      :projectors initialized-projectors})))
+      :projectors initialized-projectors
+      :statistics (atom {:n-src 0 :n-processed 0 :n-errored 0 :errored '()})})))
 
 ; features-from-stream
