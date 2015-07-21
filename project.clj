@@ -1,5 +1,6 @@
 (def feature-version (or (System/getenv "FEATURE_VERSION") "0.1"))
 (def build-number (or (System/getenv "BUILD_NUMBER") "HANDBUILT"))
+(def change-number (or (System/getenv "CHANGE_NUMBER") "031415"))
 (def release-version (str feature-version "." build-number))
 (def project-name "featured")
 (def uberjar-name (str project-name "-" release-version "-standalone.jar"))
@@ -66,7 +67,7 @@
   :java-source-paths ["src/main/java"]
   :resource-paths ["config" "src/main/resources"]
   :test-paths ["src/test/clojure"]
-  :filegen [{:data {:RELEASE_VERSION ~release-version}
+  :filegen [{:data {:RELEASE_VERSION ~release-version :CHANGE_NUMBER ~change-number}
              :template-fn (partial pdok.lein/generate-from-template "deployit-manifest.xml.template")
              :target "target/deployit-manifest.xml"}]
   :aliases {"build" ["do" ["compile"] ["test"]
