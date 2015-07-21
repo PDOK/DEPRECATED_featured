@@ -74,16 +74,22 @@
 (defn ^{:private false} transform [xslt gml] 
   (.transform xslt gml))
 
+(defn ^{:private false} transform-curves [gml]
+  (if (re-find #"curve|Curve" gml)
+         (transform xsl-curve2linearring gml)
+          gml))
+
+(defn parse-to-jts [gml]
+  (let [gml (-> gml (.getBytes "UTF-8"))
+        in (io/input-stream gml)]
+    (.parse gml3-parser in)))
+
 (defmulti as-jts (fn [obj] lower-case (get obj "type")))
 (defmethod as-jts :default [_] nil)
 (defmethod as-jts "gml" [obj]
   (let [gml (get obj "gml")
-        gml (if (re-find #"curve|Curve" gml)
-              (transform xsl-curve2linearring gml)
-              gml)
-        gml (-> gml strip-gml-ns (.getBytes "UTF-8"))
-        in (io/input-stream gml)]
-    (.parse gml3-parser in)))
+        gml (-> gml strip-gml-ns transform-curves)]
+    (parse-to-jts gml)))
 
 (defmethod as-jts "jts" [obj]
   (get obj "jts"))

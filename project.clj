@@ -31,7 +31,7 @@
   :dependencies [[cheshire "5.4.0"]
                  [clj-time "0.9.0"]
                  [com.cognitect/transit-clj "0.8.269"]
-                 [com.fasterxml.jackson.core/jackson-core "2.5.4"]
+                 [com.fasterxml.jackson.core/jackson-core "2.6.0"]
                  [com.fasterxml.uuid/java-uuid-generator "3.1.3"
                   :exclusions [[log4j]]]
                  [compojure "1.3.4"]
