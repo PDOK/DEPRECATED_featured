@@ -10,12 +10,12 @@
 
 (def joda-time-writer
   (transit/write-handler
-   (constantly "m")
+   (constantly "lm")
    (fn [v] (-> v tc/to-date .getTime))
    (fn [v] (-> v tc/to-date .getTime .toString))))
 
 (def joda-time-reader
-  (transit/read-handler #(tc/from-long (Long/parseLong %))))
+  (transit/read-handler #(-> % (tc/from-long) (tc/to-local-date-time))))
 
 (def joda-local-date-writer
   (transit/write-handler
@@ -36,10 +36,8 @@
   (swap! transit-read-handlers assoc prefix handler))
 
 (register-transit-write-handler org.joda.time.DateTime joda-time-writer)
-(register-transit-read-handler "m" joda-time-reader)
-
 (register-transit-write-handler org.joda.time.LocalDateTime joda-time-writer)
-(register-transit-read-handler "m" joda-time-reader)
+(register-transit-read-handler "lm" joda-time-reader)
 
 (register-transit-write-handler org.joda.time.LocalDate joda-local-date-writer)
 (register-transit-read-handler "ld" joda-local-date-reader)
@@ -121,9 +119,9 @@
 
 (extend-protocol j/IResultSetReadColumn
   java.sql.Date
-  (result-set-read-column [v _ _] (tc/from-sql-date v))
+  (result-set-read-column [v _ _] (tc/to-local-date (tc/from-sql-date v)))
   java.sql.Timestamp
-  (result-set-read-column [v _ _] (tc/from-sql-time v))
+  (result-set-read-column [v _ _] (tc/to-local-date-time (tc/from-sql-time v)))
   java.sql.Array
   (result-set-read-column [v _ _] (into [] (.getArray v))))
 
@@ -133,7 +131,7 @@
     clojure.lang.Keyword "text"
     clojure.lang.IPersistentMap "text"
     org.joda.time.DateTime "timestamp without time zone"
-    org.joda.time.DateTime "timestamp without time zone"
+    org.joda.time.LocalDateTime "timestamp without time zone"
     org.joda.time.LocalDate "date"
     java.lang.Integer "integer"
     java.lang.Double "double precision"

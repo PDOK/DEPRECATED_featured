@@ -197,7 +197,7 @@ VALUES (?, ?, ? ,?, ?, ?, ?, ?)"))
                (j/query c [(load-current-feature-cache-sql)
                            dataset collection] :as-arrays? true)
                for-cache
-               (map (fn [[ds col fid f]] [ [ds col fid]] (pg/from-json f) ) (drop 1 results))]
+               (map (fn [[ds col fid f]] [[ds col fid] (pg/from-json f)] ) (drop 1 results))]
            for-cache))
        (catch java.sql.SQLException e
           (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
