@@ -8,8 +8,9 @@
     <xsl:template match="Ring">
              <LinearRing>
                 <posList> 
-                   <xsl:for-each select=".//curveMember/Curve/segments/*">
+                   <xsl:for-each select=".//curveMember/Curve/segments/*|.//curveMember/LineString">
                          <xsl:value-of select=".//posList" />
+                         <xsl:text> </xsl:text>
                    </xsl:for-each>
                 </posList>
             </LinearRing>
@@ -20,6 +21,7 @@
                 <posList> 
                    <xsl:for-each select="//segments/*">
                          <xsl:value-of select=".//posList" />
+                         <xsl:text> </xsl:text>
                    </xsl:for-each>
                 </posList>
             </LineStringSegment>
