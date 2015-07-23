@@ -57,7 +57,8 @@
       (make-invalid feature "Non new feature requires: current-validity")
       (let [stream-validity (pers/current-validity persistence dataset collection id)]
         (if  (not= current-validity stream-validity)
-          (make-invalid feature "When updating current-validity should match")
+          (make-invalid feature
+                        (str  "When updating current-validity should match" current-validity " != " stream-validity))
           (apply-non-new-feature-current-validity<=validity-validation feature))))))
 
 (defn- apply-closed-feature-cannot-be-changed-validation [persistence feature]

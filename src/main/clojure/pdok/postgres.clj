@@ -4,7 +4,9 @@
             [cognitect.transit :as transit])
   (:import [com.vividsolutions.jts.geom Geometry]
            [com.vividsolutions.jts.io WKTWriter]
-           [java.io ByteArrayOutputStream ByteArrayInputStream]))
+           [java.io ByteArrayOutputStream ByteArrayInputStream]
+           [java.util Calendar TimeZone]
+           [org.joda.time DateTimeZone LocalDate LocalDateTime]))
 
 (def wkt-writer (WKTWriter.))
 
@@ -58,11 +60,14 @@
                                  {:handlers @transit-read-handlers})]
       (transit/read reader))))
 
+(def utcCal (Calendar/getInstance (TimeZone/getTimeZone "UTC")))
+(def nlZone (DateTimeZone/getDefault)) ;; used for reading datetimes, because postgres returns Z values
+
 (extend-protocol j/ISQLValue
   org.joda.time.DateTime
-  (sql-value [v] (tc/to-timestamp v))
+  (sql-value [v] (tc/to-sql-time v))
   org.joda.time.LocalDateTime
-  (sql-value [v] (tc/to-timestamp v))
+  (sql-value [v] (tc/to-sql-time v))
   org.joda.time.LocalDate
   (sql-value [v] (tc/to-sql-date v))
   com.vividsolutions.jts.geom.Geometry
@@ -73,6 +78,12 @@
   (sql-value [v] (to-json v)))
 
 (extend-protocol j/ISQLParameter
+  org.joda.time.LocalDateTime
+  (set-parameter [v ^java.sql.PreparedStatement s ^long i]
+    (.setTimestamp s i (j/sql-value v) utcCal))
+  org.joda.time.LocalDate
+  (set-parameter [v ^java.sql.PreparedStatement s ^long i]
+    (.setDate s i (j/sql-value v) utcCal))
   java.util.UUID
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
     (.setObject s i (j/sql-value v) java.sql.Types/OTHER))
@@ -119,9 +130,9 @@
 
 (extend-protocol j/IResultSetReadColumn
   java.sql.Date
-  (result-set-read-column [v _ _] (tc/to-local-date (tc/from-sql-date v)))
+  (result-set-read-column [v _ _] (LocalDate. v nlZone))
   java.sql.Timestamp
-  (result-set-read-column [v _ _] (tc/to-local-date-time (tc/from-sql-time v)))
+  (result-set-read-column [v _ _] (LocalDateTime. v nlZone))
   java.sql.Array
   (result-set-read-column [v _ _] (into [] (.getArray v))))
 
@@ -130,7 +141,7 @@
     nil "text"
     clojure.lang.Keyword "text"
     clojure.lang.IPersistentMap "text"
-    org.joda.time.DateTime "timestamp without time zone"
+    org.joda.time.DateTime "timestamp with time zone"
     org.joda.time.LocalDateTime "timestamp without time zone"
     org.joda.time.LocalDate "date"
     java.lang.Integer "integer"
