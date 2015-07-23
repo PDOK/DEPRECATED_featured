@@ -32,10 +32,10 @@
 (def ^{:private true} date-formatter (tf/formatter "yyyy-MM-dd"))
 
 (defn- parse-time
-  "Parses an ISO8601 date timestring to local date"
+  "Parses an ISO8601 date timestring to local date time"
   [datetimestring]
   (when-not (clojure.string/blank? datetimestring)
-    (tf/parse date-time-formatter datetimestring)))
+    (tc/to-local-date-time (tf/parse date-time-formatter datetimestring))))
 
 (defn- parse-date
   "Parses a date string to local date"
