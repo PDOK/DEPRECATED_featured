@@ -1,0 +1,9 @@
+<gml:Curve srsName="urn:ogc:def:crs:EPSG::28992" xmlns:gml="http://www.opengis.net/gml">\n 
+	<gml:segments>
+		\n 
+		<gml:LineStringSegment>
+			\n 
+			<gml:posList count="15" srsDimension="2">076492.094 453702.905 076597.300 453750.312 076599.693 453751.441 076602.252 453752.711 076605.353 453754.372 076608.285 453756.106 076611.245 453758.008 076614.154 453759.983 076628.035 453769.741 076630.984 453771.756 076633.898 453773.622 076636.980 453775.425 076640.113 453777.138 076669.505 453792.674 076765.562 453843.434</gml:posList>
+			\n </gml:LineStringSegment>\n </gml:segments>
+	\n 
+</gml:Curve>
