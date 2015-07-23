@@ -60,6 +60,8 @@
 (extend-protocol j/ISQLValue
   org.joda.time.DateTime
   (sql-value [v] (tc/to-timestamp v))
+  org.joda.time.LocalDateTime
+  (sql-value [v] (tc/to-timestamp v))
   org.joda.time.LocalDate
   (sql-value [v] (tc/to-sql-date v))
   com.vividsolutions.jts.geom.Geometry
