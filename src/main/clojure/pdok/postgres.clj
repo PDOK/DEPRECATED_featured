@@ -38,6 +38,9 @@
 (register-transit-write-handler org.joda.time.DateTime joda-time-writer)
 (register-transit-read-handler "m" joda-time-reader)
 
+(register-transit-write-handler org.joda.time.LocalDateTime joda-time-writer)
+(register-transit-read-handler "m" joda-time-reader)
+
 (register-transit-write-handler org.joda.time.LocalDate joda-local-date-writer)
 (register-transit-read-handler "ld" joda-local-date-reader)
 
@@ -59,6 +62,8 @@
 
 (extend-protocol j/ISQLValue
   org.joda.time.DateTime
+  (sql-value [v] (tc/to-timestamp v))
+  org.joda.time.LocalDateTime
   (sql-value [v] (tc/to-timestamp v))
   org.joda.time.LocalDate
   (sql-value [v] (tc/to-sql-date v))
@@ -127,6 +132,7 @@
     nil "text"
     clojure.lang.Keyword "text"
     clojure.lang.IPersistentMap "text"
+    org.joda.time.DateTime "timestamp without time zone"
     org.joda.time.DateTime "timestamp without time zone"
     org.joda.time.LocalDate "date"
     java.lang.Integer "integer"
