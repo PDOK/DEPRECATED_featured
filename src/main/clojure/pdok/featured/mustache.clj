@@ -1,6 +1,5 @@
 (ns pdok.featured.mustache
   (:require [clostache.parser :as clostache]
-            [stencil.core :as stencil]
             [pdok.featured.mustache-functions])
   (:gen-class))
 
