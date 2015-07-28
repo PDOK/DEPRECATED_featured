@@ -10,17 +10,24 @@
 
 (defn- template [template-dir dataset feature-type]
   (let [template-dir (if (empty? template-dir) "" (str template-dir "/"))]
-    (str template-dir dataset "-" feature-type ".template")))
+    (str template-dir dataset "/" feature-type ".mustache")))
 
 (defn- partials [template-dir dataset]
-  (let [partials-file (str template-dir dataset ".partials")
-        partials-file-exists? (.exists (clojure.java.io/as-file partials-file))]
-    (if partials-file-exists? (edn/read-string (slurp partials-file)) nil)))
+  (let [partials-dir (clojure.java.io/as-file (str template-dir "/" dataset "/partials"))
+        _ (println partials-dir)]
+    (if (.exists partials-dir)
+      (let [files (file-seq partials-dir)
+            partials (filter #(.endsWith (.getName %) ".mustache") files)]
+        (reduce (fn [acc val] (assoc acc
+                                    (keyword (clojure.string/replace (.getName val) ".mustache" ""))
+                                    (slurp val))) {} partials))
+      nil)))
 
 (defn features-for-extract [dataset feature-type features template-dir]
-  "Returns the rendered representation of the collection of features for a the given feature-type inclusive tiles-set"
+  "Returns the rendered representation of the collection of features for a given feature-type inclusive tiles-set"
   (let [template (template template-dir dataset feature-type)
-        partials (partials template-dir dataset)]
+        partials (partials template-dir dataset)
+        _ (println partials)]
     (map #(vector (tiles/nl (:geometry %)) (m/render-resource template % partials)) features)))
 
 (defn create-extract-collection [db dataset feature-type]

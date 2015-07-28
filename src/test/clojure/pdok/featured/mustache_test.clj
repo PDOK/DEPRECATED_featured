@@ -11,7 +11,7 @@
 (def example-gml-bgt-wegdeel
   "<gml:Surface srsName=\"urn:ogc:def:crs:EPSG::28992\"><gml:patches><gml:PolygonPatch><gml:exterior><gml:LinearRing><gml:posList srsDimension=\"2\" count=\"5\">172307.599 509279.740 172307.349 509280.920 172306.379 509280.670 172306.699 509279.490 172307.599 509279.740</gml:posList></gml:LinearRing></gml:exterior></gml:PolygonPatch></gml:patches></gml:Surface>"
    )
- 
+
 (def example-geometry-bgt-wegdeel {"gml" example-gml-bgt-wegdeel, "type" "gml"})
 
 (def example-attributes-bgt-wegdeel
@@ -26,7 +26,7 @@
     "lokaalID" "G0303.0979f33001fd319ae05332a1e90a5e0b"
     :kruinlijn {:geo example-geometry-bgt-wegdeel}})
 
-(def example-feature-bgt-wegdeel 
+(def example-feature-bgt-wegdeel
                     (merge
                     {"_action" "new"}
                     {:geometry example-geometry-bgt-wegdeel}
@@ -36,30 +36,28 @@
 
 (defn example-bgt-features [n] (repeat n example-feature-bgt-wegdeel))
 
-(defn render-wegdeel-with-bgt-example [n] 
-   (map (partial m/render-resource "src/test/resources/templates/test-wegdeel.template") 
+(defn render-wegdeel-with-bgt-example [n]
+   (map (partial m/render-resource "src/test/resources/templates/test/wegdeel.mustache")
       (example-bgt-features n)))
 
  (deftest test-features-mapping
    (is (= 5 (count(filter #(re-find #"G0303.0979f33001fd319ae05332a1e90a5e0b" %) (render-wegdeel-with-bgt-example 5)))))
    (is (= 5 (count(filter #(re-find #"<imgeo:inOnderzoek>false</imgeo:inOnderzoek>" %) (render-wegdeel-with-bgt-example 5))))))
 
- 
+
  (deftest test-features-gml-mapping
    (is (= 5 (count(filter #(re-find #"<gml:posList" %) (render-wegdeel-with-bgt-example 5))))))
- 
 
- (defn render-wegdeel-with-sets-with-bgt-example [n]   
-   (map (partial m/render-resource "src/test/resources/templates/test-dummy-set.template") 
+
+ (defn render-wegdeel-with-sets-with-bgt-example [n]
+   (map (partial m/render-resource "src/test/resources/templates/test/dummy-set.mustache")
       (example-bgt-features n)))
- 
+
  (deftest test-features-mapping-with-sets
    (is (= 2 (count (filter #(re-find #"<val>een</val>" %) (render-wegdeel-with-sets-with-bgt-example 2)))))
    (is (= 2 (count (filter #(re-find #"<val>drie</val>" %) (render-wegdeel-with-sets-with-bgt-example 2)))))
    )
-  
+
   (defn write-gml-files [n]
     (time (with-open [w (clojure.java.io/writer "target/features.gml.json")]
        (json/generate-stream {:features (render-wegdeel-with-bgt-example n)} w))))
-  
- 

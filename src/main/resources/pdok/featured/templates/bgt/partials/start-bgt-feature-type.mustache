@@ -1,0 +1,16 @@
+<creationDate>{{creationDate}}</creationDate>
+  <terminationDate>{{terminationDate}}{{terminationDate_leeg}}</terminationDate>
+  <imgeo:LV-publicatiedatum>{{LV-publicatiedatum}}</imgeo:LV-publicatiedatum>
+  <imgeo:relatieveHoogteligging>{{relatieveHoogteligging}}</imgeo:relatieveHoogteligging>
+  <imgeo:inOnderzoek>{{inOnderzoek}}{{inOnderzoek_leeg}}</imgeo:inOnderzoek>
+  {{#eindRegistratie}}<imgeo:eindRegistratie>{{.}}</imgeo:eindRegistratie>{{/eindRegistratie}}
+  <imgeo:tijdstipRegistratie>{{tijdstipRegistratie}}</imgeo:tijdstipRegistratie>
+  <imgeo:identificatie>
+    <imgeo:NEN3610ID>
+      <imgeo:namespace>NL.IMGeo</imgeo:namespace>
+        <imgeo:lokaalID>{{lokaalID}}</imgeo:lokaalID>
+    </imgeo:NEN3610ID>
+  </imgeo:identificatie>
+  <imgeo:bronhouder>{{bronhouder}}</imgeo:bronhouder>
+  <imgeo:bgt-status codeSpace="{{status_codespace}}">{{status}}{{status_leeg}}</imgeo:bgt-status>
+  <imgeo:plus-status codeSpace="{{plus-status_codespace}}">{{plus-status}}{{plus-status_leeg}}</imgeo:plus-status>

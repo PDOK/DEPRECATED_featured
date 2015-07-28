@@ -14,7 +14,7 @@
 
 (defn one-feature [] (list (test-feature "PDOK" "AAA" "BBB")))
 
-(defn two-features [] (list (test-feature "name1" "A" "B") 
+(defn two-features [] (list (test-feature "name1" "A" "B")
                              (test-feature "name2" "C" "D")))
 
 (deftest test-two-rendered-features
