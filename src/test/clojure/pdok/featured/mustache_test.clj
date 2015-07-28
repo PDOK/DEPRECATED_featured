@@ -37,7 +37,7 @@
 (defn example-bgt-features [n] (repeat n example-feature-bgt-wegdeel))
 
 (defn render-wegdeel-with-bgt-example [n]
-   (map (partial m/render-resource "src/test/resources/templates/test/wegdeel.mustache")
+   (map (partial m/render-resource "templates/test/wegdeel.mustache")
       (example-bgt-features n)))
 
  (deftest test-features-mapping
@@ -50,8 +50,9 @@
 
 
  (defn render-wegdeel-with-sets-with-bgt-example [n]
-   (map (partial m/render-resource "src/test/resources/templates/test/dummy-set.mustache")
-      (example-bgt-features n)))
+   (let [rendered (map (partial m/render-resource "templates/test/dummy-set.mustache")
+                       (example-bgt-features n))]
+     rendered))
 
  (deftest test-features-mapping-with-sets
    (is (= 2 (count (filter #(re-find #"<val>een</val>" %) (render-wegdeel-with-sets-with-bgt-example 2)))))

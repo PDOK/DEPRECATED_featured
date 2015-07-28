@@ -13,5 +13,4 @@
         rendered-features (map second (e/features-for-extract dataset feature-type features template-dir))
         num-features (count rendered-features)]
     (doseq [idx (take num-features (range num-features))]
-     (write-file "bgt" feature-type (get (vec rendered-features) idx) idx))))  
-
+     (write-file "bgt" feature-type (get (vec rendered-features) idx) idx))))

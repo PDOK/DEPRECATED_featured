@@ -1,20 +1,22 @@
 (ns pdok.featured.extracts
-   (:require [pdok.featured.mustache  :as m]
-             [pdok.postgres :as pg]
-             [pdok.featured.tiles :as tiles]
-             [pdok.featured.config :as config]
-             [pdok.featured.json-reader :as json-reader]
-             [clojure.edn :as edn]
-             [clojure.java.jdbc :as j]))
+  (:require [clojure.edn :as edn]
+            [clojure.java.jdbc :as j]
+            [clojure.string :as str]
+            [pdok.featured.config :as config]
+            [pdok.featured.json-reader :as json-reader]
+            [pdok.featured.mustache  :as m]
+            [pdok.featured.tiles :as tiles]
+            [pdok.postgres :as pg]))
 
 
-(defn- template [template-dir dataset feature-type]
-  (let [template-dir (if (empty? template-dir) "" (str template-dir "/"))]
-    (str template-dir dataset "/" feature-type ".mustache")))
+(defn- template [templates-dir dataset feature-type]
+  (let [template-file (clojure.java.io/as-file (str templates-dir "/" dataset "/" feature-type ".mustache"))]
+    (if (.exists template-file)
+      {:name (str feature-type) :template (slurp template-file)}
+      nil)))
 
-(defn- partials [template-dir dataset]
-  (let [partials-dir (clojure.java.io/as-file (str template-dir "/" dataset "/partials"))
-        _ (println partials-dir)]
+(defn- partials [templates-dir dataset]
+  (let [partials-dir (clojure.java.io/as-file (str templates-dir "/" dataset "/partials"))]
     (if (.exists partials-dir)
       (let [files (file-seq partials-dir)
             partials (filter #(.endsWith (.getName %) ".mustache") files)]
@@ -23,12 +25,11 @@
                                     (slurp val))) {} partials))
       nil)))
 
-(defn features-for-extract [dataset feature-type features template-dir]
+(defn features-for-extract [dataset feature-type features templates-dir]
   "Returns the rendered representation of the collection of features for a given feature-type inclusive tiles-set"
-  (let [template (template template-dir dataset feature-type)
-        partials (partials template-dir dataset)
-        _ (println partials)]
-    (map #(vector (tiles/nl (:geometry %)) (m/render-resource template % partials)) features)))
+  (let [template (template templates-dir dataset feature-type)
+        partials (partials templates-dir dataset)]
+    (map #(vector (tiles/nl (:geometry %)) (m/render template % partials)) features)))
 
 (defn create-extract-collection [db dataset feature-type]
   (let [table feature-type]

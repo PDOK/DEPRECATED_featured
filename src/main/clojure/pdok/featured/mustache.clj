@@ -1,5 +1,6 @@
 (ns pdok.featured.mustache
-  (:require [clostache.parser :as clostache]
+  (:require [stencil.core :as stencil]
+            [stencil.loader :as loader]
             [pdok.featured.mustache-functions])
   (:gen-class))
 
@@ -24,16 +25,20 @@
 (defn lookup-proxy [obj]
   (reify
     clojure.lang.ILookup
-      (valAt [_ k] (val-at k obj))
+      (valAt [_ k] (val-at k nil))
+      (valAt [_ k not-found] (if-let [v (val-at k obj)] v not-found))
     clojure.lang.IPersistentCollection
       (cons [_ o](lookup-proxy (conj obj o)))
       (seq [this] (if-not (clojure.string/blank? (str obj)) (list obj) nil))
+    clojure.lang.Associative
+      (containsKey [_ key] (if (val-at key obj) true false))
     Object
       (toString [_] (str obj))))
 
 
 (defn collection-proxy [obj]
   (reify
+    clojure.lang.Sequential
     clojure.lang.ILookup
       (valAt [_ k] (val-at k obj))
     clojure.lang.IPersistentCollection
@@ -42,17 +47,30 @@
     Object
       (toString [_] (str obj))))
 
-(defn render [template feature partials]
-   (if (nil? partials)
-     (clostache/render template (lookup-proxy feature))
-     (clostache/render template (lookup-proxy feature) partials)))
+(def ^{:private true} registered-templates (atom #{}))
+(def ^{:private true} registered-partials (atom #{}))
+
+(defn register-template [key value]
+  (if-not (contains? @registered-templates key)
+    (loader/register-template (name key) value)
+    (swap! registered-templates conj key)))
+
+(defn register-partial [key value]
+  (if-not (contains? @registered-partials key)
+    (loader/register-template (name key) value)
+    (swap! registered-partials conj key)))
+
+(defn render
+  ([template feature] (render template nil))
+  ([{:keys [name template]} feature partials]
+   (if-not (nil? partials)
+     (doseq [[k v] partials] (register-partial k v)))
+   (register-template name template)
+   (stencil/render-file name (lookup-proxy feature))))
 
 (defn render-resource
   ([path feature]
-     (render-resource path feature nil))
-  ([path feature partials]
-     (let [template (slurp path)]
-       (render template feature partials))))
+   (stencil/render-file path (lookup-proxy feature))))
 
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))

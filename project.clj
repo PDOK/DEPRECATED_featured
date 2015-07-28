@@ -36,7 +36,7 @@
                  [com.fasterxml.uuid/java-uuid-generator "3.1.3"
                   :exclusions [[log4j]]]
                  [compojure "1.3.4"]
-                 [de.ubercode.clostache/clostache "1.4.0"]
+                 [stencil "0.4.0"]
                  [environ "1.0.0"]
                  [http-kit "2.1.18"]
                  [org.clojure/clojure "1.7.0"]
