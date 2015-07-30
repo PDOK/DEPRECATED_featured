@@ -30,6 +30,7 @@
   (let [features (file-to-features path dataset)
         features-for-extract (features-for-extract dataset feature-type features template-dir)
         ]
-    (add-extract-records dataset feature-type features-for-extract)))
+    (add-extract-records dataset feature-type "citygml" 15 features-for-extract)))
+
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))

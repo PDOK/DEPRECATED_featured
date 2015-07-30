@@ -6,6 +6,7 @@
 
 
 (def gml-with-hole (slurp (resource "gml/gml-with-hole.gml")))
+
 (def gml-object-with-hole {"type" "gml" "gml" gml-with-hole})
 
 (def gml-with-arc (slurp (resource "gml/gml-with-arc.gml")))
