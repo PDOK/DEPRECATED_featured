@@ -9,6 +9,8 @@
             [pdok.postgres :as pg]))
 
 
+(def ^{:private true } extract-schema "extracten")
+
 (defn- template [templates-dir dataset feature-type]
   (let [template-file (clojure.java.io/as-file (str templates-dir "/" dataset "/" feature-type ".mustache"))]
     (if (.exists template-file)
@@ -31,12 +33,11 @@
         partials (partials templates-dir dataset)]
     (map #(vector (tiles/nl (:geometry %)) (m/render template % partials)) features)))
 
-(defn create-extract-collection [db dataset feature-type]
-  (let [table feature-type]
-    (do (when (not (pg/schema-exists? db dataset))
-          (pg/create-schema db dataset))
-        (when (not (pg/table-exists? db dataset table))
-          (pg/create-table db dataset feature-type
+(defn create-extract-collection [db table]
+    (do (when (not (pg/schema-exists? db extract-schema))
+          (pg/create-schema db extract-schema))
+        (when (not (pg/table-exists? db extract-schema table))
+          (pg/create-table db extract-schema table
                      [:id "bigserial" :primary :key]
                      [:feature_type "text"]
                      [:valid_from "timestamp without time zone"]
@@ -45,28 +46,29 @@
                      [:xml "text"]
                      [:created_on "timestamp without time zone"]
                      )
-          ))))
+          )))
 
 (defn- jdbc-insert
-  ([db feature-type valid-from valid-to tiles xml created_on]
-   (jdbc-insert db feature-type (list [feature-type valid-from valid-to tiles xml created_on])))
-  ([db feature-type entries]
+  ([db table valid-from valid-to tiles xml created_on]
+   (jdbc-insert db table (list [table valid-from valid-to tiles xml created_on])))
+  ([db table entries]
    (try (j/with-db-connection [c db]
           (apply
-           (partial j/insert! c (str "bgtextract." feature-type) :transaction? false
-                    [:feature_type :valid_from :valid_to :tiles :xml :created_on])
+           (partial j/insert! c (str extract-schema "." table) :transaction? false
+                    [:table :valid_from :valid_to :tiles :xml :created_on])
            entries)
             )
         (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
 
 
-(defn add-extract-records [dataset feature-type rendered-features]
-  "Inserts the xml-features and tile-set in an extract schema based on dataset and feature-type,
+(defn add-extract-records [dataset feature-type extract-type version rendered-features]
+  "Inserts the xml-features and tile-set in an extract schema based on dataset, extract-type, version and feature-type,
    if schema or table doesn't exists it will be created."
+   (let [table (str dataset "_" extract-type "_v" version "_" feature-type)]
   (do
-   (create-extract-collection config/data-db (str dataset "extract") feature-type)
+   (create-extract-collection config/data-db table)
    (doseq [[tiles xml-feature] rendered-features]
-     (jdbc-insert config/data-db feature-type nil nil (vec tiles) xml-feature nil))))
+     (jdbc-insert config/data-db table nil nil (vec tiles) xml-feature nil)))))
 
 
 (defn file-to-features [path dataset]
