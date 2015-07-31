@@ -65,36 +65,36 @@
   (str (name *timeline-schema*) "." (name *current-table*)))
 
 
-(defn- execute-query [db query & params]
-  (try (j/with-db-connection [c db]
+(defn- execute-query [timeline query & params]
+  (try (j/with-db-connection [c (:db timeline)]
          (let [results (j/query c (cons query params) :as-arrays? true)
                results (map (fn [[f]] (pg/from-json f)) (drop 1 results))]
            results))
        (catch java.sql.SQLException e
           (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
-(defn current [db dataset collection]
+(defn current [timeline dataset collection]
   (let [query (str "SELECT feature FROM " (qualified-current) " "
                    "WHERE dataset = ? AND collection = ? AND valid_to is null")]
-    (execute-query db query dataset collection)))
+    (execute-query timeline query dataset collection)))
 
-(defn closed [db dataset collection]
+(defn closed [timeline dataset collection]
   (let [query (str "SELECT feature FROM " (qualified-current) " "
                    "WHERE dataset = ? AND collection = ? AND valid_to is not null")]
-    (execute-query db query dataset collection)))
+    (execute-query timeline query dataset collection)))
 
-(defn history [db dataset collection]
+(defn history [timeline dataset collection]
   (let [query (str "SELECT feature FROM " (qualified-history) " "
                    "WHERE dataset = ? AND collection = ?")]
-    (execute-query db query dataset collection)))
+    (execute-query timeline query dataset collection)))
 
-(defn all [db dataset collection]
+(defn all [timeline dataset collection]
   (let [query (str "SELECT feature FROM " (qualified-history) " "
                    "WHERE dataset = ? AND collection = ? "
                    "UNION "
                    "SELECT feature FROM " (qualified-current) " "
                    "WHERE dataset = ? AND collection = ? ")]
-    (execute-query db query dataset collection dataset collection)))
+    (execute-query timeline query dataset collection dataset collection)))
 
 (defn- init-root
   ([feature]
@@ -273,7 +273,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
       (cache-batched-delete-cur (:_version f))
       (batched-delete-his f))))
 
-(deftype Timeline [db root-fn path-fn
+(defrecord Timeline [db root-fn path-fn
                    feature-cache cache-loader
                    new-current-batch new-current-batch-size
                    delete-current-batch delete-current-batch-size
