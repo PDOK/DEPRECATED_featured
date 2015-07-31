@@ -70,11 +70,11 @@
    (doseq [[tiles xml-feature valid-from valid-to] rendered-features]
      (jdbc-insert db table valid-from valid-to (vec tiles) xml-feature nil)))))
 
-(defn fill-extract [db dataset collection extract-type extract-version]
+(defn fill-extract [dataset collection extract-type extract-version]
   (let [feature-type collection
         features (timeline/all (config/timeline) dataset collection)
         features-for-extract (features-for-extract dataset feature-type extract-type features "src/main/resources/pdok/featured/templates")]
-      (add-extract-records db dataset feature-type extract-type extract-version features-for-extract)))
+      (add-extract-records config/data-db dataset feature-type extract-type extract-version features-for-extract)))
 
 (defn file-to-features [path dataset]
   "Helper function to read features from a file.
