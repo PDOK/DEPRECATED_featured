@@ -1,11 +1,11 @@
 {{>city-model-start}}
 	<bri:BridgeConstructionElement xmlns:bri="http://www.opengis.net/citygml/bridge/2.0" gml:id="_{{_version}}">
 		{{>start-bgt-feature-type}}
-			<imgeo:geometrie2dOverbruggingsdeel>{{{geometry.gml}}}</imgeo:geometrie2dOverbruggingsdeel>
-			<imgeo:overbruggingIsBeweegbaar>{{overbruggingIsBeweegbaar}}{{overbruggingIsBeweegbaar_leeg}}</imgeo:overbruggingIsBeweegbaar>		
-			<imgeo:hoortBijTypeOverbrugging codeSpace="{{hoortBijTypeOverbrugging_codeSpace}}">{{hoortBijTypeOverbrugging}}{{hoortBijTypeOverbrugging_leeg}}</imgeo:hoortBijTypeOverbrugging>	
+			<imgeo:geometrie2dOverbruggingsdeel>{{{_geometry.gml}}}</imgeo:geometrie2dOverbruggingsdeel>
+			<imgeo:overbruggingIsBeweegbaar>{{overbruggingisbeweegbaar}}{{overbruggingisbeweegbaar_leeg}}</imgeo:overbruggingIsBeweegbaar>		
+			<imgeo:hoortBijTypeOverbrugging codeSpace="{{hoortbijtypeoverbrugging_codespace}}">{{hoortbijtypeoverbrugging}}{{hoortbijtypeoverbrugging_leeg}}</imgeo:hoortBijTypeOverbrugging>	
 			<bri:_GenericApplicationPropertyOfBridgeConstructionElement>
-				<imgeo:typeOverbruggingsdeel codeSpace="{{typeOverbruggingsdeel_codeSpace}}">{{typeOverbruggingsdeel}}{{typeOverbruggingsdeel_leeg}}</imgeo:typeOverbruggingsdeel>
+				<imgeo:typeOverbruggingsdeel codeSpace="{{typeoverbruggingsdeel_codespace}}">{{typeoverbruggingsdeel}}{{typeoverbruggingsdeel_leeg}}</imgeo:typeOverbruggingsdeel>
 			</bri:_GenericApplicationPropertyOfBridgeConstructionElement>			
 	</bri:BridgeConstructionElement>
 {{>city-model-eind}}

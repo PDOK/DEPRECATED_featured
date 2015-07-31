@@ -1,7 +1,7 @@
 {{>city-model-start}}
   <imgeo:Put gml:id="_{{version}}">
   	{{>start-bgt-feature-type}}
-  	<cif:function xmlns:cif="http://www.opengis.net/citygml/cityfurniture/2.0" codeSpace="{{type_codeSpace}}">{{type}}</cif:function>
-  	<imgeo:plus-type codeSpace="{{plus-type_codeSpace}}">{{plus-type}}{{plus-type_leeg}}</imgeo:plus-type>
-  	<imgeo:geometrie2dPut>{{{geometry.gml}}}</imgeo:geometrie2dPut></imgeo:Put>
+  	<cif:function xmlns:cif="http://www.opengis.net/citygml/cityfurniture/2.0" codeSpace="{{type_codespace}}">{{type}}</cif:function>
+  	<imgeo:plus-type codeSpace="{{plus-type_codespace}}">{{plus-type}}{{plus-type_leeg}}</imgeo:plus-type>
+  	<imgeo:geometrie2dPut>{{{_geometry.gml}}}</imgeo:geometrie2dPut></imgeo:Put>
 {{>city-model-eind}}

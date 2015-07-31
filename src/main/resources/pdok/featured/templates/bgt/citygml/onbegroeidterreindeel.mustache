@@ -1,10 +1,10 @@
 {{>city-model-start}}
 	<imgeo:OnbegroeidTerreindeel gml:id="_{{_version}}">
 		{{>start-bgt-feature-type}}
-			<imgeo:bgt-fysiekVoorkomen codeSpace="{{fysiekVoorkomen_codeSpace}}">{{fysiekVoorkomen}}</imgeo:bgt-fysiekVoorkomen>			
-			<imgeo:onbegroeidTerreindeelOpTalud{{#opTalud_leeg}} nilReason="{{.}}"{{/opTalud_leeg}}>{{opTalud}}</imgeo:onbegroeidTerreindeelOpTalud>			
-			<imgeo:plus-fysiekVoorkomen codeSpace="{{plus-fysiekVoorkomen_codeSpace}}">{{plus-fysiekVoorkomen}}{{plus-fysiekVoorkomen_leeg}}</imgeo:plus-fysiekVoorkomen>
+			<imgeo:bgt-fysiekVoorkomen codeSpace="{{fysiekvoorkomen_codespace}}">{{fysiekvoorkomen}}</imgeo:bgt-fysiekVoorkomen>
+			<imgeo:onbegroeidTerreindeelOpTalud{{#optalud_leeg}} nilReason="{{.}}"{{/optalud_leeg}}>{{optalud}}</imgeo:onbegroeidTerreindeelOpTalud>			
+			<imgeo:plus-fysiekVoorkomen codeSpace="{{plus-fysiekvoorkomen_codespace}}">{{plus-fysiekVoorkomen}}{{plus-fysiekvoorkomen_leeg}}</imgeo:plus-fysiekVoorkomen>
 			<imgeo:kruinlijnOnbegroeidTerreindeel{{#kruinlijn_leeg}} nilReason="{{.}}"{{/kruinlijn_leeg}}>{{{kruinlijn.geometry.gml}}}</imgeo:kruinlijnOnbegroeidTerreindeel>			
-			<imgeo:geometrie2dOnbegroeidTerreindeel>{{{geometry.gml}}}</imgeo:geometrie2dOnbegroeidTerreindeel>	
+			<imgeo:geometrie2dOnbegroeidTerreindeel>{{{_geometry.gml}}}</imgeo:geometrie2dOnbegroeidTerreindeel>	
 	</imgeo:OnbegroeidTerreindeel>
 {{>city-model-eind}}

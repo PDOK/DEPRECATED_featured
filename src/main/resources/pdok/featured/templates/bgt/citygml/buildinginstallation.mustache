@@ -1,8 +1,8 @@
 {{>city-model-start}}
 	<bui:BuildingInstallation xmlns:bui="http://www.opengis.net/citygml/building/2.0" gml:id="_{{_version}}">
 		{{>start-bgt-feature-type}}
-			<bui:function codeSpace="{{type_codeSpace}}">{{type}}</bui:function>
-			<imgeo:geometrie2dGebouwInstallatie>{{{geometry.gml}}}</imgeo:geometrie2dGebouwInstallatie>
-			<imgeo:plus-typeGebouwInstallatie codeSpace="{{plus-type_codeSpace}}">{{plus-type}}{{plus-type_leeg}}</imgeo:plus-typeGebouwInstallatie>	
+			<bui:function codeSpace="{{type_codespace}}">{{type}}</bui:function>
+			<imgeo:geometrie2dGebouwInstallatie>{{{_geometry.gml}}}</imgeo:geometrie2dGebouwInstallatie>
+			<imgeo:plus-typeGebouwInstallatie codeSpace="{{plus-type_codespace}}">{{plus-type}}{{plus-type_leeg}}</imgeo:plus-typeGebouwInstallatie>	
 	</bui:BuildingInstallation>
 {{>city-model-eind}}

@@ -1,9 +1,9 @@
 {{>city-model-start}}
 	<imgeo:FunctioneelGebied gml:id="_{{_version}}">
 		{{>start-bgt-feature-type}}
-			<imgeo:bgt-type codeSpace="{{type_codeSpace}}">{{type}}</imgeo:bgt-type>					
-			<imgeo:plus-type codeSpace="{{plus-type_codeSpace}}">{{plus-type}}{{plus-type_leeg}}</imgeo:plus-type>	
+			<imgeo:bgt-type codeSpace="{{type_codespace}}">{{type}}</imgeo:bgt-type>					
+			<imgeo:plus-type codeSpace="{{plus-type_codespace}}">{{plus-type}}{{plus-type_leeg}}</imgeo:plus-type>	
 			<imgeo:naam>{{naam}}{{naam_leeg}}</imgeo:naam>			
-			<imgeo:geometrie2dFunctioneelGebied>{{{geometry.gml}}}</imgeo:geometrie2dFunctioneelGebied>		
+			<imgeo:geometrie2dFunctioneelGebied>{{{_geometry.gml}}}</imgeo:geometrie2dFunctioneelGebied>		
 	</imgeo:FunctioneelGebied>
 {{>city-model-eind}}

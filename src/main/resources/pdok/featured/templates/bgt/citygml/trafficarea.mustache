@@ -2,11 +2,11 @@
 	<tra:TrafficArea xmlns:tra="http://www.opengis.net/citygml/transportation/2.0" gml:id="_{{_version}}">
 		{{>start-bgt-feature-type}}
 		<tra:function codeSpace="{{functie_codeSpace}}">{{functie}}</tra:function>
-		<tra:surfaceMaterial codeSpace="{{fysiekVoorkomen_codeSpace}}">{{fysiekVoorkomen}}</tra:surfaceMaterial>
+		<tra:surfaceMaterial codeSpace="{{fysiekvoorkomen_codespace}}">{{fysiekvoorkomen}}</tra:surfaceMaterial>
 		<imgeo:kruinlijnWegdeel{{#kruinlijn_leeg}} nilReason="{{.}}"{{/kruinlijn_leeg}}>{{{kruinlijn.geometry.gml}}}</imgeo:kruinlijnWegdeel>
-		<imgeo:geometrie2dWegdeel>{{{geometry.gml}}}</imgeo:geometrie2dWegdeel>
-		<imgeo:wegdeelOpTalud{{#opTalud_leeg}} nilReason="{{.}}"{{/opTalud_leeg}}>{{opTalud}}</imgeo:wegdeelOpTalud>			
-		<imgeo:plus-fysiekVoorkomenWegdeel codeSpace="{{fysiekVoorkomen_codeSpace}}">{{plus-fysiekVoorkomen}}{{plus-fysiekVoorkomen_leeg}}</imgeo:plus-fysiekVoorkomenWegdeel>
-		<imgeo:plus-functieWegdeel codeSpace="{{plus-functie_codeSpace}}">{{plus-functie}}{{plus-functie_leeg}}</imgeo:plus-functieWegdeel>
+		<imgeo:geometrie2dWegdeel>{{{_geometry.gml}}}</imgeo:geometrie2dWegdeel>
+		<imgeo:wegdeelOpTalud{{#optalud_leeg}} nilReason="{{.}}"{{/optalud_leeg}}>{{optalud}}</imgeo:wegdeelOpTalud>			
+		<imgeo:plus-fysiekVoorkomenWegdeel codeSpace="{{fysiekvoorkomen_codespace}}">{{plus-fysiekvoorkomen}}{{plus-fysiekvoorkomen_leeg}}</imgeo:plus-fysiekVoorkomenWegdeel>
+		<imgeo:plus-functieWegdeel codeSpace="{{plus-functie_codespace}}">{{plus-functie}}{{plus-functie_leeg}}</imgeo:plus-functieWegdeel>
 	</tra:TrafficArea>
 {{>city-model-eind}}

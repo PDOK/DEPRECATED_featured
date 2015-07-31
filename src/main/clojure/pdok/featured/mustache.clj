@@ -14,11 +14,12 @@
     (collection-proxy value)
     (lookup-proxy value)))
 
-
 (defn val-at[k obj]
   (if (and (map? obj) (or (contains? obj k) (contains? obj (name k))))
     (let [value (get obj k (get obj (name k)))]
-       (mustache-proxy value))
+       (if (= (class value) pdok.featured.feature.NilAttribute)
+         nil
+         (mustache-proxy value)))
     (when-let [f (resolve-as-function "pdok.featured.mustache-functions" k)]
        (mustache-proxy (f obj)))))
 
