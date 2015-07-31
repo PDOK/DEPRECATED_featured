@@ -1,8 +1,8 @@
 {{>city-model-start}}
 	<imgeo:Weginrichtingselement gml:id="_{{_version}}">
 		{{>start-bgt-feature-type}}
-			<cit:function xmlns:cit="http://www.opengis.net/citygml/cityfurniture/2.0" codeSpace="{{type_codeSpace}}">{{type}}</cit:function>
-			<imgeo:plus-type codeSpace="{{plus-type_codeSpace}}">{{plus-type}}{{plus-type_leeg}}</imgeo:plus-type>	
-			<imgeo:geometrie2dWeginrichtingselement>{{{geometry.gml}}}</imgeo:geometrie2dWeginrichtingselement>	
+			<cit:function xmlns:cit="http://www.opengis.net/citygml/cityfurniture/2.0" codeSpace="{{type_codespace}}">{{type}}</cit:function>
+			<imgeo:plus-type codeSpace="{{plus-type_codespace}}">{{plus-type}}{{plus-type_leeg}}</imgeo:plus-type>	
+			<imgeo:geometrie2dWeginrichtingselement>{{{_geometry.gml}}}</imgeo:geometrie2dWeginrichtingselement>	
 	</imgeo:Weginrichtingselement>
 {{>city-model-eind}}

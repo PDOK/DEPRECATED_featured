@@ -18,7 +18,7 @@
 
 (deftype NilAttribute [class]
   Object
-  (toString [_] "")
+  (toString [_] nil)
   clojure.lang.IEditableCollection
   (asTransient [this] this)
   clojure.lang.ITransientAssociative

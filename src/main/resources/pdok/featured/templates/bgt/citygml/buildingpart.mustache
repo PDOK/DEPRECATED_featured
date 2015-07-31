@@ -1,8 +1,8 @@
 {{>city-model-start}}
 	<bui:BuildingPart xmlns:bui="http://www.opengis.net/citygml/building/2.0" gml:id="_{{_version}}">
 		{{>start-bgt-feature-type}}
-			<imgeo:identificatieBAGPND>{{identificatieBAGPND}}</imgeo:identificatieBAGPND>
-			<imgeo:geometrie2dGrondvlak>{{{geometry.gml}}}</imgeo:geometrie2dGrondvlak>{{#nummeraanduidingreeks}}
+			<imgeo:identificatieBAGPND>{{identificatiebagpnd}}</imgeo:identificatieBAGPND>
+			<imgeo:geometrie2dGrondvlak>{{{_geometry.gml}}}</imgeo:geometrie2dGrondvlak>{{#nummeraanduidingreeks}}
 			<imgeo:nummeraanduidingreeks>
 				<imgeo:Nummeraanduidingreeks>
 					<imgeo:nummeraanduidingreeks>
@@ -16,8 +16,8 @@
 							</imgeo:positie>
 						</imgeo:Label>
 					</imgeo:nummeraanduidingreeks>					
-					<imgeo:identificatieBAGVBOLaagsteHuisnummer>{{identificatieBAGVBOLaagsteHuisnummer}}</imgeo:identificatieBAGVBOLaagsteHuisnummer>
-					<imgeo:identificatieBAGVBOHoogsteHuisnummer>{{identificatieBAGVBOHoogsteHuisnummer}}{{identificatieBAGVBOHoogsteHuisnummer_leeg}}</imgeo:identificatieBAGVBOHoogsteHuisnummer>
+					<imgeo:identificatieBAGVBOLaagsteHuisnummer>{{identificatiebagvbolaagstehuisnummer}}</imgeo:identificatieBAGVBOLaagsteHuisnummer>
+					<imgeo:identificatieBAGVBOHoogsteHuisnummer>{{identificatiebagvbohoogstehuisnummer}}{{identificatiebagvbohoogstehuisnummer_leeg}}</imgeo:identificatiebagvbohoogsteHuisnummer>
 				</imgeo:Nummeraanduidingreeks>			
 			</imgeo:nummeraanduidingreeks>{{/nummeraanduidingreeks}}			
 	</bui:BuildingPart>

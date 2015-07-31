@@ -1,12 +1,12 @@
 {{>city-model-start}}
 	<tra:AuxiliaryTrafficArea xmlns:tra="http://www.opengis.net/citygml/transportation/2.0" gml:id="_{{_version}}">
 		{{>start-bgt-feature-type}}
-			<tra:function codeSpace="{{functie_codeSpace}}}">{{functie}}</tra:function>
-			<tra:surfaceMaterial codeSpace="{{fysiekVoorkomen_codeSpace}}">{{fysiekVoorkomen}}</tra:surfaceMaterial>
-			<imgeo:geometrie2dOndersteunendWegdeel>{{{geometry.gml}}}</imgeo:geometrie2dOndersteunendWegdeel>			
-			<imgeo:ondersteunendWegdeelOpTalud{{#opTalud_leeg}} nilReason="{{.}}"{{/opTalud_leeg}}>{{opTalud}}</imgeo:ondersteunendWegdeelOpTalud>			
-			<imgeo:plus-functieOndersteunendWegdeel codeSpace="{{plus-functie_codeSpace}}">{{plus-functie}}{{plus-functie_leeg}}</imgeo:plus-functieOndersteunendWegdeel>				
-			<imgeo:plus-fysiekVoorkomenOndersteunendWegdeel codeSpace="{{plus-fysiekVoorkomen_codeSpace}}">{{plus-fysiekVoorkomen}}{{plus-fysiekVoorkomen_leeg}}</imgeo:plus-fysiekVoorkomenOndersteunendWegdeel>			
+			<tra:function codeSpace="{{functie_codespace}}}">{{functie}}</tra:function>
+			<tra:surfaceMaterial codeSpace="{{fysiekvoorkomen_codespace}}">{{fysiekvoorkomen}}</tra:surfaceMaterial>
+			<imgeo:geometrie2dOndersteunendWegdeel>{{{_geometry.gml}}}</imgeo:geometrie2dOndersteunendWegdeel>			
+			<imgeo:ondersteunendWegdeelOpTalud{{#optalud_leeg}} nilReason="{{.}}"{{/optalud_leeg}}>{{optalud}}</imgeo:ondersteunendWegdeelOpTalud>			
+			<imgeo:plus-functieOndersteunendWegdeel codeSpace="{{plus-functie_codespace}}">{{plus-functie}}{{plus-functie_leeg}}</imgeo:plus-functieOndersteunendWegdeel>				
+			<imgeo:plus-fysiekVoorkomenOndersteunendWegdeel codeSpace="{{plus-fysiekvoorkomen_codeSpace}}">{{plus-fysiekvoorkomen}}{{plus-fysiekvoorkomen_leeg}}</imgeo:plus-fysiekVoorkomenOndersteunendWegdeel>			
 			<imgeo:kruinlijnOndersteunendWegdeel{{#kruinlijn_leeg}} nilReason="{{.}}"{{/kruinlijn_leeg}}>{{{kruinlijn.geometry.gml}}}</imgeo:kruinlijnOndersteunendWegdeel>
 	</tra:AuxiliaryTrafficArea>
 {{>city-model-eind}}
