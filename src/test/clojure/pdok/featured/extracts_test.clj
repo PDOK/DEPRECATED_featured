@@ -35,7 +35,7 @@
     (add-extract-records config/data-db dataset feature-type extract-type-citygml 15 features-for-extract)))
 
 (defn test-fill-extract []
-  (fill-extract config/data-db "bgt" "bord" "citygml"))
+  (fill-extract config/data-db "bgt" "bord" "citygml" "33"))
 
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))

@@ -47,6 +47,12 @@
   (pers/cached-jdbc-processor-persistence
                     {:db-config processor-db :batch-size 10000}))
 
+(defn timeline
+  ([] 
+   (timeline (persistence)))
+  ([persistence]
+    (timeline/create {:db-config processor-db :persistence persistence})))
+
 (defn projectors [persistence]
   [(proj/geoserver-projector {:db-config data-db})
-   (timeline/create {:db-config processor-db :persistence persistence})])
+   (timeline persistence)])
