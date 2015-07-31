@@ -5,7 +5,6 @@
             [pdok.featured.config :as config]
             [pdok.featured.json-reader :as json-reader]
             [pdok.featured.mustache  :as m]
-            [pdok.featured.tiles :as tiles]
             [pdok.featured.timeline :as timeline]
             [pdok.postgres :as pg]))
 
@@ -13,11 +12,7 @@
 (def ^{:private true } extract-schema "extracten")
 
 (defn- template [templates-dir dataset feature-type extract-type]
-  (let [_ (println templates-dir)
-        _ (println dataset)
-        _ (println feature-type)
-        template-file (clojure.java.io/as-file (str templates-dir "/" dataset "/" extract-type "/" feature-type ".mustache"))
-        _ (println template-file)]
+  (let [template-file (clojure.java.io/as-file (str templates-dir "/" dataset "/" extract-type "/" feature-type ".mustache"))]
     (if (.exists template-file)
       {:name (str feature-type) :template (slurp template-file)}
       nil)))
@@ -36,8 +31,7 @@
   "Returns the rendered representation of the collection of features for a given feature-type inclusive tiles-set"
   (let [template (template templates-dir dataset feature-type extract-type)
         partials (partials templates-dir dataset extract-type)]
-    (map #(vector (tiles/nl (:geometry %)) (m/render template % partials)) features)))
-
+    (map #(vector (:_tiles %) (m/render template % partials) (:_valid_from %) (:_valid_to %)) features)))
 
 
 (defn create-extract-collection [db table]
@@ -73,13 +67,12 @@
    (let [table (str dataset "_" extract-type "_v" version "_" feature-type)]
   (do
    (create-extract-collection config/data-db table)
-   (doseq [[tiles xml-feature] rendered-features]
-     (jdbc-insert db table nil nil (vec tiles) xml-feature nil)))))
+   (doseq [[tiles xml-feature valid-from valid-to] rendered-features]
+     (jdbc-insert db table valid-from valid-to (vec tiles) xml-feature nil)))))
 
-(defn create-extracts [db dataset collection]
+(defn fill-extract [db dataset collection extract-type]
   (let [feature-type collection
-        extract-type "citygml"
-        features (timeline/history db dataset collection)
+        features (timeline/all db dataset collection)
         features-for-extract (features-for-extract dataset feature-type extract-type features "src/main/resources/pdok/featured/templates")]
       (add-extract-records db dataset feature-type extract-type 15 features-for-extract)))
 

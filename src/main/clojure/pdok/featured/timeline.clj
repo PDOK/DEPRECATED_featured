@@ -64,38 +64,37 @@
 (defn- qualified-current []
   (str (name *timeline-schema*) "." (name *current-table*)))
 
-(defn current [db dataset collection]
+
+(defn- execute-query [db query & params]
   (try (j/with-db-connection [c db]
-         (let [results
-               (j/query c [(str "SELECT tiles, feature FROM " (qualified-current)
-                                " WHERE dataset = ? AND collection = ? AND valid_to is null")
-                           dataset collection] :as-arrays? true)
-               current (map (fn [[t f]] (vector t (pg/from-json f))) (drop 1 results))]
-           current))
+         (let [results (j/query c (cons query params) :as-arrays? true)
+               results (map (fn [[f]] (pg/from-json f)) (drop 1 results))]
+           results))
        (catch java.sql.SQLException e
           (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
+
+(defn current [db dataset collection]
+  (let [query (str "SELECT feature FROM " (qualified-current) " "
+                   "WHERE dataset = ? AND collection = ? AND valid_to is null")]
+    (execute-query db query dataset collection)))
 
 (defn closed [db dataset collection]
-  (try (j/with-db-connection [c db]
-         (let [results
-               (j/query c [(str "SELECT tiles, feature FROM " (qualified-current)
-                                " WHERE dataset = ? AND collection = ? AND valid_to is not null")
-                           dataset collection] :as-arrays? true)
-               current (map (fn [[t f]] (vector t (pg/from-json f))) (drop 1 results))]
-           current))
-       (catch java.sql.SQLException e
-          (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
+  (let [query (str "SELECT feature FROM " (qualified-current) " "
+                   "WHERE dataset = ? AND collection = ? AND valid_to is not null")]
+    (execute-query db query dataset collection)))
 
 (defn history [db dataset collection]
-  (try (j/with-db-connection [c db]
-         (let [results
-               (j/query c [(str "SELECT tiles, feature FROM " (qualified-history)
-                                " WHERE dataset = ? AND collection = ?")
-                           dataset collection] :as-arrays? true)
-               current (map (fn [[t f]] (vector t (pg/from-json f))) (drop 1 results))]
-           current))
-       (catch java.sql.SQLException e
-          (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
+  (let [query (str "SELECT feature FROM " (qualified-history) " "
+                   "WHERE dataset = ? AND collection = ?")]
+    (execute-query db query dataset collection)))
+
+(defn all [db dataset collection]
+  (let [query (str "SELECT feature FROM " (qualified-history) " "
+                   "WHERE dataset = ? AND collection = ? "
+                   "UNION "
+                   "SELECT feature FROM " (qualified-current) " "
+                   "WHERE dataset = ? AND collection = ? ")]
+    (execute-query db query dataset collection dataset collection)))
 
 (defn- init-root
   ([feature]
