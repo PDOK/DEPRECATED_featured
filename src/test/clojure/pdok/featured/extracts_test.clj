@@ -2,6 +2,7 @@
    (:require [pdok.featured.json-reader :refer [features-from-stream file-stream]]
              [pdok.featured.extracts :refer :all]
              [pdok.featured.feature :as f]
+             [pdok.featured.config :as config]
              [pdok.featured.projectors :as p]
              [clojure.test :refer :all]
              [clojure.java.io :as io]))
@@ -18,19 +19,20 @@
                              (test-feature "name2" "C" "D")))
 
 (deftest test-two-rendered-features
-  (is (= 2 )(count (features-for-extract "test" "dummy" (two-features) "src/test/resources/templates"))))
+  (is (= 2 )(count (features-for-extract "test" "dummy" "gml2extract" (two-features) "src/test/resources/templates"))))
 
 (deftest test-rendered-feature-gml
-  (let [[tiles result-feature] (first (features-for-extract "test" "dummy" (one-feature) "src/test/resources/templates"))]
+  (let [[tiles result-feature] (first (features-for-extract "test" "dummy" "gml2extract" (one-feature) "src/test/resources/templates"))]
     (is (boolean (re-find #"<geo><gml:Polygon" result-feature)))
     (is (boolean (re-find #"<naam>PDOK</naam>" result-feature)))))
+
+(def ^{:private true} extract-type-citygml "citygml")
 
 (defn write-xml-to-database [dataset feature-type path template-dir]
   "Helper function to write features to an extract-schema"
   (let [features (file-to-features path dataset)
-        features-for-extract (features-for-extract dataset feature-type features template-dir)
-        ]
-    (add-extract-records dataset feature-type "citygml" 15 features-for-extract)))
+        features-for-extract (features-for-extract dataset feature-type extract-type-citygml features template-dir)]
+    (add-extract-records config/data-db dataset feature-type extract-type-citygml 15 features-for-extract)))
 
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))

@@ -37,7 +37,7 @@
 (defn example-bgt-features [n] (repeat n example-feature-bgt-wegdeel))
 
 (defn render-wegdeel-with-bgt-example [n]
-   (map (partial m/render-resource "templates/test/wegdeel.mustache")
+   (map (partial m/render-resource "templates/test/gml2extract/wegdeel.mustache")
       (example-bgt-features n)))
 
  (deftest test-features-mapping
@@ -50,7 +50,7 @@
 
 
  (defn render-wegdeel-with-sets-with-bgt-example [n]
-   (let [rendered (map (partial m/render-resource "templates/test/dummy-set.mustache")
+   (let [rendered (map (partial m/render-resource "templates/test/gml2extract/dummy-set.mustache")
                        (example-bgt-features n))]
      rendered))
 
