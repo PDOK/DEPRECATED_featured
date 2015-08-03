@@ -34,6 +34,8 @@
         features-for-extract (features-for-extract dataset feature-type extract-type-citygml features template-dir)]
     (add-extract-records config/data-db dataset feature-type extract-type-citygml 15 features-for-extract)))
 
+; (write-xml-to-database "bgt" "bord" "D:\\data\\pdok\\bgt\\mutatie-leveringen\\bord\\973140-Bord-1.json" "D:\\projects\\featured\\src\\main\\resources\\pdok\\featured\\templates")
+
 (defn test-fill-extract []
   (fill-extract "bgt" "bord" "citygml" "33"))
 
