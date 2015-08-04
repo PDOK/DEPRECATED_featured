@@ -31,7 +31,12 @@
   "Returns the rendered representation of the collection of features for a given feature-type inclusive tiles-set"
   (let [template (template templates-dir dataset feature-type extract-type)
         partials (partials templates-dir dataset extract-type)]
-    (map #(vector (:_tiles %) (m/render template % partials) (:_valid_from %) (:_valid_to %)) features)))
+    (if (or (nil? template) (nil? partials)) 
+      [(str "Template or partials cannot be found for dataset: " dataset 
+                                                    " feature-type: " feature-type 
+                                                    " extract-type: " extract-type 
+                                                    " template-dir: " templates-dir) nil]
+      [nil (map #(vector (:_tiles %) (m/render template % partials) (:_valid_from %) (:_valid_to %)) features)])))
 
 
 (defn create-extract-collection [db table]
@@ -68,13 +73,20 @@
   (do
    (create-extract-collection config/data-db table)
    (doseq [[tiles xml-feature valid-from valid-to] rendered-features]
-     (jdbc-insert db table valid-from valid-to (vec tiles) xml-feature nil)))))
+     (jdbc-insert db table valid-from valid-to (vec tiles) xml-feature nil))
+   {:count (count rendered-features)})))
 
 (defn fill-extract [dataset collection extract-type extract-version]
   (let [feature-type collection
         features (timeline/all (config/timeline) dataset collection)
-        features-for-extract (features-for-extract dataset feature-type extract-type features "src/main/resources/pdok/featured/templates")]
-      (add-extract-records config/data-db dataset feature-type extract-type extract-version features-for-extract)))
+        [error features-for-extract] (features-for-extract dataset 
+                                                           feature-type 
+                                                           extract-type 
+                                                           features 
+                                                           "src/main/resources/pdok/featured/templates")]
+    (if (nil? error)
+      (add-extract-records config/data-db dataset feature-type extract-type extract-version features-for-extract)
+      {:error error})))
 
 (defn file-to-features [path dataset]
   "Helper function to read features from a file.
