@@ -13,6 +13,7 @@
             [pdok.featured
              [config :as config]
              [processor :as processor :refer [consume shutdown]]
+             [extracts :as extracts]
              [json-reader :as reader]]
             [ring.middleware.defaults :refer :all]
             [ring.middleware.json :refer :all]
@@ -76,7 +77,17 @@
   )
 
 (defn- extract* [callback-chan request]
-  (log/info "Processing extract: " request))
+  (log/info "Processing extract: " request)
+  
+  (try (extracts/fill-extract (:dataset request) (:collection request) (:extractType request) (:extractVersion request))
+    (let [extract-stats (assoc request :status "ok")]
+       (when (:callback request)
+         (go (>! callback-chan [(:callback request) extract-stats]))))
+    (catch Exception e 
+      (let [error-stats (assoc request :error (str e))]
+        (log/warn error-stats)
+        (when (:callback request)
+          (go (>! callback-chan [(:callback request) error-stats])))))))
 
 (defn- process-request [schema request-chan http-req]
   (let [request (:body http-req)
