@@ -39,6 +39,15 @@
    :file URI
    (s/optional-key :callback) URI})
 
+(def ExtractRequest
+  "A schema for a JSON extract request"
+  {:dataset s/Str
+   :collection s/Str
+   :extractType s/Str 
+   :extractVersion s/Str
+   (s/optional-key :callback) URI})
+
+
 (defn- callbacker [uri run-stats]
   (http/post uri {:body (json/generate-string run-stats) :headers {"Content-Type" "application/json"}}))
 
@@ -66,31 +75,37 @@
                (go (>! callback-chan [(:callback request) error-stats])))))))
   )
 
-(defn- process [process-chan http-req]
+(defn- extract* [callback-chan request]
+  (log/info "Processing extract: " request))
+
+(defn- process-request [schema request-chan http-req]
   (let [request (:body http-req)
-        invalid (s/check ProcessRequest request)]
+        invalid (s/check schema request)]
     (if invalid
       (r/status (r/response invalid) 400)
-      (do (go (>! process-chan request)) (r/response {:result :ok})))))
+      (do (go (>! request-chan request)) (r/response {:result :ok})))))
 
-(defn api-routes [process-chan callback-chan stats]
+(defn api-routes [process-chan extract-chan callback-chan stats]
   (defroutes api-routes
     (context "/api" []
              (GET "/ping" [] (r/response {:pong (tl/local-now)}))
              (POST "/ping" [] (fn [r] (println "!ping pong!" (:body r)) (r/response {:pong (tl/local-now)})))
              (GET "/stats" [] (r/response @stats))
-             (POST "/process" [] (partial process process-chan) ))
+             (POST "/process" [] (partial process-request ProcessRequest process-chan))
+             (POST "/extract" [] (partial process-request ExtractRequest extract-chan )))
     (route/not-found "NOT FOUND")))
 
 (defn rest-handler [& more]
   (let [pc (chan)
+        ec (chan)
         cc (chan 10)
         stats (atom {:processing nil
                      :processed []
                      :errored []})]
     (go (while true (process* stats cc (<! pc))))
+    (go (while true (extract* cc (<! ec))))
     (go (while true (apply callbacker (<! cc))))
-    (-> (api-routes pc cc stats)
+    (-> (api-routes pc ec cc stats)
         (wrap-json-body {:keywords? true :bigdecimals? true})
         (wrap-json-response)
         (wrap-defaults api-defaults))))
