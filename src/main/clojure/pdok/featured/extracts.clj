@@ -74,7 +74,7 @@
    (create-extract-collection config/data-db table)
    (doseq [[tiles xml-feature valid-from valid-to] rendered-features]
      (jdbc-insert db table valid-from valid-to (vec tiles) xml-feature nil))
-   {:count (count rendered-features)})))
+ (count rendered-features))))
 
 (defn fill-extract [dataset collection extract-type extract-version]
   (let [feature-type collection
@@ -85,8 +85,8 @@
                                                            features 
                                                            "src/main/resources/pdok/featured/templates")]
     (if (nil? error)
-      (add-extract-records config/data-db dataset feature-type extract-type extract-version features-for-extract)
-      {:error error})))
+      {:status "ok" :count (add-extract-records config/data-db dataset feature-type extract-type extract-version features-for-extract)}
+      {:status "error" :msg error :count 0})))
 
 (defn file-to-features [path dataset]
   "Helper function to read features from a file.

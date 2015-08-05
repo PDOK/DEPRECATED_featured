@@ -52,6 +52,11 @@
 (defn- callbacker [uri run-stats]
   (http/post uri {:body (json/generate-string run-stats) :headers {"Content-Type" "application/json"}}))
 
+
+(defn- stats-on-callback [callback-chan request stats]
+  (when (:callback request)
+          (go (>! callback-chan [(:callback request) stats]))))
+
 (defn- process* [stats callback-chan request]
   (log/info "Processsing: " request)
   (swap! stats assoc-in [:processing] request)
@@ -65,29 +70,26 @@
                  run-stats (assoc (:statistics processor) :request request)]
              (swap! stats update-in [:processed] #(conj % run-stats))
              (swap! stats assoc-in [:processing] nil)
-             (when (:callback request)
-               (go (>! callback-chan [(:callback request) run-stats])))))
+             (stats-on-callback callback-chan request run-stats)))
          (catch Exception e
            (let [error-stats (assoc request :error (str e))]
              (log/warn error-stats)
              (swap! stats update-in [:errored] #(conj % error-stats))
              (swap! stats assoc-in [:processing] nil)
-             (when (:callback request)
-               (go (>! callback-chan [(:callback request) error-stats])))))))
+             (stats-on-callback callback-chan request error-stats)))))
   )
 
 (defn- extract* [callback-chan request]
   (log/info "Processing extract: " request)
   
-  (try (extracts/fill-extract (:dataset request) (:collection request) (:extractType request) (:extractVersion request))
-    (let [extract-stats (assoc request :status "ok")]
-       (when (:callback request)
-         (go (>! callback-chan [(:callback request) extract-stats]))))
+  (try 
+    (let [response (extracts/fill-extract (:dataset request) (:collection request) (:extractType request) (:extractVersion request)) 
+          extract-stats (assoc request :response response)]
+       (stats-on-callback callback-chan request extract-stats))
     (catch Exception e 
-      (let [error-stats (assoc request :error (str e))]
+      (let [error-stats (assoc request :response {:status "error" :msg (str e)})]
         (log/warn error-stats)
-        (when (:callback request)
-          (go (>! callback-chan [(:callback request) error-stats])))))))
+        (stats-on-callback callback-chan request error-stats)))))
 
 (defn- process-request [schema request-chan http-req]
   (let [request (:body http-req)
