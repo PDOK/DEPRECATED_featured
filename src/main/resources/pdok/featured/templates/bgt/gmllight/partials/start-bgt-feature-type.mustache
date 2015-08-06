@@ -1,0 +1,13 @@
+  <imgeo-s:objectBeginTijd>{{creationDate}}</imgeo-s:objectBeginTijd>
+  {{#terminationDate}}<imgeo-s:objectEindTijd>{{.}}</imgeo-s:objectEindTijd>{{/terminationDate}}
+  <imgeo-s:identificatie.namespace>NL.IMGeo</imgeo-s:identificatie.namespace>
+  <imgeo-s:identificatie.lokaalID>{{lokaalID}}</imgeo-s:identificatie.lokaalID>
+  <imgeo-s:tijdstipRegistratie>{{tijdstipRegistratie}}</imgeo-s:tijdstipRegistratie>
+  {{#eindRegistratie}}<imgeo-s:eindRegistratie>{{.}}</imgeo-s:eindRegistratie>{{/eindRegistratie}}
+  <imgeo-s:LV-publicatiedatum>{{LV-publicatiedatum}}</imgeo-s:LV-publicatiedatum>
+  <imgeo-s:bronhouder>{{bronhouder}}</imgeo-s:bronhouder>
+  {{#inOnderzoek}}<imgeo-s:inOnderzoek>{{.}}</imgeo-s:inOnderzoek>{{/inOnderzoek}}
+  {{^inOnderzoek}}<imgeo-s:inOnderzoek>false</imgeo-s:inOnderzoek>{{/inOnderzoek}}
+  <imgeo-s:relatieveHoogteligging>{{relatieveHoogteligging}}</imgeo-s:relatieveHoogteligging>
+  <imgeo-s:bgt-status>{{status}}{{status_leeg}}</imgeo-s:bgt-status>
+  <imgeo-s:plus-status>{{plus-status}}{{plus-status_leeg}}</imgeo-s:plus-status>
