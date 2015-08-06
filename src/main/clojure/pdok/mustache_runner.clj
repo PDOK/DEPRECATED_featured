@@ -10,7 +10,8 @@
   (let [dataset "bgt"
         features (e/file-to-features feature-file dataset)
         template-dir (or (first args) "")
-        rendered-features (map second (e/features-for-extract dataset feature-type extract-type features template-dir))
+        [error rendered-features-with-tiles] (e/features-for-extract dataset feature-type extract-type features template-dir)
+        rendered-features (map second rendered-features-with-tiles)
         num-features (count rendered-features)]
     (doseq [idx (take num-features (range num-features))]
      (write-file "bgt" feature-type (get (vec rendered-features) idx) idx))))
