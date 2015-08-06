@@ -1,0 +1,11 @@
+{{>start-gml-light}}
+  <imgeo-s:Plaatsbepalingspunt gml:id="_{{_version}}">
+    <imgeo-s:identificatie.namespace>NL.IMGeo</imgeo-s:identificatie.namespace>
+	<imgeo-s:identificatie.lokaalID>{{lokaalID}}</imgeo-s:identificatie.lokaalID>
+	<imgeo-s:nauwkeurigheid>{{nauwkeurigheid}}{{nauwkeurigheid_leeg}}</imgeo-s:nauwkeurigheid>
+	<imgeo-s:datumInwinning>{{datumInwinning}}</imgeo-s:datumInwinning>
+	<imgeo-s:inwinnendeInstantie>{{inwinnendeInstantie}}{{inwinnendeInstantie_leeg}}</imgeo-s:inwinnendeInstantie>
+	<imgeo-s:inwinningsmethode>{{inwinningsmethode}}</imgeo-s:inwinningsmethode>		
+   <imgeo-s:geometrie>{{{geometry.gml}}}</imgeo-s:geometrie>
+  </imgeo-s:Plaatsbepalingspunt>
+{{>end-gml-light}}
