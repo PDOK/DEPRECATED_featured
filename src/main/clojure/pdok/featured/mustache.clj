@@ -17,7 +17,7 @@
 (defn val-at[k obj]
   (if (and (map? obj) (or (contains? obj k) (contains? obj (name k))))
     (let [value (get obj k (get obj (name k)))]
-       (if (= (class value) pdok.featured.feature.NilAttribute)
+       (if (or (= (class value) pdok.featured.feature.NilAttribute) (= value nil))
          nil
          (mustache-proxy value)))
     (when-let [f (resolve-as-function "pdok.featured.mustache-functions" k)]

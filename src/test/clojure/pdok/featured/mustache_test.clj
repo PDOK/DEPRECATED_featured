@@ -8,6 +8,32 @@
   (is (= nil (m/resolve-as-function "clojure.string" "no-function")))
   (is (= #'clojure.string/split (m/resolve-as-function "clojure.string" "split"))))
 
+(def ^{:private true} inverted-template "templates/test/gml2extract/inverted.mustache")
+
+(deftest test-inverted-with-value
+  (let [render-result (m/render-resource inverted-template 
+                                         {"lokaalid" "123456789" "inonderzoek" "vandaag"})]
+  (is (boolean (re-find #"<inonderzoekA>vandaag<inonderzoekA>" render-result)))
+  (is (= nil (re-find #"inonderzoekB" render-result)))))
+
+(deftest test-inverted-with-false 
+  (let [render-result (m/render-resource inverted-template
+                                         {"lokaalid" "123456789" "inonderzoek" false})]
+  (is (boolean (re-find #"<inonderzoekA>false<inonderzoekA>" render-result)))
+  (is (= nil (re-find #"inonderzoekB" render-result)))))
+
+(deftest test-inverted-without-value 
+  (let [render-result (m/render-resource inverted-template  
+                                         {"lokaalid" "123456789"})]
+  (is (boolean (re-find #"<inonderzoekB>no-fill<inonderzoekB>" render-result)))
+  (is (= nil (re-find #"inonderzoekA" render-result)))))
+
+(deftest test-inverted-without-value 
+  (let [render-result (m/render-resource inverted-template
+                                         {"lokaalid" "123456789" "inonderzoek" nil})]
+  (is (boolean (re-find #"<inonderzoekB>no-fill<inonderzoekB>" render-result)))
+  (is (= nil (re-find #"inonderzoekA" render-result)))))
+
 (def example-gml-bgt-wegdeel
   "<gml:Surface srsName=\"urn:ogc:def:crs:EPSG::28992\"><gml:patches><gml:PolygonPatch><gml:exterior><gml:LinearRing><gml:posList srsDimension=\"2\" count=\"5\">172307.599 509279.740 172307.349 509280.920 172306.379 509280.670 172306.699 509279.490 172307.599 509279.740</gml:posList></gml:LinearRing></gml:exterior></gml:PolygonPatch></gml:patches></gml:Surface>"
    )
