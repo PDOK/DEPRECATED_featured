@@ -31,7 +31,7 @@
   "Returns the rendered representation of the collection of features for a given feature-type inclusive tiles-set"
   (let [template (template templates-dir dataset feature-type extract-type)
         partials (partials templates-dir dataset extract-type)]
-    (if (or (nil? template) (nil? partials)) 
+    (if (or (nil? template) (nil? partials))
       [(str "Template or partials cannot be found for dataset: " dataset 
                                                     " feature-type: " feature-type 
                                                     " extract-type: " extract-type 
