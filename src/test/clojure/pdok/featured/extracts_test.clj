@@ -31,7 +31,7 @@
 (def ^{:private true} extract-type-citygml "citygml")
 
 (defn write-xml-to-database [dataset feature-type path template-dir]
-  "Helper function to write features to an extract-schema"
+  "Helper function to write features to an extract-schema."
   (let [features (file-to-features path dataset)
        [error features-for-extract] (features-for-extract dataset feature-type extract-type-citygml features template-dir)]
     (add-extract-records config/data-db dataset feature-type extract-type-citygml 15 features-for-extract)))
