@@ -15,15 +15,14 @@
 
 (defn one-feature [] (list (test-feature "PDOK" "AAA" "BBB")))
 
-(deftest test-rendered-feature-gml
-  (time (Thread/sleep 1000))
-  (let [[error features] (features-for-extract "test" "dummy" "gml2extract" (one-feature) "src/test/resources/templates")
-        [tiles feature] (first features)]
-    (is (boolean (re-find #"<geo><gml:Polygon" feature)))
-    (is (boolean (re-find #"<naam>PDOK</naam>" feature)))))
 
 (defn two-features [] (list (test-feature "name1" "A" "B")
                              (test-feature "name2" "C" "D")))
+
+(deftest test-one-feature
+  (let [[error features] (features-for-extract "test" "dummy" "gml2extract" (one-feature) "src/test/resources/templates")
+        [tiles feature] (first features)]
+    (is (boolean (re-find #"<geo><gml:Polygon" feature)))))
 
 (deftest test-two-rendered-features 
   (let [[error features] (features-for-extract "test" "dummy" "gml2extract" (two-features) "src/test/resources/templates")]
@@ -42,6 +41,15 @@
 
 (defn test-fill-extract []
   (fill-extract "bgt" "bord" "citygml" "33"))
+
+
+; (deftest test-rendered-feature-gml
+;  (time (Thread/sleep 1000))
+;  (let [[error features] (features-for-extract "test" "dummy" "gml2extract" (one-feature) "src/test/resources/templates")
+;        [tiles feature] (first features)]
+;    (is (boolean (re-find #"<geo><gml:Polygon" feature)))
+;    (is (boolean (re-find #"<naam>PDOK</naam>" feature)))))
+
 
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))
