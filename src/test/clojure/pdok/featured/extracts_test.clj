@@ -18,7 +18,7 @@
 (defn two-features [] (list (test-feature "name1" "A" "B")
                              (test-feature "name2" "C" "D")))
 
-(deftest test-two-rendered-features 
+(def test-two-rendered-features 
   (let [[error features-for-extract] (features-for-extract "test" "dummy" "gml2extract" (two-features) "src/test/resources/templates")]
     (is (= 2 )(count features-for-extract))))
 
