@@ -15,6 +15,16 @@
 
 (defn one-feature [] (list (test-feature "PDOK" "AAA" "BBB")))
 
+(def test-rendered-feature-gml
+  (let [_ (println (str "feature one " (one-feature)))
+        [error features-for-extract] (features-for-extract "test" "dummy" "gml2extract" (one-feature) "src/test/resources/templates")
+        _ (println (str "error " error))
+        _ (println (str "feature for extracts" features-for-extract))
+        [tiles result-feature] (first features-for-extract)
+        _ (println result-feature)]
+    (is (boolean (re-find #"<geo><gml:Polygon" result-feature)))
+    (is (boolean (re-find #"<naam>PDOK</naam>" result-feature)))))
+
 (defn two-features [] (list (test-feature "name1" "A" "B")
                              (test-feature "name2" "C" "D")))
 
