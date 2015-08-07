@@ -23,8 +23,10 @@
     (is (= 2 )(count features-for-extract))))
 
 (deftest test-rendered-feature-gml
-  (let [[error features-for-extract] (features-for-extract "test" "dummy" "gml2extract" (one-feature) "src/test/resources/templates")
-        _ (println features-for-extract)
+  (let [_ (println (str "feature one " (one-feature)))
+        [error features-for-extract] (features-for-extract "test" "dummy" "gml2extract" (one-feature) "src/test/resources/templates")
+        _ (println (str "error " error))
+        _ (println (str "feature for extracts" features-for-extract))
         [tiles result-feature] (first features-for-extract)
         _ (println result-feature)]
     (is (boolean (re-find #"<geo><gml:Polygon" result-feature)))
