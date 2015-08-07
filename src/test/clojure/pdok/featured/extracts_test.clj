@@ -24,7 +24,9 @@
 
 (deftest test-rendered-feature-gml
   (let [[error features-for-extract] (features-for-extract "test" "dummy" "gml2extract" (one-feature) "src/test/resources/templates")
-        [tiles result-feature] (first features-for-extract)]
+        _ (println features-for-extract)
+        [tiles result-feature] (first features-for-extract)
+        _ (println result-feature)]
     (is (boolean (re-find #"<geo><gml:Polygon" result-feature)))
     (is (boolean (re-find #"<naam>PDOK</naam>" result-feature)))))
 
