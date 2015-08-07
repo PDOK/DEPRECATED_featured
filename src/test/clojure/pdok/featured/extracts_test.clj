@@ -22,6 +22,8 @@
   (let [[error features-for-extract] (features-for-extract "test" "dummy" "gml2extract" (two-features) "src/test/resources/templates")]
     (is (= 2 )(count features-for-extract))))
 
+(def ^{:private true} extract-type-citygml "citygml")
+
 (deftest test-rendered-feature-gml
   (let [_ (println (str "feature one " (one-feature)))
         [error features-for-extract] (features-for-extract "test" "dummy" "gml2extract" (one-feature) "src/test/resources/templates")
@@ -32,7 +34,6 @@
     (is (boolean (re-find #"<geo><gml:Polygon" result-feature)))
     (is (boolean (re-find #"<naam>PDOK</naam>" result-feature)))))
 
-(def ^{:private true} extract-type-citygml "citygml")
 
 (defn write-xml-to-database [dataset feature-type path template-dir]
   "Helper function to write features to an extract-schema."
