@@ -20,7 +20,9 @@
                              (test-feature "name2" "C" "D")))
 
 (deftest test-one-feature
-  (let [[error features] (features-for-extract "test" "one-feature" "gml2extract" (one-feature) "src/test/resources/templates")
+  (let [[error features] (features-for-extract "test" "one-feature" "gml2extract" (two-features) "src/test/resources/templates")
+        _ (println (str "error: " error))
+        _ (prrintln (str "features" features))
         [tiles feature] (first features)]
     (is (boolean (re-find #"<geo><gml:Polygon" feature)))))
 
