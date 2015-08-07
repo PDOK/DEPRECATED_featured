@@ -20,14 +20,13 @@
   (let [[error features] (features-for-extract "test" "dummy" "gml2extract" (two-features) "src/test/resources/templates")]
     (is (= 2 )(count features))))
 
-
 (def ^{:private true} extract-type-citygml "citygml")
 
 (defn write-xml-to-database [dataset feature-type path template-dir]
   "Helper function to write features to an extract-schema."
   (let [features (file-to-features path dataset)
        [error features-for-extract] (features-for-extract dataset feature-type extract-type-citygml features template-dir)]
-    (add-extract-records config/data-db dataset feature-type extract-type-citygml 15 features-for-extract)))
+    (add-extract-records config/data-db dataset feature-type extract-type-citygml 14 features-for-extract)))
 
 ; (write-xml-to-database "bgt" "bord" "D:\\data\\pdok\\bgt\\mutatie-leveringen\\bord\\973140-Bord-1.json" "D:\\projects\\featured\\src\\main\\resources\\pdok\\featured\\templates")
 
