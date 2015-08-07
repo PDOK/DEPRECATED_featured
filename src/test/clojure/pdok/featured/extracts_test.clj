@@ -16,9 +16,11 @@
 (defn one-feature [] (list (test-feature "PDOK" "AAA" "BBB")))
 
 (deftest test-rendered-feature-gml
-  (let [[error features] (features-for-extract "test" "dummy" "gml2extract" (one-feature) "src/test/resources/templates")]
-    (is (boolean (re-find #"<geo><gml:Polygon" (first features))))
-    (is (boolean (re-find #"<naam>PDOK</naam>" (first features))))))
+  (time (Thread/sleep 1000))
+  (let [[error features] (features-for-extract "test" "dummy" "gml2extract" (one-feature) "src/test/resources/templates")
+        [tiles feature] (first features)]
+    (is (boolean (re-find #"<geo><gml:Polygon" feature)))
+    (is (boolean (re-find #"<naam>PDOK</naam>" feature)))))
 
 (defn two-features [] (list (test-feature "name1" "A" "B")
                              (test-feature "name2" "C" "D")))
