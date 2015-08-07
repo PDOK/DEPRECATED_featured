@@ -1,12 +1,12 @@
 {{>start-gml-light}}
   <imgeo-s:OpenbareRuimteLabel gml:id="_{{_version}}">
   	{{>start-bgt-feature-type}}
-    <imgeo-s:identificatieBAGOPR>{{identificatieBAGOPR}}</imgeo-s:identificatieBAGOPR>
-    <imgeo-s:openbareRuimteNaam.tekst>{{openbareRuimteNaam}}</imgeo-s:openbareRuimteNaam.tekst>
+    <imgeo-s:identificatieBAGOPR>{{identificatiebagopr}}</imgeo-s:identificatieBAGOPR>
+    <imgeo-s:openbareRuimteNaam.tekst>{{openbareruimtenaam}}</imgeo-s:openbareRuimteNaam.tekst>
     {{#positie}}
 	<imgeo-s:openbareRuimteNaam.positie_1.plaatsingspunt>{{{geometry.gml}}}</imgeo-s:openbareRuimteNaam.positie_1.plaatsingspunt>
     <imgeo-s:openbareRuimteNaam.positie_1.hoek>{{hoek}}</imgeo-s:openbareRuimteNaam.positie_1.hoek>
 	{{/positie}}
-    <imgeo-s:openbareRuimteType>{{openbareRuimteType}}</imgeo-s:openbareRuimteType>
+    <imgeo-s:openbareRuimteType>{{openbareruimtetype}}</imgeo-s:openbareRuimteType>
   </imgeo-s:OpenbareRuimteLabel>
 {{>end-gml-light}}
