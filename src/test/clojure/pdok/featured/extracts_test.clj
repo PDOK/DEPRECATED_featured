@@ -13,19 +13,12 @@
                "other" other
                "_geometry" {"type" "gml", "gml" "<gml:Polygon xmlns:gml=\"http://www.opengis.net/gml\" srsName=\"EPSG:28992\"><gml:exterior><gml:LinearRing><gml:posList srsDimension=\"2\">10.0 10.0 5.0 10.0 5.0 5.0 10.0 5.0 10.0 10.0</gml:posList></gml:LinearRing></gml:exterior></gml:Polygon>"}})
 
-(defn one-feature [] (list (test-feature "PDOK" "AAA" "BBB")))
-
-
 (defn two-features [] (list (test-feature "name1" "A" "B")
                              (test-feature "name2" "C" "D")))
 
-(deftest test-one-feature
-  (let [[error features] (features-for-extract "test" "one-feature" "gml2extract" (one-feature) "src/test/resources/templates")
-        _ (println (str "error: " error))
-        _ (println (str "features" (first features)))
-        [tiles feature] (first features)]
-    (is (boolean (re-find #"<geo><gml:Polygon" feature)))))
-
+(deftest test-two-rendered-features 
+  (let [[error features] (features-for-extract "test" "dummy" "gml2extract" (two-features) "src/test/resources/templates")]
+    (is (= 2 )(count features))))
 
 
 (def ^{:private true} extract-type-citygml "citygml")
