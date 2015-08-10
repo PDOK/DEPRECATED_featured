@@ -1,7 +1,7 @@
 {{>city-model-start}}
 	<veg:PlantCover xmlns:veg="http://www.opengis.net/citygml/vegetation/2.0" gml:id="_{{_version}}">
 		{{>start-bgt-feature-type}}
-		<veg:class codeSpace="{{fysiekvoorkomen_codeSpace}}">{{fysiekvoorkomen}}</veg:class>			
+		<veg:class codeSpace="{{fysiekvoorkomen_codespace}}">{{fysiekvoorkomen}}</veg:class>			
 		<imgeo:geometrie2dBegroeidTerreindeel>{{{_geometry.gml}}}</imgeo:geometrie2dBegroeidTerreindeel>
 		<imgeo:begroeidTerreindeelOpTalud{{#optalud_leeg}} nilReason="{{.}}"{{/optalud_leeg}}>{{optalud}}</imgeo:begroeidTerreindeelOpTalud>	
 		<imgeo:kruinlijnBegroeidTerreindeel{{#kruinlijn_leeg}} nilReason="{{.}}"{{/kruinlijn_leeg}}>{{{kruinlijn.geometry.gml}}}</imgeo:kruinlijnBegroeidTerreindeel>	

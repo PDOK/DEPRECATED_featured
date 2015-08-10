@@ -1,7 +1,7 @@
 {{>city-model-start}}
 	<tra:TrafficArea xmlns:tra="http://www.opengis.net/citygml/transportation/2.0" gml:id="_{{_version}}">
 		{{>start-bgt-feature-type}}
-		<tra:function codeSpace="{{functie_codeSpace}}">{{functie}}</tra:function>
+		<tra:function codeSpace="{{functie_codespace}}">{{functie}}</tra:function>
 		<tra:surfaceMaterial codeSpace="{{fysiekvoorkomen_codespace}}">{{fysiekvoorkomen}}</tra:surfaceMaterial>
 		<imgeo:kruinlijnWegdeel{{#kruinlijn_leeg}} nilReason="{{.}}"{{/kruinlijn_leeg}}>{{{kruinlijn.geometry.gml}}}</imgeo:kruinlijnWegdeel>
 		<imgeo:geometrie2dWegdeel>{{{_geometry.gml}}}</imgeo:geometrie2dWegdeel>

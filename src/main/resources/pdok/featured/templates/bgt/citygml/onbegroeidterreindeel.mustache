@@ -3,7 +3,7 @@
 		{{>start-bgt-feature-type}}
 			<imgeo:bgt-fysiekVoorkomen codeSpace="{{fysiekvoorkomen_codespace}}">{{fysiekvoorkomen}}</imgeo:bgt-fysiekVoorkomen>
 			<imgeo:onbegroeidTerreindeelOpTalud{{#optalud_leeg}} nilReason="{{.}}"{{/optalud_leeg}}>{{optalud}}</imgeo:onbegroeidTerreindeelOpTalud>			
-			<imgeo:plus-fysiekVoorkomen codeSpace="{{plus-fysiekvoorkomen_codespace}}">{{plus-fysiekVoorkomen}}{{plus-fysiekvoorkomen_leeg}}</imgeo:plus-fysiekVoorkomen>
+			<imgeo:plus-fysiekVoorkomen codeSpace="{{plus-fysiekvoorkomen_codespace}}">{{plus-fysiekvoorkomen}}{{plus-fysiekvoorkomen_leeg}}</imgeo:plus-fysiekVoorkomen>
 			<imgeo:kruinlijnOnbegroeidTerreindeel{{#kruinlijn_leeg}} nilReason="{{.}}"{{/kruinlijn_leeg}}>{{{kruinlijn.geometry.gml}}}</imgeo:kruinlijnOnbegroeidTerreindeel>			
 			<imgeo:geometrie2dOnbegroeidTerreindeel>{{{_geometry.gml}}}</imgeo:geometrie2dOnbegroeidTerreindeel>	
 	</imgeo:OnbegroeidTerreindeel>
