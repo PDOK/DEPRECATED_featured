@@ -87,17 +87,17 @@
 (defn- feature-to-sparse-record [feature all-fields-constructor]
   (let [id (:id feature)
         version (:version feature)
-        sparse-attributes (all-fields-constructor (:attributes feature))
-        geometry (-> feature (:geometry) (f/as-jts))
-        geo-group (f/geometry-group (:geometry feature))
-        record (concat [id
+        sparse-attributes (all-fields-constructor (:attributes feature))]
+        (when-let [geometry (-> feature (:geometry) (f/as-jts))]
+          (let [geo-group (f/geometry-group (:geometry feature))
+                record (concat [id
                         version
                         (when (= :point geo-group)  geometry)
                         (when (= :line geo-group)  geometry)
                         (when (= :polygon geo-group)  geometry)
                         geo-group]
                        sparse-attributes)]
-      record))
+      record))))
 
 (defn- feature-keys [feature]
   (let [geometry (:geometry feature)
@@ -136,11 +136,12 @@
         (doseq [[[dataset collection] grouped-features] per-dataset-collection]
          (j/with-db-connection [c db]
            (let [all-attributes (all-attributes-fn dataset collection)
-                 records (map #(feature-to-sparse-record % (all-fields-constructor all-attributes)) grouped-features)]
-              (let [fields (concat [:_id :_version :_geometry_point :_geometry_line :_geometry_polygon :_geo_group]
+                 records (filter (comp not nil?) (map #(feature-to-sparse-record % (all-fields-constructor all-attributes)) grouped-features))]
+              (if (not (empty? records))
+                (let [fields (concat [:_id :_version :_geometry_point :_geometry_line :_geometry_polygon :_geo_group]
                                    (map pg/quoted all-attributes))]
-                (apply (partial j/insert! c (str dataset "." (pg/quoted (visualization dataset collection))) fields)
-                       records))))))
+                  (apply (partial j/insert! c (str dataset "." (pg/quoted (visualization dataset collection))) fields)
+                       records)))))))
      (catch java.sql.SQLException e
        (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e))))))
 
