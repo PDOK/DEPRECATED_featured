@@ -230,7 +230,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
 
 (defn- delete-history [db features]
   (try
-    (let [records (map (juxt :_all_versions) features)]
+    (let [transform-fn (juxt #(set (:_all_versions %)))
+          records (map transform-fn features)]
       (j/execute! db (cons (delete-history-sql) records) :multi? true :transaction? false))
      (catch java.sql.SQLException e
        (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))

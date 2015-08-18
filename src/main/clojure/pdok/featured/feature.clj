@@ -87,9 +87,9 @@
 (defmulti as-jts (fn [obj] lower-case (get obj "type")))
 (defmethod as-jts :default [_] nil)
 (defmethod as-jts "gml" [obj]
-  (let [gml (get obj "gml")
-        gml (-> gml strip-gml-ns transform-curves)]
-    (parse-to-jts gml)))
+  (when-let [gml (get obj "gml")]
+    (let [gml (-> gml strip-gml-ns transform-curves)]
+    (parse-to-jts gml))))
 
 (defmethod as-jts "jts" [obj]
   (get obj "jts"))
