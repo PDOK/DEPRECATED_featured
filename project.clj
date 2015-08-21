@@ -72,6 +72,11 @@
   :java-source-paths ["src/main/java"]
   :resource-paths ["config" "src/main/resources"]
   :test-paths ["src/test/clojure"]
+  :jvm-opts ["-Dhttp.proxyHost=http://www-proxy.cs.kadaster.nl" 
+             "-Dhttp.proxyPort=8082" 
+             "-Dhttps.proxyHost=http://www-proxy.cs.kadaster.nl" 
+             "-Dhttps.proxyPort=8082" 
+             "-Dhttp.nonProxyHosts=localhost|127.0.0.1|*.SO.kadaster.nl|*.so.kadaster.nl|orchestration-plp.cs.kadaster.nl|10.*"]
   :filegen [{:data {:RELEASE_VERSION ~release-version :CHANGE_NUMBER ~change-number}
              :template-fn (partial pdok.lein/generate-from-template "deployit-manifest.xml.template")
              :target "target/deployit-manifest.xml"}]
