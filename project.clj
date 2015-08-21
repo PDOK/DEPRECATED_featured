@@ -25,12 +25,13 @@
   :url "http://github.so.kadaster.nl/PDOK/featured"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :repositories {"osgeo" {:url "http://download.osgeo.org/webdav/geotools/"
-                           :snapshots falogse}
-                  "kadaster"  "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/releases/"
-                  "local" "file:repo"}
-  :mirrors {"*" {:name "kadaster"
-                 :url "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/public/"}}
+    :repositories [["snapshots" "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/snapshots/"]
+                   ["releases" "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/releases/"]            
+                   ["osgeo" {:url "http://download.osgeo.org/webdav/geotools/"
+                             :snapshots false}]
+                   ["local" "file:repo"]]  
+    :mirrors {"*" {:name "kadaster"
+                   :url "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/public/"}}
   :dependencies [[cheshire "5.4.0"]
                  [clj-time "0.9.0"]
                  [com.cognitect/transit-clj "0.8.269"]
@@ -72,11 +73,6 @@
   :java-source-paths ["src/main/java"]
   :resource-paths ["config" "src/main/resources"]
   :test-paths ["src/test/clojure"]
-  :jvm-opts ["-Dhttp.proxyHost=http://www-proxy.cs.kadaster.nl" 
-             "-Dhttp.proxyPort=8082" 
-             "-Dhttps.proxyHost=http://www-proxy.cs.kadaster.nl" 
-             "-Dhttps.proxyPort=8082" 
-             "-Dhttp.nonProxyHosts=localhost|127.0.0.1|*.SO.kadaster.nl|*.so.kadaster.nl|orchestration-plp.cs.kadaster.nl|10.*"]
   :filegen [{:data {:RELEASE_VERSION ~release-version :CHANGE_NUMBER ~change-number}
              :template-fn (partial pdok.lein/generate-from-template "deployit-manifest.xml.template")
              :target "target/deployit-manifest.xml"}]
