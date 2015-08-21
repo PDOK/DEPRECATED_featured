@@ -27,7 +27,7 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :repositories {"osgeo" {:url "http://download.osgeo.org/webdav/geotools/"
                            :snapshots falogse}
-                  "kadaster"  "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/release/"
+                  "kadaster"  "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/releases/"
                   "local" "file:repo"}
   :mirrors {"*" {:name "kadaster"
                  :url "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/public/"}}
