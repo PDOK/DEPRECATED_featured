@@ -6,12 +6,9 @@
             [pdok.postgres :as pg]
             [cognitect.transit :as transit]
             [clojure.java.io :as io])
-  (:import [pdok.featured WstxParser]
-           [org.geotools.gml2 SrsSyntax]
-           [org.geotools.gml3 GMLConfiguration]
+  (:import [nl.pdok.gml3 GML3Parser]
            [com.vividsolutions.jts.geom Geometry]
-           [com.vividsolutions.jts.io WKTWriter]
-           [pdok.featured.xslt TransformXSLT]))
+           [com.vividsolutions.jts.io WKTWriter]))
 
 (def lower-case
   (fnil str/lower-case ""))
@@ -52,44 +49,20 @@
 (pg/register-transit-write-handler pdok.featured.feature.NilAttribute nil-attribute-writer)
 (pg/register-transit-read-handler "x" nil-attribute-reader)
 
-(def gml3-configuration
-  (doto (GMLConfiguration.) (.setSrsSyntax SrsSyntax/OGC_URN)))
+(def gml3-parser (GML3Parser.))
 
-(def gml3-parser
-  ;"gml v3 parser, which requires that gml: namespace prefixes are removed"
-  (doto (WstxParser. gml3-configuration)
-    (.setValidating true)
-    (.setFailOnValidationError true)))
-
-(defn strip-gml-ns [input]
-  (str/replace input "gml:" ""))
+(defn gml3-as-jts [gml]
+  (.toJTSGeometry gml3-parser gml))
 
 (defmulti as-gml (fn [obj] lower-case (get obj "type")))
-
 (defmethod as-gml "gml" [obj] (get obj "gml"))
 (defmethod as-gml :default [obj] nil)
-
-(def ^{:private true} xsl-curve2linearring (TransformXSLT. (io/input-stream (io/resource "pdok/featured/xslt/curve2linearring.xsl"))))
-
-(defn ^{:private false} transform [xslt gml] 
-  (.transform xslt gml))
-
-(defn ^{:private false} transform-curves [gml]
-  (if (re-find #"curve|Curve" gml)
-         (transform xsl-curve2linearring gml)
-          gml))
-
-(defn parse-to-jts [gml]
-  (let [gml (-> gml (.getBytes "UTF-8"))
-        in (io/input-stream gml)]
-    (.parse gml3-parser in)))
 
 (defmulti as-jts (fn [obj] lower-case (get obj "type")))
 (defmethod as-jts :default [_] nil)
 (defmethod as-jts "gml" [obj]
-  (when-let [gml (get obj "gml")]
-    (let [gml (-> gml strip-gml-ns transform-curves)]
-    (parse-to-jts gml))))
+ (when-let [gml (get obj "gml")]
+  (gml3-as-jts gml)))
 
 (defmethod as-jts "jts" [obj]
   (get obj "jts"))
