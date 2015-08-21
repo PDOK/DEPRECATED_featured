@@ -25,8 +25,7 @@
   :url "http://github.so.kadaster.nl/PDOK/featured"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-    :repositories [["snapshots" "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/snapshots/"]
-                   ["releases" "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/releases/"]            
+    :repositories [["releases" "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/releases/"]            
                    ["osgeo" {:url "http://download.osgeo.org/webdav/geotools/"
                              :snapshots false}]
                    ["local" "file:repo"]]  
