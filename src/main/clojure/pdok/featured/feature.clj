@@ -7,6 +7,7 @@
             [cognitect.transit :as transit]
             [clojure.java.io :as io])
   (:import [nl.pdok.gml3 GML3Parser]
+           [pdok.featured.xslt TransformXSLT]
            [com.vividsolutions.jts.geom Geometry]
            [com.vividsolutions.jts.io WKTWriter]))
 
@@ -49,10 +50,19 @@
 (pg/register-transit-write-handler pdok.featured.feature.NilAttribute nil-attribute-writer)
 (pg/register-transit-read-handler "x" nil-attribute-reader)
 
+(def xslt-simple-gml (io/resource "pdok/featured/xslt/imgeo2simple-gml31-gml.xsl"))
+
+(def simple-gml-transfomer (TransformXSLT. (io/input-stream xslt-simple-gml)))
+
 (def gml3-parser (GML3Parser.))
 
 (defn gml3-as-jts [gml]
   (.toJTSGeometry gml3-parser gml))
+
+(def wkt-writer (WKTWriter.))
+
+(defn jts-as-wkt [jts]
+  (.write wkt-writer jts))
 
 (defmulti as-gml (fn [obj] lower-case (get obj "type")))
 (defmethod as-gml "gml" [obj] (get obj "gml"))
@@ -63,17 +73,16 @@
 (defmethod as-jts "gml" [obj]
  (when-let [gml (get obj "gml")]
   (gml3-as-jts gml)))
-
 (defmethod as-jts "jts" [obj]
   (get obj "jts"))
 
+(defmulti as-gml-light (fn [obj] lower-case (get obj "type")))
+(defmethod as-gml-light "gml" [obj] 
+  (when-let [gml (get obj "gml")]
+    (.transform simple-gml-transfomer gml)))
+(defmethod as-gml-light :default [obj] nil)
+
 (defmulti as-wkt (fn [obj] lower-case (get obj "type")))
-
-(def wkt-writer (WKTWriter.))
-
-(defn jts-as-wkt [jts]
-  (.write wkt-writer jts))
-
 (defmethod as-wkt "gml" [obj]
   (let [jts (as-jts obj)
         wkt (jts-as-wkt jts)]
