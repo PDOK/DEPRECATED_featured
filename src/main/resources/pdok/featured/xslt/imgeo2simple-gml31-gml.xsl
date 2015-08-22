@@ -1,27 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<xsl:stylesheet version="2.0" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:gml="http://www.opengis.net/gml" xmlns:imgeo-s="http://www.geostandaarden.nl/imgeo/2.1/simple/gml31" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:fn="http://www.w3.org/2005/xpath-functions" exclude-result-prefixes="xsl xsi fn imgeo">
+<xsl:stylesheet version="2.0" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:gml="http://www.opengis.net/gml" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:fn="http://www.w3.org/2005/xpath-functions" exclude-result-prefixes="xsl xsi fn imgeo">
 
-    <xsl:output method="xml" encoding="UTF-8"/>
+    <!-- xsl:output method="xml" encoding="UTF-8"/-->
 
     <xsl:strip-space elements="*"/>
 
-    <xsl:template match="MultiSurface">
+    <xsl:template match="gml:MultiSurface">
         <gml:MultiSurface>
-            <xsl:for-each select=".//surfaceMember">
+            <xsl:for-each select=".//gml:surfaceMember">
                 <gml:surfaceMember>
                     <xsl:apply-templates select="node()"/>
                 </gml:surfaceMember>
             </xsl:for-each>
         </gml:MultiSurface>
-    </xsl:template>
+    </xsl:template> 
 
-    <xsl:template match="MultiPoint">
+    <xsl:template match="gml:MultiPoint">
         <gml:MultiPoint>
-            <xsl:for-each select=".//Point">
+            <xsl:for-each select=".//gml:Point">
                 <gml:pointMember>
                     <gml:Point>
                         <gml:pos>
-                            <xsl:value-of select="pos"/>
+                            <xsl:value-of select="gml:pos"/>
                         </gml:pos>
                     </gml:Point>
                 </gml:pointMember>
@@ -29,16 +29,16 @@
         </gml:MultiPoint>
     </xsl:template>
 	
-    <xsl:template match="Polygon|PolygonPatch">
+    <xsl:template match="gml:Polygon|gml:PolygonPatch">
         <gml:Polygon>
             <xsl:choose>
-                <xsl:when test="exterior/Ring">
+                <xsl:when test="gml:exterior/gml:Ring">
                     <gml:exterior>
                         <gml:Ring>
                             <gml:curveMember>
                                 <gml:Curve>
                                     <gml:segments>
-                                        <xsl:apply-templates select="exterior/Ring/curveMember/Curve/segments/*"/>
+                                        <xsl:apply-templates select="gml:exterior/gml:Ring/gml:curveMember/gml:Curve/gml:segments/*"/>
                                     </gml:segments>
                                 </gml:Curve>
                             </gml:curveMember>
@@ -49,21 +49,21 @@
                     <gml:exterior>
                         <gml:LinearRing>
                             <gml:posList>
-                                <xsl:value-of select=".//exterior//posList"/>
+                                <xsl:value-of select=".//gml:exterior//gml:posList"/>
                             </gml:posList>
                         </gml:LinearRing>
                     </gml:exterior>
                 </xsl:otherwise>
             </xsl:choose>
-            <xsl:for-each select=".//interior">
+            <xsl:for-each select=".//gml:interior">
                 <xsl:choose>
-                    <xsl:when test="Ring">
+                    <xsl:when test="gml:Ring">
                         <gml:interior>
                             <gml:Ring>
                                 <gml:curveMember>
                                     <gml:Curve>
                                         <gml:segments>
-                                            <xsl:apply-templates select="Ring/curveMember/Curve/segments/*"/>
+                                            <xsl:apply-templates select="gml:Ring/gml:curveMember/gml:Curve/gml:segments/*"/>
                                         </gml:segments>
                                     </gml:Curve>
                                 </gml:curveMember>
@@ -74,7 +74,7 @@
                         <gml:interior>
                             <gml:LinearRing>
                                 <gml:posList>
-                                    <xsl:value-of select=".//posList"/>
+                                    <xsl:value-of select=".//gml:posList"/>
                                 </gml:posList>
                             </gml:LinearRing>
                         </gml:interior>
@@ -84,42 +84,42 @@
         </gml:Polygon>
     </xsl:template>
 
-    <xsl:template match="LineStringSegment">
+    <xsl:template match="gml:LineStringSegment">
         <gml:LineStringSegment>
             <gml:posList>
-                <xsl:value-of select=".//posList"/>
+                <xsl:value-of select=".//gml:posList"/>
             </gml:posList>
         </gml:LineStringSegment>
     </xsl:template>
 
-    <xsl:template match="Arc">
+    <xsl:template match="gml:Arc">
         <gml:Arc>
             <gml:posList>
-                <xsl:value-of select=".//posList"/>
+                <xsl:value-of select=".//gml:posList"/>
             </gml:posList>
         </gml:Arc>		
     </xsl:template>
 
-    <xsl:template match="LineString">
+    <xsl:template match="gml:LineString">
         <gml:LineString>
             <gml:posList>
-                <xsl:value-of select=".//posList"/>
+                <xsl:value-of select=".//gml:posList"/>
             </gml:posList>
         </gml:LineString>
     </xsl:template>
 
-    <xsl:template match="Curve">
+    <xsl:template match="gml:Curve">
         <gml:Curve>
-            <gml:segments>
-                <xsl:apply-templates select=".//Arc|.//LineStringSegment"/>
-            </gml:segments>
+            <gml:segments-l>
+                <xsl:apply-templates select=".//gml:Arc|.//gml:LineStringSegment"/>
+            </gml:segments-l>
         </gml:Curve>
     </xsl:template>
 
-    <xsl:template match="Point">
+    <xsl:template match="gml:Point">
         <gml:Point>
             <gml:pos>
-                <xsl:value-of select="pos"/>
+                <xsl:value-of select="gml:pos"/>
             </gml:pos>
         </gml:Point>
     </xsl:template>
