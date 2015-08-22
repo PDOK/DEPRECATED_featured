@@ -41,6 +41,13 @@
   (let [transformed-gml (-> gml-surface-with-more-elements gml3-as-jts jts-as-wkt)]
     (is (re-find #"POLYGON" transformed-gml))
     (is (re-find #"176567.478 317267.125" transformed-gml))))
+
+(defn learn-xslt [xslt document]
+  (.transform 
+    (TransformXSLT. 
+       (clojure.java.io/input-stream 
+         (clojure.java.io/resource (str "pdok/featured/xslt/" xslt ".xsl")))) 
+   (slurp (resource (str "gml/" document ".gml")))))
   
   ; (def transformed-gml (transform (TransformXSLT. (clojure.java.io/input-stream (clojure.java.io/resource "pdok/featured/xslt/curve2linearring.xsl"))) (strip-gml-ns gml-surface)))
   ; (parse-to-jts transformed-gml)
