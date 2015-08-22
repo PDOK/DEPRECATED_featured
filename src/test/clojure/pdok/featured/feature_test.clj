@@ -20,6 +20,7 @@
 (def gml-one-curve (slurp (resource "gml/gml-one-curve.gml")))
 
 (def gml-surface-with-more-elements (slurp (resource "gml/gml-surface-with-more-elements.gml")))
+(def gml-object-surface-with-more-elements {"type" "gml" "gml" gml-surface-with-more-elements})
 
 (deftest test-as-jts-with-curves
  (is (re-find #"curve" (as-gml gml-object-with-hole)))
