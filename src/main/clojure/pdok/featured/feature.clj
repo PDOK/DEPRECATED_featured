@@ -50,7 +50,7 @@
 (pg/register-transit-write-handler pdok.featured.feature.NilAttribute nil-attribute-writer)
 (pg/register-transit-read-handler "x" nil-attribute-reader)
 
-(def xslt-simple-gml (io/resource "pdok/featured/xslt/imgeo2simple-gml31-gml.xsl"))
+(def xslt-simple-gml (io/resource "pdok/featured/xslt/imgeo2simple-gml.xsl"))
 
 (def simple-gml-transfomer (TransformXSLT. (io/input-stream xslt-simple-gml)))
 
@@ -76,11 +76,11 @@
 (defmethod as-jts "jts" [obj]
   (get obj "jts"))
 
-(defmulti as-gml-light (fn [obj] lower-case (get obj "type")))
-(defmethod as-gml-light "gml" [obj] 
+(defmulti as-simple-gml (fn [obj] lower-case (get obj "type")))
+(defmethod as-simple-gml "gml" [obj] 
   (when-let [gml (get obj "gml")]
     (.transform simple-gml-transfomer gml)))
-(defmethod as-gml-light :default [obj] nil)
+(defmethod as-simple-gml :default [obj] nil)
 
 (defmulti as-wkt (fn [obj] lower-case (get obj "type")))
 (defmethod as-wkt "gml" [obj]
