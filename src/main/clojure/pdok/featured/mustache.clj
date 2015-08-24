@@ -21,7 +21,8 @@
          nil
          (mustache-proxy value)))
     (when-let [f (resolve-as-function "pdok.featured.mustache-functions" k)]
-       (mustache-proxy (f obj)))))
+      (let [_ (println f)]
+       (mustache-proxy (f obj))))))
 
 (defn lookup-proxy [obj]
   (reify

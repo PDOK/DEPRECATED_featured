@@ -4,6 +4,6 @@
 
 (defn gml [arg] (feature/as-gml arg))
 
-(defn gml-light [arg] (feature/as-gml arg))
+(defn simple-gml [arg] (feature/as-simple-gml arg))
 
 (defn _version [_] (random/UUID))
