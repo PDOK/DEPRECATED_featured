@@ -43,7 +43,7 @@
     (is (re-find #"POLYGON" transformed-gml))
     (is (re-find #"176567.478 317267.125" transformed-gml))))
 
-(defn learn-xslt [xslt document]
+(defn test-xslt [xslt document]
   (.transform 
     (TransformXSLT. 
        (clojure.java.io/input-stream 
