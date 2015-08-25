@@ -14,13 +14,12 @@
              [config :as config]
              [processor :as processor :refer [consume shutdown]]
              [extracts :as extracts]
-             [json-reader :as reader]]
+             [json-reader :as reader]
+             [zipfiles :as zipfiles]]
             [ring.middleware.defaults :refer :all]
             [ring.middleware.json :refer :all]
             [ring.util.response :as r]
             [schema.core :as s])
-  (:import  [java.util.zip ZipInputStream]
-            [java.io FileInputStream])
    )
 
 (extend-protocol cheshire.generate/JSONable
@@ -60,38 +59,19 @@
   (when (:callback request)
           (go (>! callback-chan [(:callback request) stats]))))
 
-(defn feature-stream-zip [request])
-        
-(defmulti feature-stream (fn [request] "json"))
-(defmethod feature-stream "json" [request]
-   (io/input-stream (:file request)))
-(defmethod feature-stream :default [request] nil)
-
-
-(defn- input-zip [input] 
-  (let [in (ZipInputStream. input)
-       ze (.getNextEntry in)]
-  in))
-
-(defn- close-zip [zip]
-    (do (.closeEntry zip)
-        (.close zip)))
-
-
 (defn- process* [stats callback-chan request]
   (log/info "Processsing: " request)
   (swap! stats assoc-in [:processing] request)
   (let [persistence (config/persistence)
         projectors (config/projectors persistence)
         processor (processor/create persistence projectors)
-        request-file (:file request)
-        zip-file? (.endsWith request-file ".zip")]
+        zip-file? (.endsWith (:file request) ".zip")]
     (try 
           (with-open [input (io/input-stream (:file request))]
-            (let [in (if zip-file? (input-zip input) input)
+            (let [in (if zip-file? (zipfiles/zip-as-input input) input)
                   features (reader/features-from-stream in :dataset (:dataset request))
                   _ (dorun (consume processor features))
-                  _ (if zip-file? (close-zip in))
+                  _ (if zip-file? (zipfiles/close-zip in))
                  processor (shutdown processor)
                  run-stats (assoc (:statistics processor) :request request)]
              (swap! stats update-in [:processed] #(conj % run-stats))
