@@ -40,6 +40,7 @@
   "A schema for a JSON process request"
   {:dataset s/Str
    :file URI
+   (s/optional-key :format) (s/enum "json" "zip")
    (s/optional-key :callback) URI})
 
 (def ExtractRequest
@@ -65,7 +66,7 @@
   (let [persistence (config/persistence)
         projectors (config/projectors persistence)
         processor (processor/create persistence projectors)
-        zip-file? (.endsWith (:file request) ".zip")]
+        zip-file? (= (:format request) "zip")]
     (try 
           (with-open [input (io/input-stream (:file request))]
             (let [in (if zip-file? (zipfiles/zip-as-input input) input)
