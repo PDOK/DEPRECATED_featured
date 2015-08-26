@@ -29,14 +29,16 @@
 
 (defn features-for-extract [dataset feature-type extract-type features templates-dir]
   "Returns the rendered representation of the collection of features for a given feature-type inclusive tiles-set"
-  (let [template (template templates-dir dataset feature-type extract-type)
-        partials (partials templates-dir dataset extract-type)]
-    (if (or (nil? template) (nil? partials))
-      [(str "Template or partials cannot be found for dataset: " dataset 
+  (if (empty? features) 
+    [nil nil]
+    (let [template (template templates-dir dataset feature-type extract-type)
+          partials (partials templates-dir dataset extract-type)]
+      (if (or (nil? template) (nil? partials))
+        [(str "Template or partials cannot be found for dataset: " dataset 
                                                     " feature-type: " feature-type 
                                                     " extract-type: " extract-type 
                                                     " template-dir: " templates-dir) nil]
-      [nil (map #(vector (:_tiles %) (m/render template % partials) (:_valid_from %) (:_valid_to %)) features)])))
+        [nil (map #(vector (:_tiles %) (m/render template % partials) (:_valid_from %) (:_valid_to %)) features)]))))
 
 
 (defn create-extract-collection [db table]
@@ -83,7 +85,9 @@
                                                            features 
                                                            "src/main/resources/pdok/featured/templates")]
     (if (nil? error)
-      {:status "ok" :count (add-extract-records config/data-db dataset feature-type extract-type extract-version features-for-extract)}
+      (if (nil? features-for-extract)
+        {:status "ok" :count 0}
+        {:status "ok" :count (add-extract-records config/data-db dataset feature-type extract-type extract-version features-for-extract)})
       {:status "error" :msg error :count 0})))
 
 (defn file-to-features [path dataset]
