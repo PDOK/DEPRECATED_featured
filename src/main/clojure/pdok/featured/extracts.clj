@@ -9,7 +9,7 @@
             [pdok.postgres :as pg]))
 
 
-(def ^{:private true } extract-schema "extracten")
+(def ^{:private true } extract-schema "extractmanagement")
 
 (defn- template [templates-dir dataset feature-type extract-type]
   (let [template-file (clojure.java.io/as-file (str templates-dir "/" dataset "/" extract-type "/" feature-type ".mustache"))]
