@@ -63,8 +63,12 @@
                     entries))  
         (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
 
+(defn- jdbc-insert-extractset [db extract-type version tiles]
+  ;TODO
+  )
+
 (defn prepare-feature [[tiles xml-feature valid-from valid-to]]
-  [valid-from valid-to (vec tiles) xml-feature nil])
+  [[valid-from valid-to (vec tiles) xml-feature nil] (vec tiles)])
 
 (defn add-extract-records [db dataset feature-type extract-type version rendered-features]
   "Inserts the xml-features and tile-set in an extract schema based on dataset, extract-type, version and feature-type,
@@ -72,8 +76,9 @@
    (let [table (str dataset "_" extract-type "_v" version "_" feature-type)]
   (do
    (create-extract-collection config/data-db table)
-   (let [entries (map prepare-feature rendered-features)]
-     (jdbc-insert-extract db table entries))
+   (let [[entries tiles] (map prepare-feature rendered-features)]
+     (jdbc-insert-extract db table entries)
+     (jdbc-insert-extractset db extract-type version tiles))
  (count rendered-features))))
 
 (defn fill-extract [dataset collection extract-type extract-version]
