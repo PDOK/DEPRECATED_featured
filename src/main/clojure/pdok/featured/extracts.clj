@@ -10,6 +10,8 @@
 
 
 (def ^{:private true } extract-schema "extractmanagement")
+(def ^{:private true } extractset-table "extractmanagement.extractset")
+(def ^{:private true } extractset-area-table "extractmanagement.extractset_area")
 
 (defn- template [templates-dir dataset feature-type extract-type]
   (let [template-file (clojure.java.io/as-file (str templates-dir "/" dataset "/" extract-type "/" feature-type ".mustache"))]
@@ -57,29 +59,46 @@
 
 (defn- jdbc-insert-extract [db table entries]
    (try (j/with-db-connection [c db]
-          (apply 
-            (partial j/insert! c (str extract-schema "." table) :transaction? false
+          (apply (partial j/insert! c (str extract-schema "." table) :transaction? false
                     [:valid_from :valid_to :tiles :xml :created_on])
                     entries))  
         (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
 
-(defn- jdbc-insert-extractset [db extract-type version tiles]
-  ;TODO
-  )
+(defn add-extractset [db extractset version]
+  (let [query (str "select id from " extractset-table " where extractset_name = ? and version = ?")]
+    (j/with-db-connection [c db]
+      (let [result (j/query c [query extractset version])] 
+        (if (empty? result)
+          (j/insert! db extractset-table {:extractset_name extractset :version version :active false})
+          result)))))
 
-(defn prepare-feature [[tiles xml-feature valid-from valid-to]]
-  [[valid-from valid-to (vec tiles) xml-feature nil] (vec tiles)])
+(defn add-extractset-area [db extractset-id tiles]
+  (let [query (str "select * from " extractset-area-table " where extractset_id = ? and area_id = ?")]
+    (j/with-db-transaction [c db]
+      (doseq [area-id tiles]
+        (if (empty? (j/query c [query extractset-id area-id]))
+          (j/insert! db extractset-area-table {:extractset_id extractset-id :area_id area-id}))))))
+
+(defn- tiles-from-feature [[tiles & more]]
+   tiles)
+
+(defn add-metadata-extract-records [db dataset extract-type version rendered-features]
+   (let [extractset-id (:id (first (add-extractset db (str dataset "_" extract-type) version)))
+         tiles (reduce clojure.set/union (map tiles-from-feature rendered-features))]
+     (add-extractset-area db extractset-id tiles)))
+
+(defn- tranform-feature-for-db [[tiles xml-feature valid-from valid-to]]
+  [valid-from valid-to (vec tiles) xml-feature nil])
 
 (defn add-extract-records [db dataset feature-type extract-type version rendered-features]
   "Inserts the xml-features and tile-set in an extract schema based on dataset, extract-type, version and feature-type,
    if schema or table doesn't exists it will be created."
-   (let [table (str dataset "_" extract-type "_v" version "_" feature-type)]
-  (do
-   (create-extract-collection config/data-db table)
-   (let [[entries tiles] (map prepare-feature rendered-features)]
-     (jdbc-insert-extract db table entries)
-     (jdbc-insert-extractset db extract-type version tiles))
- (count rendered-features))))
+  (let [table (str dataset "_" extract-type "_v" version "_" feature-type)]
+    (do
+      (create-extract-collection db table)
+      (jdbc-insert-extract db table (map tranform-feature-for-db rendered-features))
+      (add-metadata-extract-records db dataset extract-type version rendered-features))
+    (count rendered-features)))
 
 (defn fill-extract [dataset collection extract-type extract-version]
   (let [feature-type collection
