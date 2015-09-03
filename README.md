@@ -64,9 +64,10 @@ FIXME: explanation
 
 ### Aanroep REST-calls
 #### Verwerken json-bestanden
-Op ../featured/api/process een POST uitvoeren met request:
+Op ../featured/api/process een POST uitvoeren met onderstaande request, waarbij de parameters _format_ en _callback_ optioneel zijn.
     
-    {"dataset": "bgt", "file": "file://D:/Development/PDOK/featured/.test-files/change-features-single-collection-1000.json", "callback": "http://localhost:3000/api/ping"}
+    {"dataset": "bgt", "file": "file://D:/Development/PDOK/featured/.test-files/change-features-single-collection-1000.json", "format":"zip", "callback": "http://localhost:3000/api/ping"}
+
 #### Aanmaken extract-records    
 Op ../featured/api/extract een POST uitvoeren met request:
   
