@@ -90,7 +90,10 @@
   (log/info "Processing extract: " request)
   
   (try 
-    (let [response (extracts/fill-extract (:dataset request) (:collection request) (:extractType request) (:extractVersion request)) 
+    (let [response (extracts/fill-extract (:dataset request) 
+                                          (:collection request) 
+                                          (:extractType request) 
+                                          (read-string (:extractVersion request))) 
           extract-stats (assoc request :response response)]
        (stats-on-callback callback-chan request extract-stats))
     (catch Exception e 
