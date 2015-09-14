@@ -65,7 +65,7 @@
   (.write wkt-writer jts))
 
 (defmulti as-gml (fn [obj] lower-case (get obj "type")))
-(defmethod as-gml "gml" [obj] (get obj "gml"))
+(defmethod as-gml "gml" [obj] (str/replace (get obj "gml") #"<\?[^\?]*\?>" ""))
 (defmethod as-gml :default [obj] nil)
 
 (defmulti as-jts (fn [obj] lower-case (get obj "type")))
@@ -77,7 +77,7 @@
   (get obj "jts"))
 
 (defmulti as-simple-gml (fn [obj] lower-case (get obj "type")))
-(defmethod as-simple-gml "gml" [obj] 
+(defmethod as-simple-gml "gml" [obj]
   (when-let [gml (get obj "gml")]
     (.transform simple-gml-transfomer gml)))
 (defmethod as-simple-gml :default [obj] nil)
@@ -116,8 +116,8 @@
   #{"Curve" "CompositeCurve" "Arc" "ArcString" "Circle" "LineString"})
 
 (defmethod geometry-group "gml" [obj]
-  (let [re-result (re-find #"^<(gml:)?([^\s]+)" (get obj "gml"))
-        type (when re-result (nth re-result 2))]
+  (let [re-result (re-find #"^(<\?[^\?]*\?>)?<([a-zA-Z0-9]+:)?([^\s]+)" (get obj "gml"))
+        type (when re-result (nth re-result 3))]
     (geometry-group* gml-point-types gml-line-types type)))
 
 (def jts-point-types
