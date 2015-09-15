@@ -5,16 +5,16 @@
 			<imgeo:geometrie2dGrondvlak>{{{_geometry.gml}}}</imgeo:geometrie2dGrondvlak>{{#nummeraanduidingreeks}}
 			<imgeo:nummeraanduidingreeks>
 				<imgeo:Nummeraanduidingreeks>
-					<imgeo:nummeraanduidingreeks>
+					<imgeo:nummeraanduidingreeks>{{#positie}}
 						<imgeo:Label>
 							<imgeo:tekst>{{tekst}}</imgeo:tekst>
 							<imgeo:positie>
 								<imgeo:Labelpositie>
-									<imgeo:plaatsingspunt>{{#positie}}{{#plaatsingspunt}}{{#geometry}}{{{gml}}}{{/geometry}}{{/plaatsingspunt}}{{/positie}}</imgeo:plaatsingspunt>
-									<imgeo:hoek>{{#positie}}{{hoek}}{{/positie}}</imgeo:hoek>
+									<imgeo:plaatsingspunt>{{{_geometry.gml}}}</imgeo:plaatsingspunt>
+									<imgeo:hoek>{{hoek}}</imgeo:hoek>
 								</imgeo:Labelpositie>
 							</imgeo:positie>
-						</imgeo:Label>
+						</imgeo:Label>{{/positie}}
 					</imgeo:nummeraanduidingreeks>					
 					<imgeo:identificatieBAGVBOLaagsteHuisnummer>{{identificatiebagvbolaagstehuisnummer}}</imgeo:identificatieBAGVBOLaagsteHuisnummer>
 					<imgeo:identificatieBAGVBOHoogsteHuisnummer>{{identificatiebagvbohoogstehuisnummer}}{{identificatiebagvbohoogstehuisnummer_leeg}}</imgeo:identificatiebagvbohoogsteHuisnummer>

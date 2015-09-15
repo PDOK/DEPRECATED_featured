@@ -129,7 +129,6 @@
     (loop [[[field id] & rest] path
            t target
            f identity]
-      ;(println field id t f)
       (if field
         (let [field-value (get target field)]
           (if field-value
@@ -157,7 +156,7 @@
 
 (defn- merge
   ([target path feature]
-   (let [keyworded-path (map (fn [[_ id field]] [(keyword field) id]) path)
+   (let [keyworded-path (map (fn [[_ _ field id]] [(keyword field) id]) path)
          mustafied (mustafy feature)
          merger (path->merge-fn target keyworded-path)
          merged (merger mustafied)
