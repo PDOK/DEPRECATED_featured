@@ -64,37 +64,48 @@
 (defn- qualified-current []
   (str (name *timeline-schema*) "." (name *current-table*)))
 
+(defn map->where-clause [clauses]
+  (str/join " AND " (map #(str (name (first %1)) " = '" (second %1) "'") clauses)))
 
-(defn- execute-query [timeline query & params]
+(defn- execute-query [timeline query]
   (try (j/with-db-connection [c (:db timeline)]
-         (let [results (j/query c (cons query params) :as-arrays? true)
+         (let [results (j/query c [query] :as-arrays? true)
                results (map (fn [[f]] (pg/from-json f)) (drop 1 results))]
            results))
        (catch java.sql.SQLException e
           (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
-(defn current [timeline dataset collection]
-  (let [query (str "SELECT feature FROM " (qualified-current) " "
-                   "WHERE dataset = ? AND collection = ? AND valid_to is null")]
-    (execute-query timeline query dataset collection)))
+(defn current
+  ([timeline dataset collection] (current timeline {:dataset dataset :collection collection}))
+  ([timeline selector]
+   (let [query (str "SELECT feature FROM " (qualified-current) " "
+                    "WHERE valid_to is null AND " (map->where-clause selector))]
+     (execute-query timeline query))))
 
-(defn closed [timeline dataset collection]
-  (let [query (str "SELECT feature FROM " (qualified-current) " "
-                   "WHERE dataset = ? AND collection = ? AND valid_to is not null")]
-    (execute-query timeline query dataset collection)))
+(defn closed
+  ([timeline dataset collection] (closed timeline {:dataset dataset :collection collection}))
+  ([timeline selector]
+   (let [query (str "SELECT feature FROM " (qualified-current) " "
+                    "WHERE valid_to is not null AND " (map->where-clause selector))]
+     (execute-query timeline query))))
 
-(defn history [timeline dataset collection]
-  (let [query (str "SELECT feature FROM " (qualified-history) " "
-                   "WHERE dataset = ? AND collection = ?")]
-    (execute-query timeline query dataset collection)))
+(defn history
+  ([timeline dataset collection] (history timeline {:dataset dataset :collection collection}))
+  ([timeline selector]
+   (let [query (str "SELECT feature FROM " (qualified-history) " "
+                    "WHERE " (map->where-clause selector))]
+     (execute-query timeline query))))
 
-(defn all [timeline dataset collection]
-  (let [query (str "SELECT feature FROM " (qualified-history) " "
-                   "WHERE dataset = ? AND collection = ? "
-                   "UNION "
-                   "SELECT feature FROM " (qualified-current) " "
-                   "WHERE dataset = ? AND collection = ? ")]
-    (execute-query timeline query dataset collection dataset collection)))
+(defn all
+  ([timeline dataset collection] (all timeline {:dataset dataset :collection collection}))
+  ([timeline selector]
+   (let [clause (map->where-clause selector)
+         query (str "SELECT feature FROM " (qualified-history) " "
+                    "WHERE " clause
+                    "UNION "
+                    "SELECT feature FROM " (qualified-current) " "
+                    "WHERE " clause)]
+     (execute-query timeline query))))
 
 (defn- init-root
   ([feature]
@@ -118,7 +129,6 @@
     (loop [[[field id] & rest] path
            t target
            f identity]
-      ;(println field id t f)
       (if field
         (let [field-value (get target field)]
           (if field-value
@@ -146,7 +156,7 @@
 
 (defn- merge
   ([target path feature]
-   (let [keyworded-path (map (fn [[_ id field]] [(keyword field) id]) path)
+   (let [keyworded-path (map (fn [[_ _ field id]] [(keyword field) id]) path)
          mustafied (mustafy feature)
          merger (path->merge-fn target keyworded-path)
          merged (merger mustafied)

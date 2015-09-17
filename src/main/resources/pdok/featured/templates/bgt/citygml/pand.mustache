@@ -7,13 +7,13 @@
 				<imgeo:Nummeraanduidingreeks>
 					<imgeo:nummeraanduidingreeks>
 						<imgeo:Label>
-							<imgeo:tekst>{{tekst}}</imgeo:tekst>
+							<imgeo:tekst>{{tekst}}</imgeo:tekst>{{#positie}}
 							<imgeo:positie>
 								<imgeo:Labelpositie>
-									<imgeo:plaatsingspunt>{{#positie}}{{#plaatsingspunt}}{{#geometry}}{{{gml}}}{{/geometry}}{{/plaatsingspunt}}{{/positie}}</imgeo:plaatsingspunt>
-									<imgeo:hoek>{{#positie}}{{hoek}}{{/positie}}</imgeo:hoek>
+									<imgeo:plaatsingspunt>{{{_geometry.gml}}}</imgeo:plaatsingspunt>
+									<imgeo:hoek>{{hoek}}</imgeo:hoek>
 								</imgeo:Labelpositie>
-							</imgeo:positie>
+							</imgeo:positie>{{/positie}}
 						</imgeo:Label>
 					</imgeo:nummeraanduidingreeks>					
 					<imgeo:identificatieBAGVBOLaagsteHuisnummer>{{identificatiebagvbolaagstehuisnummer}}</imgeo:identificatieBAGVBOLaagsteHuisnummer>

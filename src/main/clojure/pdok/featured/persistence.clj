@@ -26,14 +26,14 @@
   )
 
 (defn path [persistence dataset collection id]
-  "Returns sequence of [collection id field] tuples. Parents first. Root only means empty sequence"
+  "Returns sequence of [collection id field child-id] tuples. Parents first. Root only means empty sequence"
   (when (and dataset collection id)
     (if-let [[parent-collection parent-id parent-field] (parent persistence dataset collection id)]
-      (loop [path (list [parent-collection parent-id parent-field])
+      (loop [path (list [parent-collection parent-id parent-field id])
              pc  parent-collection
              pid parent-id]
         (if-let [[new-pc new-pid new-pf] (parent persistence dataset pc pid)]
-          (recur (conj path [new-pc new-pid new-pf]) new-pc new-pid)
+          (recur (conj path [new-pc new-pid new-pf pid]) new-pc new-pid)
           path))
       (list))))
 

@@ -47,7 +47,7 @@
   "A schema for a JSON extract request"
   {:dataset s/Str
    :collection s/Str
-   :extractType s/Str 
+   :extractType s/Str
    :extractVersion s/Str
    (s/optional-key :callback) URI})
 
@@ -67,7 +67,7 @@
         projectors (config/projectors persistence)
         processor (processor/create persistence projectors)
         zip-file? (= (:format request) "zip")]
-    (try 
+    (try
           (with-open [input (io/input-stream (:file request))]
             (let [in (if zip-file? (zipfiles/zip-as-input input) input)
                   features (reader/features-from-stream in :dataset (:dataset request))
@@ -88,12 +88,15 @@
 
 (defn- extract* [callback-chan request]
   (log/info "Processing extract: " request)
-  
-  (try 
-    (let [response (extracts/fill-extract (:dataset request) (:collection request) (:extractType request) (:extractVersion request)) 
+
+  (try
+    (let [response (extracts/fill-extract (:dataset request)
+                                          (:collection request)
+                                          (:extractType request)
+                                          (read-string (:extractVersion request)))
           extract-stats (assoc request :response response)]
        (stats-on-callback callback-chan request extract-stats))
-    (catch Exception e 
+    (catch Exception e
       (let [error-stats (assoc request :response {:status "error" :msg (str e)})]
         (log/warn error-stats)
         (stats-on-callback callback-chan request error-stats)))))

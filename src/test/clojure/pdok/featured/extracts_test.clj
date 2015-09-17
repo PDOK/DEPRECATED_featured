@@ -28,19 +28,6 @@
        [error features-for-extract] (features-for-extract dataset feature-type extract-type-citygml features template-dir)]
     (add-extract-records config/data-db dataset feature-type extract-type-citygml 14 features-for-extract)))
 
-; (write-xml-to-database "bgt" "bord" "D:\\data\\pdok\\bgt\\mutatie-leveringen\\bord\\973140-Bord-1.json" "D:\\projects\\featured\\src\\main\\resources\\pdok\\featured\\templates")
-
-(defn test-fill-extract []
-  (fill-extract "bgt" "bord" "citygml" "33"))
-
-
-; (deftest test-rendered-feature-gml
-;  (time (Thread/sleep 1000))
-;  (let [[error features] (features-for-extract "test" "dummy" "gml2extract" (one-feature) "src/test/resources/templates")
-;        [tiles feature] (first features)]
-;    (is (boolean (re-find #"<geo><gml:Polygon" feature)))
-;    (is (boolean (re-find #"<naam>PDOK</naam>" feature)))))
-
-
+;(write-xml-to-database "bgt" "bord" "D:\\data\\pdok\\bgt\\mutatie-leveringen\\bord\\973140-Bord-1.json" "D:\\projects\\featured\\src\\main\\resources\\pdok\\featured\\templates")
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))
