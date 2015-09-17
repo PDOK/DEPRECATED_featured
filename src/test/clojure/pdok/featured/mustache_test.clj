@@ -11,31 +11,31 @@
 (def ^{:private true} inverted-template "templates/test/gml2extract/inverted.mustache")
 
 (deftest test-inverted-with-value
-  (let [render-result (m/render-resource inverted-template 
+  (let [render-result (m/render-resource inverted-template
                                          {"lokaalid" "123456789" "inonderzoek" "vandaag"})]
   (is (boolean (re-find #"<inonderzoekA>vandaag<inonderzoekA>" render-result)))
   (is (= nil (re-find #"inonderzoekB" render-result)))))
 
-(deftest test-inverted-with-false 
+(deftest test-inverted-with-false
   (let [render-result (m/render-resource inverted-template
                                          {"lokaalid" "123456789" "inonderzoek" false})]
   (is (boolean (re-find #"<inonderzoekA>false<inonderzoekA>" render-result)))
   (is (= nil (re-find #"inonderzoekB" render-result)))))
 
-(deftest test-inverted-without-value 
-  (let [render-result (m/render-resource inverted-template  
+(deftest test-inverted-without-value
+  (let [render-result (m/render-resource inverted-template
                                          {"lokaalid" "123456789"})]
   (is (boolean (re-find #"<inonderzoekB>no-fill<inonderzoekB>" render-result)))
   (is (= nil (re-find #"inonderzoekA" render-result)))))
 
-(deftest test-inverted-without-value 
+(deftest test-inverted-without-value
   (let [render-result (m/render-resource inverted-template
                                          {"lokaalid" "123456789" "inonderzoek" nil})]
   (is (boolean (re-find #"<inonderzoekB>no-fill<inonderzoekB>" render-result)))
   (is (= nil (re-find #"inonderzoekA" render-result)))))
 
 (def example-gml-bgt-wegdeel
-  "<gml:Surface srsName=\"urn:ogc:def:crs:EPSG::28992\"><gml:patches><gml:PolygonPatch><gml:exterior><gml:LinearRing><gml:posList srsDimension=\"2\" count=\"5\">172307.599 509279.740 172307.349 509280.920 172306.379 509280.670 172306.699 509279.490 172307.599 509279.740</gml:posList></gml:LinearRing></gml:exterior></gml:PolygonPatch></gml:patches></gml:Surface>"
+  "<?xml version=\"1.0\" encoding=\"UTF-8\"?><gml:Surface srsName=\"urn:ogc:def:crs:EPSG::28992\"><gml:patches><gml:PolygonPatch><gml:exterior><gml:LinearRing><gml:posList srsDimension=\"2\" count=\"5\">172307.599 509279.740 172307.349 509280.920 172306.379 509280.670 172306.699 509279.490 172307.599 509279.740</gml:posList></gml:LinearRing></gml:exterior></gml:PolygonPatch></gml:patches></gml:Surface>"
    )
 
 (def example-geometry-bgt-wegdeel {"gml" example-gml-bgt-wegdeel, "type" "gml"})
@@ -71,8 +71,10 @@
    (is (= 5 (count(filter #(re-find #"<imgeo:inOnderzoek>false</imgeo:inOnderzoek>" %) (render-wegdeel-with-bgt-example 5))))))
 
 
- (deftest test-features-gml-mapping
-   (is (= 5 (count(filter #(re-find #"<gml:posList" %) (render-wegdeel-with-bgt-example 5))))))
+(deftest test-features-gml-mapping
+  (let [rendered (render-wegdeel-with-bgt-example 5)]
+    (is (= 5 (count(filter #(re-find #"<gml:posList" %) rendered))))
+    (is (= 0 (count(filter #(re-find #"<\?" %) rendered))))))
 
 
  (defn render-wegdeel-with-sets-with-bgt-example [n]
@@ -88,3 +90,10 @@
   (defn write-gml-files [n]
     (time (with-open [w (clojure.java.io/writer "target/features.gml.json")]
        (json/generate-stream {:features (render-wegdeel-with-bgt-example n)} w))))
+
+
+(deftest collections-are-proxied-too []
+  (let [feature {:nested (into [] (map (fn [g] {:_geometry g}) (repeat 3 example-geometry-bgt-wegdeel)))}
+        rendered (m/render-resource "templates/test/gml2extract/nested-function.mustache" feature)]
+    (is (= 3 (count (re-seq #"<gml:posList" rendered))))
+    (is (= 0 (count (re-seq #"<\?" rendered))))))

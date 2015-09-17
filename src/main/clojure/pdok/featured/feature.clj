@@ -5,7 +5,8 @@
             [clojure.java.jdbc :as j]
             [pdok.postgres :as pg]
             [cognitect.transit :as transit]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [clojure.tools.logging :as log])
   (:import [nl.pdok.gml3 GML3Parser]
            [pdok.featured.xslt TransformXSLT]
            [com.vividsolutions.jts.geom Geometry]

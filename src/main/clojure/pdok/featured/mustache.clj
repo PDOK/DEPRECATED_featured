@@ -1,7 +1,8 @@
 (ns pdok.featured.mustache
   (:require [stencil.core :as stencil]
             [stencil.loader :as loader]
-            [pdok.featured.mustache-functions])
+            [pdok.featured.mustache-functions]
+            [clojure.tools.logging :as log])
   (:gen-class))
 
 (defn resolve-as-function [namespace function]
@@ -15,13 +16,13 @@
     (lookup-proxy value)))
 
 (defn val-at[k obj]
-  (if (and (map? obj) (or (contains? obj k) (contains? obj (name k))))
-    (let [value (get obj k (get obj (name k)))]
-       (if (or (= (class value) pdok.featured.feature.NilAttribute) (= value nil))
-         nil
-         (mustache-proxy value)))
-    (when-let [f (resolve-as-function "pdok.featured.mustache-functions" k)]
-       (mustache-proxy (f obj)))))
+  (if-let [f (resolve-as-function "pdok.featured.mustache-functions" k)]
+    (mustache-proxy (f obj))
+    (if (and (map? obj) (or (contains? obj k) (contains? obj (name k))))
+      (let [value (get obj k (get obj (name k)))]
+        (if (or (= (class value) pdok.featured.feature.NilAttribute) (= value nil))
+          nil
+          (mustache-proxy value))))))
 
 (defn lookup-proxy [obj]
   (reify
@@ -44,7 +45,7 @@
       (valAt [_ k] (val-at k obj))
     clojure.lang.IPersistentCollection
       (cons [_ o](mustache-proxy (conj obj o)))
-      (seq [this] (if (or (map? obj) (string? obj)) (list obj) (seq obj)))
+      (seq [this] (if (or (map? obj) (string? obj)) (list (mustache-proxy obj)) (seq (map mustache-proxy obj))))
     Object
       (toString [_] (str obj))))
 

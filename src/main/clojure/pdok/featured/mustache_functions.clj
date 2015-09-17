@@ -6,4 +6,7 @@
 
 (defn simple-gml [arg] (feature/as-simple-gml arg))
 
-(defn _version [_] (random/UUID))
+(defn _version [arg]
+  (if-let [version (:_version arg)]
+    version
+    (random/UUID)))
