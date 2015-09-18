@@ -112,7 +112,7 @@
   (defroutes api-routes
     (context "/api" []
              (GET "/ping" [] (r/response {:pong (tl/local-now)}))
-             (POST "/ping" [] (fn [r] (println "!ping pong!" (:body r)) (r/response {:pong (tl/local-now)})))
+             (POST "/ping" [] (fn [r] (log/info "!ping pong!" (:body r)) (r/response {:pong (tl/local-now)})))
              (GET "/stats" [] (r/response @stats))
              (POST "/process" [] (partial process-request ProcessRequest process-chan))
              (POST "/extract" [] (partial process-request ExtractRequest extract-chan )))
