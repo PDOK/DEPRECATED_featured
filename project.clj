@@ -25,10 +25,10 @@
   :url "http://github.so.kadaster.nl/PDOK/featured"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-    :repositories [["releases" "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/releases/"]            
+    :repositories [["releases" "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/releases/"]
                    ["osgeo" {:url "http://download.osgeo.org/webdav/geotools/"
                              :snapshots false}]
-                   ["local" "file:repo"]]  
+                   ["local" "file:repo"]]
     :mirrors {"*" {:name "kadaster"
                    :url "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/public/"}}
   :dependencies [[cheshire "5.4.0"]
@@ -39,7 +39,7 @@
                   :exclusions [[log4j]]]
                  [compojure "1.3.4"]
                  [stencil "0.4.0"]
-                 [environ "1.0.0"]
+                 [environ "1.0.1"]
                  [http-kit "2.1.18"]
                  [org.clojure/clojure "1.7.0"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
@@ -61,8 +61,7 @@
                  [ring/ring-json "0.3.1"]
                  [xalan/xalan "2.7.2"]
                  [nl.pdok/gml311-jts "0.0.2"]]
-  :plugins [[lein-environ "1.0.0"]
-            [lein-ring "0.9.6" ]
+  :plugins [[lein-ring "0.9.6" ]
             [lein-filegen "0.1.0-SNAPSHOT"]]
   :ring {:handler pdok.featured.api/app
          :uberwar-name ~uberwar-name}
