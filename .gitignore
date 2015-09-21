@@ -11,3 +11,5 @@ pom.xml.asc
 .hg/
 .test-files/
 profiles.clj
+.idea/
+src/main/main.iml
