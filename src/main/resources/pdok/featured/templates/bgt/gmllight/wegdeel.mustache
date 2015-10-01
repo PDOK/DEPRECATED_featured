@@ -1,9 +1,12 @@
 {{>start-gml-light}}
   <imgeo-s:Wegdeel xmlns:tra="http://www.opengis.net/citygml/transportation/2.0" gml:id="_{{_version}}">
    {{>start-bgt-feature-type}}
+
     <imgeo-s:bgt-functie>{{functie}}</imgeo-s:bgt-functie>
     <imgeo-s:opTalud>{{optalud}}</imgeo-s:opTalud>
     <imgeo-s:bgt-fysiekVoorkomen>{{fysiekvoorkomen}}</imgeo-s:bgt-fysiekVoorkomen>
    {{>end-bgt-feature-type}}
+
+     <imgeo:kruinlijnWegdeel{{#kruinlijn_leeg}} nilReason="{{.}}"{{/kruinlijn_leeg}}>{{#kruinlijn}}{{{_geometry.gml}}}{{/kruinlijn}}</imgeo:kruinlijnWegdeel>
   </imgeo-s:Wegdeel>
 {{>end-gml-light}}

@@ -5,5 +5,7 @@
     <imgeo-s:bgt-fysiekVoorkomen>{{fysiekvoorkomen}}</imgeo-s:bgt-fysiekVoorkomen>
     <imgeo-s:plus-fysiekVoorkomen>{{plus-fysiekvoorkomen}}{{plus-fysiekvoorkomen_leeg}}</imgeo-s:plus-fysiekVoorkomen>
    {{>end-bgt-feature-type}}
+   
+   	<imgeo:kruinlijnBegroeidTerreindeel{{#kruinlijn_leeg}} nilReason="{{.}}"{{/kruinlijn_leeg}}>{{#kruinlijn}}{{{_geometry.gml}}}{{/kruinlijn}}</imgeo:kruinlijnBegroeidTerreindeel>
   </imgeo-s:BegroeidTerreindeel>
 {{>end-gml-light}}
