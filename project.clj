@@ -75,8 +75,8 @@
              :template-fn (partial pdok.lein/generate-from-template "deployit-manifest.xml.template")
              :target "target/deployit-manifest.xml"}
             {:data ~release-version
-             :template-fn #(str %)
-             :target "target/featured.version"}]
+             :template-fn #(str "FEATURED_VERSION=" %1 "\n")
+             :target "target/featured.properties"}]
   :aliases {"build" ["do" ["compile"] ["test"]
                      ["ring" "uberwar"] ["filegen"]]}
   :profiles {:uberjar {:aot :all}
