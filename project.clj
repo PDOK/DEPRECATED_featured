@@ -73,7 +73,10 @@
   :test-paths ["src/test/clojure"]
   :filegen [{:data {:RELEASE_VERSION ~release-version :CHANGE_NUMBER ~change-number}
              :template-fn (partial pdok.lein/generate-from-template "deployit-manifest.xml.template")
-             :target "target/deployit-manifest.xml"}]
+             :target "target/deployit-manifest.xml"}
+            {:data ~release-version
+             :template-fn #(str %)
+             :target "target/featured.version"}]
   :aliases {"build" ["do" ["compile"] ["test"]
                      ["ring" "uberwar"] ["filegen"]]}
   :profiles {:uberjar {:aot :all}
