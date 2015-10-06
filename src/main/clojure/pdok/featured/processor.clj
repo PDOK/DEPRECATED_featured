@@ -70,19 +70,20 @@
   )
 
 (defn- validate [{:keys [persistence]} feature]
+  "Validates features. Nested actions are validated against new checks, because we always close the old nested features."
   (condp contains? (:action feature)
-    #{:new :nested-new}
+    #{:new :nested-new :nested-change :nested-close}
     (let [validated  (->> feature
                           (apply-all-features-validation persistence)
                           (apply-new-feature-requires-non-existing-stream-validation persistence))]
       validated)
-    #{:change :nested-change}
+    #{:change}
     (->> feature
          (apply-all-features-validation persistence)
          (apply-non-new-feature-requires-existing-stream-validation persistence)
          (apply-closed-feature-cannot-be-changed-validation persistence)
          (apply-non-new-feature-current-validity-validation persistence))
-    #{:close :nested-close}
+    #{:close}
     (->> feature
          (apply-all-features-validation persistence)
          (apply-closed-feature-cannot-be-changed-validation persistence)
