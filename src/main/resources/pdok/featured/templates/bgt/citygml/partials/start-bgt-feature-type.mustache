@@ -1,8 +1,9 @@
 <creationDate>{{creationdate}}</creationDate>
-  <terminationDate>{{terminationdate}}{{terminationdate_leeg}}</terminationDate>
+  {{#terminationdate}}<imgeo:objectEindTijd>{{.}}</imgeo:objectEindTijd>{{/terminationdate}}
   <imgeo:LV-publicatiedatum>{{lv-publicatiedatum}}</imgeo:LV-publicatiedatum>
   <imgeo:relatieveHoogteligging>{{relatievehoogteligging}}</imgeo:relatieveHoogteligging>
-  <imgeo:inOnderzoek>{{inonderzoek}}{{inonderzoek_leeg}}</imgeo:inOnderzoek>
+  {{#inonderzoek}}<imgeo:inOnderzoek>{{.}}</imgeo:inOnderzoek>{{/inonderzoek}}
+  {{^inonderzoek}}<imgeo:inOnderzoek>false</imgeo:inOnderzoek>{{/inonderzoek}}
   {{#eindregistratie}}<imgeo:eindRegistratie>{{.}}</imgeo:eindRegistratie>{{/eindregistratie}}
   <imgeo:tijdstipRegistratie>{{tijdstipregistratie}}</imgeo:tijdstipRegistratie>
   <imgeo:identificatie>
