@@ -7,18 +7,18 @@
     <tomcat.LoggingSpec name="featuredLogging">
       <tags />
       <logging>
-        <entry key="IGNORE-ERROR">{{featured.logging.ignore-ERROR}}</entry>
-        <entry key="DEFAULT-TRACE">{{featured.logging.default-TRACE}}</entry>
-        <entry key="IGNORE-TRACE">{{featured.logging.ignore-TRACE}}</entry>
-        <entry key="DEFAULT-ERROR">{{featured.logging.default-ERROR}}</entry>
-        <entry key="DEFAULT-DEBUG">{{featured.logging.default-DEBUG}}</entry>
-        <entry key="IGNORE-INFO">{{featured.logging.ignore-INFO}}</entry>
-        <entry key="IGNORE-WARN">{{featured.logging.ignore-WARN}}</entry>
-        <entry key="DEFAULT-INFO">{{featured.logging.default-INFO}}</entry>
-        <entry key="DEFAULT-WARN">{{featured.logging.default-WARN}}</entry>
-        <entry key="IGNORE-DEBUG">{{featured.logging.ignore-DEBUG}}</entry>
-        <entry key="IGNORE-FATAL">{{featured.logging.ignore-FATAL}}</entry>
-        <entry key="DEFAULT-FATAL">{{featured.logging.default-FATAL}}</entry>
+        <entry key="IGNORE-ERROR">{{logging.ignore-ERROR}}</entry>
+        <entry key="DEFAULT-TRACE">{{logging.default-TRACE}}</entry>
+        <entry key="IGNORE-TRACE">{{logging.ignore-TRACE}}</entry>
+        <entry key="DEFAULT-ERROR">{{logging.default-ERROR}}</entry>
+        <entry key="DEFAULT-DEBUG">{{logging.default-DEBUG}}</entry>
+        <entry key="IGNORE-INFO">{{logging.ignore-INFO}}</entry>
+        <entry key="IGNORE-WARN">{{logging.ignore-WARN}}</entry>
+        <entry key="DEFAULT-INFO">{{logging.default-INFO}}</entry>
+        <entry key="DEFAULT-WARN">{{logging.default-WARN}}</entry>
+        <entry key="IGNORE-DEBUG">{{logging.ignore-DEBUG}}</entry>
+        <entry key="IGNORE-FATAL">{{logging.ignore-FATAL}}</entry>
+        <entry key="DEFAULT-FATAL">{{logging.default-FATAL}}</entry>
       </logging>
     </tomcat.LoggingSpec>
     <tomcat.War name="featured-war" file="uberjar/featured.war">
