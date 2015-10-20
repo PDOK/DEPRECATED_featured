@@ -14,15 +14,15 @@
 (defn execute [{:keys [json-file
                        dataset-name
                        no-projectors]}]
-  (println (str "start" (when dataset-name " dataset: " dataset-name) (when no-projectors " without projectors")))
+  (log/info (str "start " (when dataset-name " dataset: " dataset-name) (when no-projectors " without projectors")))
   (let [persistence (config/persistence)
         processor (if no-projectors
                     (processor/create persistence)
                     (processor/create persistence (config/projectors persistence)))]
     (with-open [s (file-stream json-file)]
       (dorun (consume processor (features-from-stream s :dataset dataset-name)))
-      (time (do (log/info "Shutting down.")
-                (shutdown processor)))))
+      (do (log/info "Shutting down.")
+          (shutdown processor))))
   (log/info "done")
   )
 
