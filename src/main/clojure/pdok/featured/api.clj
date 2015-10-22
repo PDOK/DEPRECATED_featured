@@ -51,6 +51,14 @@
    :extractVersion s/Str
    (s/optional-key :callback) URI})
 
+(def TemplateRequest
+  "A schema for a JSON template request"
+  {:dataset s/Str
+   :collection s/Str 
+   :extractType s/Str
+   :template s/Str 
+    (s/optional-key :partial) s/Bool})
+
 
 (defn- callbacker [uri run-stats]
   (http/post uri {:body (json/generate-string run-stats) :headers {"Content-Type" "application/json"}}))
