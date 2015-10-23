@@ -29,20 +29,22 @@
            (alter cache #(cache/miss % key (apply value-fn current-value args)))))))
     (apply cached-fn args)))
 
-(defn apply-cache-miss-fn-result [cache key-value-pairs]
+(defn apply-to-cache [cache key-value-pairs]
   (dosync
    (doseq [kvp key-value-pairs]
      (alter cache #(cache/miss % (first kvp) (second kvp))))))
 
-(defn use-cache [cache key-fn cache-miss-fn]
-  (fn [& args]
-    (letfn [(cache-lookup [key] (cache/lookup @cache key))]
-      (let [cache-key (apply key-fn args)
-            cached (cache-lookup cache-key)]
-        (if cached
-          cached
-          (do (when cache-miss-fn (apply-cache-miss-fn-result cache (apply cache-miss-fn args)))
-              (cache-lookup cache-key)))))))
+(defn use-cache
+  ([cache key-fn] (use-cache cache key-fn nil))
+  ([cache key-fn cache-miss-fn]
+   (fn [& args]
+     (letfn [(cache-lookup [key] (cache/lookup @cache key))]
+       (let [cache-key (apply key-fn args)
+             cached (cache-lookup cache-key)]
+         (if cached
+           cached
+           (do (when cache-miss-fn (apply-to-cache cache (apply cache-miss-fn args)))
+               (cache-lookup cache-key))))))))
 
 (defmacro cached [cache f & args]
   "Cached version of f. Needs atom as cache. If first param is :reload reloads"

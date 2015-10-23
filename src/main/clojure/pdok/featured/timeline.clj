@@ -11,6 +11,8 @@
             [clojure.tools.logging :as log]
             [clj-time.core :as t]))
 
+(declare create)
+
 (defn indices-of [f coll]
   (keep-indexed #(if (f %2) %1 nil) coll))
 
@@ -195,16 +197,17 @@ VALUES (?, ?, ? ,?, ?, ?, ?, ?)"))
 ;;                       dataset collection id])]
 ;;       (pg/from-json (:feature (first results))))))
 
-(defn- load-current-feature-cache-sql []
+(defn- load-current-feature-cache-sql [n]
   (str "SELECT dataset, collection, feature_id, feature  FROM " (qualified-current)
-   " WHERE dataset = ? AND collection = ?")
+       " WHERE dataset = ? AND collection = ? AND feature_id in ("
+       (clojure.string/join "," (repeat n "?")) ")")
   )
 
-(defn- load-current-feature-cache [db dataset collection]
+(defn- load-current-feature-cache [db dataset collection ids]
   (try (j/with-db-connection [c db]
          (let [results
-               (j/query c [(load-current-feature-cache-sql)
-                           dataset collection] :as-arrays? true)
+               (j/query c (apply vector (load-current-feature-cache-sql (count ids))
+                                 dataset collection ids) :as-arrays? true)
                for-cache
                (map (fn [[ds col fid f]] [[ds col fid] (pg/from-json f)] ) (drop 1 results))]
            for-cache))
@@ -285,14 +288,14 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
       (batched-delete-his f))))
 
 (defrecord Timeline [db root-fn path-fn
-                   feature-cache cache-loader
+                   feature-cache
                    new-current-batch new-current-batch-size
                    delete-current-batch delete-current-batch-size
                    new-history-batch new-history-batch-size
                    delete-history-batch delete-history-batch-size
                    flush-fn]
   proj/Projector
-  (init [this]
+  (proj/init [this]
     (init db) this)
   (proj/new-feature [_ feature]
     (let [[dataset collection id] (feature-key feature)
@@ -304,7 +307,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
                                           delete-current-batch delete-current-batch-size
                                           flush-fn feature-cache)
           batched-history (with-batch new-history-batch new-history-batch-size (partial new-history db) flush-fn)
-          cached-get-current (use-cache feature-cache cache-use-key cache-loader)]
+          cached-get-current (use-cache feature-cache cache-use-key)]
       (if-let [current (cached-get-current dataset root-col root-id)]
         (let [new-current (merge current path feature)]
           (if (= (:action feature) :close)
@@ -328,7 +331,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
           cache-batched-delete (batched-deleter db delete-current-batch delete-current-batch-size
                                                 delete-history-batch delete-history-batch-size
                                                 flush-fn feature-cache)
-          cached-get-current (use-cache feature-cache cache-use-key cache-loader)]
+          cached-get-current (use-cache feature-cache cache-use-key)]
       (when-let [current (cached-get-current dataset root-col root-id)]
         (cache-batched-delete current))))
   (proj/close [this]
@@ -336,27 +339,69 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
     this)
   )
 
-(defn create [config]
-  (let [db (:db-config config)
-        persistence (or (:persistence config) (pers/cached-jdbc-processor-persistence config))
-        cache (ref (cache/basic-cache-factory {}))
-        load-cache?-fn (once-true-fn)
-        cache-loader (fn [dataset collection id]
-                       (when (load-cache?-fn dataset collection)
-                         (load-current-feature-cache db dataset collection)))
-        new-current-batch-size (or (:new-current-batch-size config) (:batch-size config) 10000)
-        new-current-batch (ref (clojure.lang.PersistentQueue/EMPTY))
-        delete-current-batch-size (or (:delete-current-batch-size config) (:batch-size config) 10000)
-        delete-current-batch (ref (clojure.lang.PersistentQueue/EMPTY))
-        new-history-batch-size (or (:new-history-batch-size config) (:batch-size config) 10000)
-        new-history-batch (ref (clojure.lang.PersistentQueue/EMPTY))
-        delete-history-batch-size (or (:delete-history-batch-size config) (:batch-size config) 10000)
-        delete-history-batch (ref (clojure.lang.PersistentQueue/EMPTY))
-        flush-fn #(flush-all db new-current-batch delete-current-batch new-history-batch delete-history-batch)]
-    (->Timeline db (partial pers/root persistence) (partial pers/path persistence)
-                cache cache-loader
-                new-current-batch new-current-batch-size
-                delete-current-batch delete-current-batch-size
-                new-history-batch new-history-batch-size
-                delete-history-batch delete-history-batch-size
-                flush-fn)))
+
+;; (let [selector (juxt :dataset :collection)
+;;            per-dataset-collection (group-by selector features)]
+;;         (doseq [[[dataset collection] grouped-features] per-dataset-collection]
+
+(defn create-cache [db chunk]
+  (let [selector (juxt :dataset :collection)
+        per-d-c (group-by selector chunk)
+        cache (ref (cache/basic-cache-factory {}))]
+    (doseq [[[dataset collection] features] per-d-c]
+      (apply-to-cache cache
+                      (load-current-feature-cache db dataset collection (map :id features))))
+    cache))
+
+(defn process-chunk* [config chunk]
+  (let [cache (create-cache (:db-config config) chunk)
+        timeline (proj/init (create config cache))]
+    (doseq [f chunk]
+      (condp = (:action f)
+        :new (proj/new-feature timeline f)
+        :change (proj/change-feature timeline f)
+        :close (proj/close-feature timeline f)
+        :delete (proj/delete-feature timeline f)))
+    (proj/close timeline)))
+
+(defn process-chunk [config chunk]
+  (flush-batch chunk (partial process-chunk* config)))
+
+(defrecord ChunkedTimeline [config chunk process-fn]
+  proj/Projector
+  (proj/init [this]
+    (init (:db-config config)) this)
+  (proj/new-feature [_ feature] (process-fn feature))
+  (proj/change-feature [_ feature] (process-fn feature))
+  (proj/close-feature [_ feature] (process-fn feature))
+  (proj/delete-feature [_ feature] (process-fn feature))
+  (proj/close [this] (process-chunk config chunk)))
+
+(defn create
+  ([config] (create config (ref (cache/basic-cache-factory {}))))
+  ([config cache]
+   (let [db (:db-config config)
+         persistence (or (:persistence config) (pers/cached-jdbc-processor-persistence config))
+         new-current-batch-size (or (:new-current-batch-size config) (:batch-size config) 10000)
+         new-current-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+         delete-current-batch-size (or (:delete-current-batch-size config) (:batch-size config) 10000)
+         delete-current-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+         new-history-batch-size (or (:new-history-batch-size config) (:batch-size config) 10000)
+         new-history-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+         delete-history-batch-size (or (:delete-history-batch-size config) (:batch-size config) 10000)
+         delete-history-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+         flush-fn #(flush-all db new-current-batch delete-current-batch new-history-batch delete-history-batch)]
+     (->Timeline db (partial pers/root persistence) (partial pers/path persistence)
+                 cache
+                 new-current-batch new-current-batch-size
+                 delete-current-batch delete-current-batch-size
+                 new-history-batch new-history-batch-size
+                 delete-history-batch delete-history-batch-size
+                 flush-fn))))
+
+
+(defn create-chunked [config]
+  (let [chunk-size (or (:chunk-size config) 10000)
+        chunk (ref (clojure.lang.PersistentQueue/EMPTY))
+        process-fn (with-batch chunk chunk-size #() #(process-chunk config chunk))]
+    (->ChunkedTimeline config chunk process-fn)))

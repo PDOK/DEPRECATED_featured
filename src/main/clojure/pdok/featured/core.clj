@@ -14,7 +14,7 @@
 (defn execute [{:keys [json-file
                        dataset-name
                        no-projectors]}]
-  (log/info (str "start " (when dataset-name " dataset: " dataset-name) (when no-projectors " without projectors")))
+  (log/info (str "start" (when dataset-name (str " - dataset: " dataset-name)) " - file: " json-file (when no-projectors " without projectors")))
   (let [persistence (config/persistence)
         processor (if no-projectors
                     (processor/create persistence)
