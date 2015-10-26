@@ -116,6 +116,13 @@
       (r/status (r/response invalid) 400)
       (do (go (>! request-chan request)) (r/response {:result :ok})))))
 
+(defn- template-request [http-req]
+  (let [request (:body http-req)
+        invalid (s/check TemplateRequest request)]
+    (if invalid 
+      (r/status (r/response invalid) 400)
+      (r/response {:result :ok}))))
+
 (defn api-routes [process-chan extract-chan callback-chan stats]
   (defroutes api-routes
     (context "/api" []
@@ -123,7 +130,8 @@
              (POST "/ping" [] (fn [r] (log/info "!ping pong!" (:body r)) (r/response {:pong (tl/local-now)})))
              (GET "/stats" [] (r/response @stats))
              (POST "/process" [] (partial process-request ProcessRequest process-chan))
-             (POST "/extract" [] (partial process-request ExtractRequest extract-chan )))
+             (POST "/extract" [] (partial process-request ExtractRequest extract-chan ))
+             (POST "/template" [] (fn [r] (log/info "Template request: " (:body r)) (r/response (template-request r)))))
     (route/not-found "NOT FOUND")))
 
 (defn rest-handler [& more]
