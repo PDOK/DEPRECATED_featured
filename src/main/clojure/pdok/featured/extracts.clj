@@ -38,8 +38,7 @@
       (if (or (nil? template) (nil? partials))
         [(str "Template or partials cannot be found for dataset: " dataset
                                                     " feature-type: " feature-type
-                                                    " extract-type: " extract-type
-                                                    " template-dir: " templates-dir) nil]
+                                                    " extract-type: " extract-type) nil]
         [nil (map #(vector feature-type (:_tiles %) (m/render template % partials)
                            (:_valid_from %) (:_valid_to %)) features)]))))
 
@@ -109,6 +108,14 @@
    Returns features read from file."
   (with-open [s (json-reader/file-stream path)]
    (doall (json-reader/features-from-stream s :dataset dataset))))
+
+(defn add-or-update-template-store [template-store dataset extract-type name partial? template]
+  (if partial? 
+    (swap! (:partials template-store) assoc-in [dataset extract-type name] template)
+    (swap! (:templates template-store) assoc-in  [dataset extract-type name] template)))
+
+(defn create-template-store []
+  {:templates (atom {}) :partials (atom {})})
 
 
 

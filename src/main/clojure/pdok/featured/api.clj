@@ -116,12 +116,19 @@
       (r/status (r/response invalid) 400)
       (do (go (>! request-chan request)) (r/response {:result :ok})))))
 
+(def ^{:private true} template-store (extracts/create-template-store))
+
 (defn- template-request [http-req]
   (let [request (:body http-req)
         invalid (s/check TemplateRequest request)]
     (if invalid 
       (r/status (r/response invalid) 400)
-      (r/response {:result :ok}))))
+      (r/response (extracts/add-or-update-template-store template-store 
+                                                         (:dataset request)
+                                                         (:extractType request)
+                                                         (:collection request)
+                                                         (:partial request)
+                                                         (:template request))))))
 
 (defn api-routes [process-chan extract-chan callback-chan stats]
   (defroutes api-routes
