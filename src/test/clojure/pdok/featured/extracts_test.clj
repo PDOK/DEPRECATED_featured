@@ -7,6 +7,8 @@
              [clojure.test :refer :all]
              [clojure.java.io :as io]))
 
+
+
 (defn- test-feature [name something other]
               {"name" name
                "something" something
@@ -27,6 +29,28 @@
   (let [features (file-to-features path dataset)
        [error features-for-extract] (features-for-extract dataset feature-type extract-type-citygml features template-dir)]
     (add-extract-records config/data-db dataset feature-type extract-type-citygml 14 features-for-extract)))
+
+
+(def test-partial "<gml:start en nog wat namespaces>")
+(def test-template "{{>model-start}}<imgeo:Bak>{{>start-feature-type}}<imgeo:geometrie2dBak>{{{_geometry.gml}}}</imgeo:geometrie2dBak></imgeo:Bak>{{>model-eind}}")
+(def expected-template "{{>bgt-city-model-start}}<imgeo:Bak>{{>bgt-city-start-feature-type}}<imgeo:geometrie2dBak>{{{_geometry.gml}}}</imgeo:geometrie2dBak></imgeo:Bak>{{>bgt-city-model-eind}}")
+
+(deftest test-replace-in-template
+  (is (= expected-template (replace-in-template test-template "bgt" "city" "{{>"))))
+
+
+(def test-store (create-template-store))
+
+(deftest test-add-or-update-template-store
+  (do 
+    (add-or-update-template-store test-store "bgt" "city" "bak" false test-template)
+    (add-or-update-template-store test-store "bgt" "gml-light" "bak" false test-template)
+    (add-or-update-template-store test-store "bgt" "city" "start-bgt" true test-partial))
+    (is (= 2 (count (get-in @(:templates test-store) ["bgt"]))))
+    (is (= 1 (count (get-in @(:partials test-store) ["bgt"]))))
+    (is (= expected-template (get-in @(:templates test-store) ["bgt" "city" "bak"])))
+  )
+
 
 ;(write-xml-to-database "bgt" "bord" "D:\\data\\pdok\\bgt\\mutatie-leveringen\\bord\\973140-Bord-1.json" "D:\\projects\\featured\\src\\main\\resources\\pdok\\featured\\templates")
 
