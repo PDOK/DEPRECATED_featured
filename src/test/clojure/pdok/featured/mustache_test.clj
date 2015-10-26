@@ -97,3 +97,10 @@
         rendered (m/render-resource "templates/test/gml2extract/nested-function.mustache" feature)]
     (is (= 3 (count (re-seq #"<gml:posList" rendered))))
     (is (= 0 (count (re-seq #"<\?" rendered))))))
+
+(def test-template "{{>model-start}}<imgeo:Bak>{{>start-feature-type}}<imgeo:geometrie2dBak>{{{_geometry.gml}}}</imgeo:geometrie2dBak></imgeo:Bak>{{>model-eind}}")
+(def expected-template "{{>bgt-city-model-start}}<imgeo:Bak>{{>bgt-city-start-feature-type}}<imgeo:geometrie2dBak>{{{_geometry.gml}}}</imgeo:geometrie2dBak></imgeo:Bak>{{>bgt-city-model-eind}}")
+
+(deftest test-replace-in-template
+  (is (= expected-template (m/replace-in-template test-template "bgt-city-" "{{>"))))
+

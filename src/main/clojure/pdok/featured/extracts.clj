@@ -109,15 +109,12 @@
   (with-open [s (json-reader/file-stream path)]
    (doall (json-reader/features-from-stream s :dataset dataset))))
 
-(defn replace-in-template [template dataset extract-type search-prefix]
-  (let [qualified-name (str dataset "-" extract-type "-")]
-  (clojure.string/replace template search-prefix (str search-prefix qualified-name))))
-
 (defn add-or-update-template-store [template-store dataset extract-type name partial? template]
-  (let [template (replace-in-template template dataset extract-type "{{>")]
+  (let [qualifier (str dataset "-" extract-type "-")
+        template (m/replace-in-template template qualifier "{{>")]
     (if partial? 
-      (swap! (:partials template-store) assoc-in [dataset extract-type name] template)
-      (swap! (:templates template-store) assoc-in  [dataset extract-type name] template))))
+      (swap! (:partials template-store) assoc-in [(str qualifier name)] template)
+      (swap! (:templates template-store) assoc-in  [(str qualifier name)] template))))
 
 (defn create-template-store []
   {:templates (atom {}) :partials (atom {})})
