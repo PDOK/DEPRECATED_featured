@@ -54,13 +54,15 @@
 
 (defn register-template [key value]
   (if-not (contains? @registered-templates key)
-    (loader/register-template (name key) value)
-    (swap! registered-templates conj key)))
+    (do 
+      (loader/register-template (name key) value)
+      (swap! registered-templates conj key))))
 
 (defn register-partial [key value]
   (if-not (contains? @registered-partials key)
-    (loader/register-template (name key) value)
-    (swap! registered-partials conj key)))
+    (do 
+      (loader/register-template (name key) value)
+      (swap! registered-partials conj key))))
 
 (defn render
   ([template feature] (render template nil))

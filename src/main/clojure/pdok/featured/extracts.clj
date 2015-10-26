@@ -29,12 +29,12 @@
                                     (slurp val))) {} partials))
       nil)))
 
-(defn features-for-extract [dataset feature-type extract-type features templates-dir]
+(defn features-for-extract [dataset feature-type extract-type features template-store]
   "Returns the rendered representation of the collection of features for a given feature-type inclusive tiles-set"
   (if (empty? features)
     [nil nil]
-    (let [template (template templates-dir dataset feature-type extract-type)
-          partials (partials templates-dir dataset extract-type)]
+    (let [template (template template-store dataset feature-type extract-type)
+          partials (partials template-store dataset extract-type)]
       (if (or (nil? template) (nil? partials))
         [(str "Template or partials cannot be found for dataset: " dataset
                                                     " feature-type: " feature-type
@@ -89,14 +89,14 @@
       (add-metadata-extract-records db extractset-id rendered-features))
     (count rendered-features)))
 
-(defn fill-extract [dataset collection extract-type extract-version]
+(defn fill-extract [template-store dataset collection extract-type extract-version]
   (let [feature-type collection
         features (timeline/all (config/timeline) dataset collection)
         [error features-for-extract] (features-for-extract dataset
                                                            feature-type
                                                            extract-type
                                                            features
-                                                           "src/main/resources/pdok/featured/templates")]
+                                                           template-store)]
     (if (nil? error)
       (if (nil? features-for-extract)
         {:status "ok" :count 0}
@@ -109,10 +109,15 @@
   (with-open [s (json-reader/file-stream path)]
    (doall (json-reader/features-from-stream s :dataset dataset))))
 
+(defn replace-in-template [template dataset extract-type search-prefix]
+  (let [qualified-name (str dataset "-" extract-type "-")]
+  (clojure.string/replace template search-prefix (str search-prefix qualified-name))))
+
 (defn add-or-update-template-store [template-store dataset extract-type name partial? template]
-  (if partial? 
-    (swap! (:partials template-store) assoc-in [dataset extract-type name] template)
-    (swap! (:templates template-store) assoc-in  [dataset extract-type name] template)))
+  (let [template (replace-in-template template dataset extract-type "{{>")]
+    (if partial? 
+      (swap! (:partials template-store) assoc-in [dataset extract-type name] template)
+      (swap! (:templates template-store) assoc-in  [dataset extract-type name] template))))
 
 (defn create-template-store []
   {:templates (atom {}) :partials (atom {})})

@@ -94,11 +94,23 @@
              (stats-on-callback callback-chan request error-stats)))))
   )
 
+
+(defn- process-request [schema request-chan http-req]
+  (let [request (:body http-req)
+        invalid (s/check schema request)]
+    (if invalid
+      (r/status (r/response invalid) 400)
+      (do (go (>! request-chan request)) (r/response {:result :ok})))))
+
+
+(def ^{:private true} template-store (extracts/create-template-store))
+
 (defn- extract* [callback-chan request]
   (log/info "Processing extract: " request)
 
   (try
-    (let [response (extracts/fill-extract (:dataset request)
+    (let [response (extracts/fill-extract template-store
+                                          (:dataset request)
                                           (:collection request)
                                           (:extractType request)
                                           (read-string (:extractVersion request)))
@@ -109,14 +121,6 @@
         (log/warn error-stats)
         (stats-on-callback callback-chan request error-stats)))))
 
-(defn- process-request [schema request-chan http-req]
-  (let [request (:body http-req)
-        invalid (s/check schema request)]
-    (if invalid
-      (r/status (r/response invalid) 400)
-      (do (go (>! request-chan request)) (r/response {:result :ok})))))
-
-(def ^{:private true} template-store (extracts/create-template-store))
 
 (defn- template-request [http-req]
   (let [request (:body http-req)
