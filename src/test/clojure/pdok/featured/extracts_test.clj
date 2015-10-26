@@ -32,23 +32,20 @@
 
 
 (def test-partial "<gml:start en nog wat namespaces>")
+
+(def test-store (create-template-store))
 (def test-template "{{>model-start}}<imgeo:Bak>{{>start-feature-type}}<imgeo:geometrie2dBak>{{{_geometry.gml}}}</imgeo:geometrie2dBak></imgeo:Bak>{{>model-eind}}")
 (def expected-template "{{>bgt-city-model-start}}<imgeo:Bak>{{>bgt-city-start-feature-type}}<imgeo:geometrie2dBak>{{{_geometry.gml}}}</imgeo:geometrie2dBak></imgeo:Bak>{{>bgt-city-model-eind}}")
 
-(deftest test-replace-in-template
-  (is (= expected-template (replace-in-template test-template "bgt" "city" "{{>"))))
-
-
-(def test-store (create-template-store))
 
 (deftest test-add-or-update-template-store
   (do 
     (add-or-update-template-store test-store "bgt" "city" "bak" false test-template)
     (add-or-update-template-store test-store "bgt" "gml-light" "bak" false test-template)
     (add-or-update-template-store test-store "bgt" "city" "start-bgt" true test-partial))
-    (is (= 2 (count (get-in @(:templates test-store) ["bgt"]))))
-    (is (= 1 (count (get-in @(:partials test-store) ["bgt"]))))
-    (is (= expected-template (get-in @(:templates test-store) ["bgt" "city" "bak"])))
+    (is (= 2 (count @(:templates test-store))))
+    (is (= 1 (count @(:partials test-store))))
+    (is (= expected-template (get @(:templates test-store) "bgt-city-bak")))
   )
 
 

@@ -49,6 +49,10 @@
     Object
       (toString [_] (str obj))))
 
+
+(defn replace-in-template [template qualifier search-prefix]
+ (clojure.string/replace template search-prefix (str search-prefix qualifier)))
+
 (def ^{:private true} registered-templates (atom #{}))
 (def ^{:private true} registered-partials (atom #{}))
 
