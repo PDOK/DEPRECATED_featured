@@ -13,28 +13,12 @@
 (def ^{:private true } extractset-table "extractmanagement.extractset")
 (def ^{:private true } extractset-area-table "extractmanagement.extractset_area")
 
-(defn- template [templates-dir dataset feature-type extract-type]
-  (let [template-file (clojure.java.io/as-file (str templates-dir "/" dataset "/" extract-type "/" feature-type ".mustache"))]
-    (if (.exists template-file)
-      {:name (str feature-type) :template (slurp template-file)}
-      nil)))
-
-(defn- partials [templates-dir dataset extract-type]
-  (let [partials-dir (clojure.java.io/as-file (str templates-dir "/" dataset "/" extract-type "/partials"))]
-    (if (.exists partials-dir)
-      (let [files (file-seq partials-dir)
-            partials (filter #(.endsWith (.getName %) ".mustache") files)]
-        (reduce (fn [acc val] (assoc acc
-                                    (keyword (clojure.string/replace (.getName val) ".mustache" ""))
-                                    (slurp val))) {} partials))
-      nil)))
-
 (defn features-for-extract [dataset feature-type extract-type features template-store]
   "Returns the rendered representation of the collection of features for a given feature-type inclusive tiles-set"
   (if (empty? features)
     [nil nil]
-    (let [template (template template-store dataset feature-type extract-type)
-          partials (partials template-store dataset extract-type)]
+    (let [template (get-in @(:templates template-store) [dataset extract-type feature-type])
+          partials (get-in @(:partials template-store) [dataset extract-type])]
       (if (or (nil? template) (nil? partials))
         [(str "Template or partials cannot be found for dataset: " dataset
                                                     " feature-type: " feature-type
@@ -111,10 +95,11 @@
 
 (defn add-or-update-template-store [template-store dataset extract-type name partial? template]
   (let [qualifier (str dataset "-" extract-type "-")
-        template (m/replace-in-template template qualifier "{{>")]
+        template (m/replace-in-template template qualifier "{{>")
+        template-with-name {:template template :name (str qualifier name)}]
     (if partial? 
-      (swap! (:partials template-store) assoc-in [(str qualifier name)] template)
-      (swap! (:templates template-store) assoc-in  [(str qualifier name)] template))))
+      (swap! (:partials template-store) assoc-in [dataset extract-type name] template-with-name)
+      (swap! (:templates template-store) assoc-in  [dataset extract-type name] template-with-name))))
 
 (defn create-template-store []
   {:templates (atom {}) :partials (atom {})})

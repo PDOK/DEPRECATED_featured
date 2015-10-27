@@ -18,8 +18,13 @@
 (defn two-features [] (list (test-feature "name1" "A" "B")
                              (test-feature "name2" "C" "D")))
 
+(def dummy-store (create-template-store))
+
+(def test-gml2extract-dummy-template (slurp (io/resource "templates/test/gml2extract/dummy.mustache")))
+
 (deftest test-two-rendered-features 
-  (let [[error features] (features-for-extract "test" "dummy" "gml2extract" (two-features) "src/test/resources/templates")]
+  (let [_ (add-or-update-template-store dummy-store "test" "gml2extract" "dummy" false test-gml2extract-dummy-template)
+        [error features] (features-for-extract "test" "dummy" "gml2extract" (two-features) dummy-store)]
     (is (= 2 )(count features))))
 
 (def ^{:private true} extract-type-citygml "citygml")
@@ -43,9 +48,9 @@
     (add-or-update-template-store test-store "bgt" "city" "bak" false test-template)
     (add-or-update-template-store test-store "bgt" "gml-light" "bak" false test-template)
     (add-or-update-template-store test-store "bgt" "city" "start-bgt" true test-partial))
-    (is (= 2 (count @(:templates test-store))))
-    (is (= 1 (count @(:partials test-store))))
-    (is (= expected-template (get @(:templates test-store) "bgt-city-bak")))
+    (is (= 2 (count (get-in @(:templates test-store) ["bgt"]))))
+    (is (= 1 (count (get-in @(:partials test-store) ["bgt"]))))
+    (is (= expected-template (get-in @(:templates test-store) ["bgt" "city" "bak" :template])))
   )
 
 
