@@ -56,24 +56,26 @@
 (def ^{:private true} registered-templates (atom #{}))
 (def ^{:private true} registered-partials (atom #{}))
 
-(defn register-template [key value]
-  (if-not (contains? @registered-templates key)
+(defn register [registered name template]
+  (if-not (contains? @registered name)
     (do 
-      (loader/register-template (name key) value)
-      (swap! registered-templates conj key))))
+      (loader/register-template name template)
+      (swap! registered conj name))))
 
-(defn register-partial [key value]
-  (if-not (contains? @registered-partials key)
+(defn register-partial [name template]
+   (if-not (contains? @registered-partials name)
     (do 
-      (loader/register-template (name key) value)
-      (swap! registered-partials conj key))))
+      (loader/register-template name template)
+      (swap! registered-partials conj name))))
 
 (defn render
   ([template feature] (render template nil))
   ([{:keys [name template]} feature partials]
    (if-not (nil? partials)
-     (doseq [[k v] partials] (register-partial k v)))
-   (register-template name template)
+     (doseq [[k partial] partials] (let [name (:name partial)
+                                         partial-content (:template partial)]
+                                     (register registered-partials name partial-content))))
+   (register registered-templates name template)
    (stencil/render-file name (lookup-proxy feature))))
 
 (defn render-resource

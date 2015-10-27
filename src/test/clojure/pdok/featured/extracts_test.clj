@@ -18,14 +18,23 @@
 (defn two-features [] (list (test-feature "name1" "A" "B")
                              (test-feature "name2" "C" "D")))
 
+(def test-expected-rendered-feature "<dummyObjectMember><naam><hier is een begin>name1</naam><ietsAnders object=\"A\">B</ietsAnders><geo><gml:Polygon xmlns:gml=\"http://www.opengis.net/gml\" srsName=\"EPSG:28992\"><gml:exterior><gml:LinearRing><gml:posList srsDimension=\"2\">10.0 10.0 5.0 10.0 5.0 5.0 10.0 5.0 10.0 10.0</gml:posList></gml:LinearRing></gml:exterior></gml:Polygon></geo><noValue></noValue><dit lijkt wel een eind/></dummyObjectMember>")
+
 (def dummy-store (create-template-store))
 
 (def test-gml2extract-dummy-template (slurp (io/resource "templates/test/gml2extract/dummy.mustache")))
+(def test-gml2extract-start-partial (slurp (io/resource "templates/test/gml2extract/partials/start.mustache")))
+(def test-gml2extract-end-partial (slurp (io/resource "templates/test/gml2extract/partials/end.mustache")))
+
 
 (deftest test-two-rendered-features 
   (let [_ (add-or-update-template-store dummy-store "test" "gml2extract" "dummy" false test-gml2extract-dummy-template)
-        [error features] (features-for-extract "test" "dummy" "gml2extract" (two-features) dummy-store)]
-    (is (= 2 )(count features))))
+        _ (add-or-update-template-store dummy-store "test" "gml2extract" "start" true test-gml2extract-start-partial)
+        _ (add-or-update-template-store dummy-store "test" "gml2extract" "end" true test-gml2extract-end-partial)
+        [error features] (features-for-extract "test" "dummy" "gml2extract" (two-features) dummy-store)
+        rendered-feature (nth (first features) 2)]
+    (is (= 2 (count features)))
+    (is (= test-expected-rendered-feature rendered-feature))))
 
 (def ^{:private true} extract-type-citygml "citygml")
 
