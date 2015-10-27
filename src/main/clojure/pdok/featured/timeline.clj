@@ -367,10 +367,10 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
 (defn process-chunk [config chunk]
   (flush-batch chunk (partial process-chunk* config)))
 
-(defrecord ChunkedTimeline [config chunk process-fn]
+(defrecord ChunkedTimeline [config db chunk process-fn]
   proj/Projector
   (proj/init [this]
-    (init (:db-config config)) this)
+    (init db) this)
   (proj/new-feature [_ feature] (process-fn feature))
   (proj/change-feature [_ feature] (process-fn feature))
   (proj/close-feature [_ feature] (process-fn feature))
@@ -403,5 +403,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
 (defn create-chunked [config]
   (let [chunk-size (or (:chunk-size config) 10000)
         chunk (ref (clojure.lang.PersistentQueue/EMPTY))
-        process-fn (with-batch chunk chunk-size #() #(process-chunk config chunk))]
-    (->ChunkedTimeline config chunk process-fn)))
+        process-fn (with-batch chunk chunk-size #() #(process-chunk config chunk))
+        db (:db-config config)]
+    (->ChunkedTimeline config db chunk process-fn)))
