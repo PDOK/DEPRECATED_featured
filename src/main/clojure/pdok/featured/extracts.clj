@@ -65,7 +65,8 @@
 (defn add-extract-records [db dataset feature-type extract-type version rendered-features]
   "Inserts the xml-features and tile-set in an extract schema based on dataset, extract-type, version and feature-type,
    if schema or table doesn't exists it will be created."
-  (let [collection (str dataset "_" extract-type)
+  (let [_ (println rendered-features)
+        collection (str dataset "_" extract-type)
         table (str collection "_v" version)
         extractset-id (get-or-add-extractset db collection version) ]
     (do
