@@ -54,19 +54,12 @@
  (clojure.string/replace template search-prefix (str search-prefix qualifier)))
 
 (def ^{:private true} registered-templates (atom #{}))
-(def ^{:private true} registered-partials (atom #{}))
 
-(defn register [registered name template]
-  (if-not (contains? @registered name)
+(defn register [name template]
+  (if-not (contains? @registered-templates name)
     (do 
       (loader/register-template name template)
-      (swap! registered conj name))))
-
-(defn register-partial [name template]
-   (if-not (contains? @registered-partials name)
-    (do 
-      (loader/register-template name template)
-      (swap! registered-partials conj name))))
+      (swap! registered-templates conj name))))
 
 (defn render
   ([template feature] (render template nil))
@@ -74,8 +67,8 @@
    (if-not (nil? partials)
      (doseq [[k partial] partials] (let [name (:name partial)
                                          partial-content (:template partial)]
-                                     (register registered-partials name partial-content))))
-   (register registered-templates name template)
+                                     (register name partial-content))))
+   (register name template)
    (stencil/render-file name (lookup-proxy feature))))
 
 (defn render-resource
