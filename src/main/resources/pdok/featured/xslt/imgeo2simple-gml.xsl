@@ -109,9 +109,9 @@
 
     <xsl:template match="gml:Curve">
         <gml:Curve>
-            <gml:segments-l>
+            <gml:segments>
                 <xsl:apply-templates select=".//gml:Arc|.//gml:LineStringSegment"/>
-            </gml:segments-l>
+            </gml:segments>
         </gml:Curve>
     </xsl:template>
 
