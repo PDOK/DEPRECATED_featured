@@ -58,7 +58,6 @@
    :templateName s/Str 
    :template s/Str})
 
-
 (defn- callbacker [uri run-stats]
   (http/post uri {:body (json/generate-string run-stats) :headers {"Content-Type" "application/json"}}))
 
@@ -71,7 +70,7 @@
   (log/info "Processsing: " request)
   (swap! stats assoc-in [:processing] request)
   (let [persistence (config/persistence)
-        projectors (config/projectors persistence)
+        projectors [(config/projectors persistence) (config/timeline persistence)]
         processor (processor/create persistence projectors)
         zip-file? (= (:format request) "zip")]
     (try
@@ -122,12 +121,12 @@
 (defn- template-request [http-req]
   (let [request (:body http-req)
         invalid (s/check TemplateRequest request)]
-    (if invalid 
+    (if invalid
       (r/status (r/response invalid) 400)
       (r/response (extracts/add-or-update-template (:dataset request)
-                                                         (:extractType request)
-                                                         (:templateName request)
-                                                         (:template request))))))
+                                                   (:extractType request)
+                                                   (:templateName request)
+                                                   (:template request))))))
 
 (defn api-routes [process-chan extract-chan callback-chan stats]
   (defroutes api-routes
