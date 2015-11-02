@@ -13,12 +13,13 @@
 
 (defn execute [{:keys [json-file
                        dataset-name
-                       no-projectors]}]
+                       no-projectors
+                       no-timeline]}]
   (log/info (str "start" (when dataset-name (str " - dataset: " dataset-name)) " - file: " json-file (when no-projectors " without projectors")))
   (let [persistence (config/persistence)
-        processor (if no-projectors
-                    (processor/create persistence)
-                    (processor/create persistence (config/projectors persistence)))]
+        projectors (cond-> [] (not no-projectors) (conj (config/projectors persistence))
+                           (not no-timeline) (conj (config/timeline persistence)))
+        processor (processor/create persistence projectors)]
     (with-open [s (file-stream json-file)]
       (dorun (consume processor (features-from-stream s :dataset dataset-name)))
       (do (log/info "Shutting down.")
@@ -34,7 +35,8 @@
 (def cli-options
   [["-f" "--json-file FILE" "JSON-file with features"]
    ["-d" "--dataset-name DATASET" "dataset"]
-   ["-n" "--no-projectors"]])
+   [nil "--no-projectors"]
+   [nil "--no-timeline"]])
 
 (defn performance-test [n & args]
   (with-open [json (apply random-json-feature-stream "perftest" "col1" n args)]

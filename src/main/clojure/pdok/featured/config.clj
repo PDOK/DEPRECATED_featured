@@ -54,5 +54,4 @@
     (timeline/create-chunked {:db-config processor-db :persistence persistence})))
 
 (defn projectors [persistence]
-  [(proj/geoserver-projector {:db-config data-db})
-   (timeline persistence)])
+  [(proj/geoserver-projector {:db-config data-db})])

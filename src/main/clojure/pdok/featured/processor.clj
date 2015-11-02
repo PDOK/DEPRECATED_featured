@@ -354,9 +354,9 @@
 
 (defn create
   ([persistence] (create persistence []))
-  ([persistence projectors]
+  ([persistence & projectors]
    (let [initialized-persistence (pers/init persistence)
-         initialized-projectors (doall (map proj/init projectors))]
+         initialized-projectors (doall (map proj/init (clojure.core/flatten projectors)))]
      {:persistence initialized-persistence
       :projectors initialized-projectors
       :statistics (atom {:n-src 0 :n-processed 0 :n-errored 0 :errored '()})})))

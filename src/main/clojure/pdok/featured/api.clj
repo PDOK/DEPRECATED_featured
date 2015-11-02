@@ -54,9 +54,9 @@
 (def TemplateRequest
   "A schema for a JSON template request"
   {:dataset s/Str
-   :collection s/Str 
+   :collection s/Str
    :extractType s/Str
-   :template s/Str 
+   :template s/Str
     (s/optional-key :partial) s/Bool})
 
 
@@ -72,7 +72,7 @@
   (log/info "Processsing: " request)
   (swap! stats assoc-in [:processing] request)
   (let [persistence (config/persistence)
-        projectors (config/projectors persistence)
+        projectors [(config/projectors persistence) (config/timeline persistence)]
         processor (processor/create persistence projectors)
         zip-file? (= (:format request) "zip")]
     (try
@@ -125,9 +125,9 @@
 (defn- template-request [http-req]
   (let [request (:body http-req)
         invalid (s/check TemplateRequest request)]
-    (if invalid 
+    (if invalid
       (r/status (r/response invalid) 400)
-      (r/response (extracts/add-or-update-template-store template-store 
+      (r/response (extracts/add-or-update-template-store template-store
                                                          (:dataset request)
                                                          (:extractType request)
                                                          (:collection request)
