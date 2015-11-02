@@ -67,6 +67,11 @@ FIXME: explanation
 Op ../featured/api/process een POST uitvoeren met onderstaande request, waarbij de parameters _format_ en _callback_ optioneel zijn.
     
     {"dataset": "bgt", "file": "file://D:/Development/PDOK/featured/.test-files/change-features-single-collection-1000.json", "format":"zip", "callback": "http://localhost:3000/api/ping"}
+    
+#### Registreren templates
+Op ../featured/api/template een POST uitvoeren met request:
+
+    {"dataset":"bgt", "extractType":"citygml", "collection":"bak", "partial": false, "template":"{{>start-model}}<imgeo:Bak gml:id=\"_{{_version}}\">{{>start-feature-type}}<function xmlns=\"http://www.opengis.net/citygml/cityfurniture/2.0\" codeSpace=\"{{type_codespace}}\">{{type}}</function><imgeo:plus-type codeSpace=\"{{plus-type_codespace}}\">{{plus-type}}{{plus-type_leeg}}</imgeo:plus-type><imgeo:geometrie2dBak>{{{_geometry.gml}}}</imgeo:geometrie2dBak></imgeo:Bak>{{>end-model}}"}
 
 #### Aanmaken extract-records    
 Op ../featured/api/extract een POST uitvoeren met request:
