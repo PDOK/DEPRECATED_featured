@@ -20,18 +20,16 @@
 
 (def test-expected-rendered-feature "<dummyObjectMember><naam><hier is een begin>name1</naam><ietsAnders object=\"A\">B</ietsAnders><geo><gml:Polygon xmlns:gml=\"http://www.opengis.net/gml\" srsName=\"EPSG:28992\"><gml:exterior><gml:LinearRing><gml:posList srsDimension=\"2\">10.0 10.0 5.0 10.0 5.0 5.0 10.0 5.0 10.0 10.0</gml:posList></gml:LinearRing></gml:exterior></gml:Polygon></geo><noValue></noValue><dit lijkt wel een eind/></dummyObjectMember>")
 
-(def dummy-store (create-template-store))
-
 (def test-gml2extract-dummy-template (slurp (io/resource "templates/test/gml2extract/dummy.mustache")))
 (def test-gml2extract-start-partial (slurp (io/resource "templates/test/gml2extract/partials/start.mustache")))
 (def test-gml2extract-end-partial (slurp (io/resource "templates/test/gml2extract/partials/end.mustache")))
 
 
 (deftest test-two-rendered-features 
-  (let [_ (add-or-update-template-store dummy-store "test" "gml2extract" "dummy" false test-gml2extract-dummy-template)
-        _ (add-or-update-template-store dummy-store "test" "gml2extract" "start" true test-gml2extract-start-partial)
-        _ (add-or-update-template-store dummy-store "test" "gml2extract" "end" true test-gml2extract-end-partial)
-        [error features] (features-for-extract "test" "dummy" "gml2extract" (two-features) dummy-store)
+  (let [_ (add-or-update-template "test" "gml2extract" "dummy" test-gml2extract-dummy-template)
+        _ (add-or-update-template "test" "gml2extract" "start" test-gml2extract-start-partial)
+        _ (add-or-update-template "test" "gml2extract" "end" test-gml2extract-end-partial)
+        [error features] (features-for-extract "test" "dummy" "gml2extract" (two-features))
         rendered-feature (nth (first features) 2)]
     (is (= 2 (count features)))
     (is (= test-expected-rendered-feature rendered-feature))))
@@ -43,24 +41,6 @@
   (let [features (file-to-features path dataset)
        [error features-for-extract] (features-for-extract dataset feature-type extract-type-citygml features template-dir)]
     (add-extract-records config/data-db dataset feature-type extract-type-citygml 14 features-for-extract)))
-
-
-(def test-partial "<gml:start en nog wat namespaces>")
-
-(def test-store (create-template-store))
-(def test-template "{{>model-start}}<imgeo:Bak>{{>start-feature-type}}<imgeo:geometrie2dBak>{{{_geometry.gml}}}</imgeo:geometrie2dBak></imgeo:Bak>{{>model-eind}}")
-(def expected-template "{{>bgt-city-model-start}}<imgeo:Bak>{{>bgt-city-start-feature-type}}<imgeo:geometrie2dBak>{{{_geometry.gml}}}</imgeo:geometrie2dBak></imgeo:Bak>{{>bgt-city-model-eind}}")
-
-
-(deftest test-add-or-update-template-store
-  (do 
-    (add-or-update-template-store test-store "bgt" "city" "bak" false test-template)
-    (add-or-update-template-store test-store "bgt" "gml-light" "bak" false test-template)
-    (add-or-update-template-store test-store "bgt" "city" "start-bgt" true test-partial))
-    (is (= 2 (count (get-in @(:templates test-store) ["bgt"]))))
-    (is (= 1 (count (get-in @(:partials test-store) ["bgt"]))))
-    (is (= expected-template (get-in @(:templates test-store) ["bgt" "city" "bak" :template])))
-  )
 
 
 ;(write-xml-to-database "bgt" "bord" "D:\\data\\pdok\\bgt\\mutatie-leveringen\\bord\\973140-Bord-1.json" "D:\\projects\\featured\\src\\main\\resources\\pdok\\featured\\templates")

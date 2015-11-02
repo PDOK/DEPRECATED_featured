@@ -54,10 +54,9 @@
 (def TemplateRequest
   "A schema for a JSON template request"
   {:dataset s/Str
-   :collection s/Str 
    :extractType s/Str
-   :template s/Str 
-    (s/optional-key :partial) s/Bool})
+   :templateName s/Str 
+   :template s/Str})
 
 
 (defn- callbacker [uri run-stats]
@@ -109,8 +108,7 @@
   (log/info "Processing extract: " request)
 
   (try
-    (let [response (extracts/fill-extract template-store
-                                          (:dataset request)
+    (let [response (extracts/fill-extract (:dataset request)
                                           (:collection request)
                                           (:extractType request)
                                           (read-string (:extractVersion request)))
@@ -121,17 +119,14 @@
         (log/warn error-stats)
         (stats-on-callback callback-chan request error-stats)))))
 
-
 (defn- template-request [http-req]
   (let [request (:body http-req)
         invalid (s/check TemplateRequest request)]
     (if invalid 
       (r/status (r/response invalid) 400)
-      (r/response (extracts/add-or-update-template-store template-store 
-                                                         (:dataset request)
+      (r/response (extracts/add-or-update-template (:dataset request)
                                                          (:extractType request)
-                                                         (:collection request)
-                                                         (:partial request)
+                                                         (:templateName request)
                                                          (:template request))))))
 
 (defn api-routes [process-chan extract-chan callback-chan stats]
