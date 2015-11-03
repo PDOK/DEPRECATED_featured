@@ -44,7 +44,7 @@
   (let [table (visualization dataset collection)]
     (pg/table-exists? db dataset table)))
 
-(defn- gs-create-collection [db dataset collection]
+(defn- gs-create-collection [db ndims srid dataset collection]
   "Create table with default fields"
   (let [table (visualization dataset collection)]
 
@@ -58,9 +58,9 @@
                 [:_geo_group "varchar (20)"])
 
       (pg/create-index db dataset table "_id")
-      (pg/add-geo-constraints db dataset table :_geometry_point)
-      (pg/add-geo-constraints db dataset table :_geometry_line)
-      (pg/add-geo-constraints db dataset table :_geometry_polygon)
+      (pg/add-geo-constraints db dataset table :_geometry_point ndims srid)
+      (pg/add-geo-constraints db dataset table :_geometry_line ndims srid)
+      (pg/add-geo-constraints db dataset table :_geometry_polygon ndims srid)
       (pg/populate-geometry-columns db dataset table)))
 
 (defn- gs-collection-attributes [db dataset collection]
@@ -84,20 +84,20 @@
       (catch java.sql.SQLException e
         (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e))))))
 
-(defn- feature-to-sparse-record [feature all-fields-constructor]
+(defn- feature-to-sparse-record [proj-fn feature all-fields-constructor]
   (let [id (:id feature)
         version (:version feature)
         sparse-attributes (all-fields-constructor (:attributes feature))]
-        (when-let [geometry (-> feature (:geometry) (f/as-jts))]
-          (let [geo-group (f/geometry-group (:geometry feature))
-                record (concat [id
-                        version
-                        (when (= :point geo-group)  geometry)
-                        (when (= :line geo-group)  geometry)
-                        (when (= :polygon geo-group)  geometry)
-                        geo-group]
-                       sparse-attributes)]
-      record))))
+    (when-let [geometry (proj-fn (-> feature (:geometry) (f/as-jts)))]
+      (let [geo-group (f/geometry-group (:geometry feature))
+            record (concat [id
+                            version
+                            (when (= :point geo-group)  geometry)
+                            (when (= :line geo-group)  geometry)
+                            (when (= :polygon geo-group)  geometry)
+                            geo-group]
+                           sparse-attributes)]
+        record))))
 
 (defn- feature-keys [feature]
   (let [geometry (:geometry feature)
@@ -107,15 +107,15 @@
              attributes (conj!-coll (keys attributes))
              true (persistent!))))
 
- (defn- feature-to-update-record [feature]
+ (defn- feature-to-update-record [proj-fn feature]
    (let [attributes (:attributes feature)
          geometry (:geometry feature)
          geo-group (when geometry (f/geometry-group geometry))]
      (cond-> (transient [(:version feature)])
              geometry (conj!-coll
-                       (when (= :point geo-group) (f/as-jts geometry))
-                       (when (= :line geo-group) (f/as-jts geometry))
-                       (when (= :polygon geo-group)  (f/as-jts geometry))
+                       (when (= :point geo-group) (proj-fn (f/as-jts geometry)))
+                       (when (= :line geo-group) (proj-fn (f/as-jts geometry)))
+                       (when (= :polygon geo-group)  (proj-fn (f/as-jts geometry)))
                        geo-group)
              attributes (conj!-coll (vals attributes))
              true (conj! (:id feature))
@@ -129,14 +129,15 @@
    (str "_geometry_" (name geo-group)))
 
 (defn- gs-add-feature
-  ([db all-attributes-fn features]
+  ([db proj-fn all-attributes-fn features]
    (try
      (let [selector (juxt :dataset :collection)
            per-dataset-collection (group-by selector features)]
         (doseq [[[dataset collection] grouped-features] per-dataset-collection]
          (j/with-db-connection [c db]
            (let [all-attributes (all-attributes-fn dataset collection)
-                 records (filter (comp not nil?) (map #(feature-to-sparse-record % (all-fields-constructor all-attributes)) grouped-features))]
+                 records (filter (comp not nil?)
+                                 (map #(feature-to-sparse-record proj-fn % (all-fields-constructor all-attributes)) grouped-features))]
               (if (not (empty? records))
                 (let [fields (concat [:_id :_version :_geometry_point :_geometry_line :_geometry_polygon :_geo_group]
                                    (map pg/quoted all-attributes))]
@@ -158,7 +159,7 @@
     (catch java.sql.SQLException e
       (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e)))))
 
-(defn- gs-update-feature [db features]
+(defn- gs-update-feature [db proj-fn features]
     (let [selector (juxt :dataset :collection)
          per-dataset-collection
            (group-by selector features)]
@@ -167,7 +168,7 @@
         (let [keyed (group-by feature-keys collection-features)]
           (doseq [[columns vals] keyed]
             (when (< 0 (count columns))
-               (let [update-vals (map feature-to-update-record vals)]
+               (let [update-vals (map feature-to-update-record proj-fn vals)]
                  (execute-update-sql db dataset collection columns update-vals)
                )))))))
 
@@ -187,17 +188,17 @@
     (catch java.sql.SQLException e
       (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e)))))
 
-(defn- flush-all [db cache insert-batch update-batch delete-batch]
+(defn- flush-all [db proj-fn cache insert-batch update-batch delete-batch]
   "Used for flushing all batches, so entry order is alway new change close"
   (let [cached-collection-attributes (cached cache gs-collection-attributes db)]
-    (flush-batch insert-batch (partial gs-add-feature db cached-collection-attributes))
-    (flush-batch update-batch (partial gs-update-feature db))
+    (flush-batch insert-batch (partial gs-add-feature db proj-fn cached-collection-attributes))
+    (flush-batch update-batch (partial gs-update-feature db proj-fn))
     (flush-batch delete-batch (partial gs-delete-feature db))))
 
 (deftype GeoserverProjector [db cache insert-batch insert-batch-size
                              update-batch update-batch-size
                              delete-batch delete-batch-size
-                             flush-fn]
+                             flush-fn proj-fn ndims srid]
   Projector
   (init [this] this)
   (new-feature [_ feature]
@@ -206,12 +207,12 @@
           cached-collection-exists? (cached cache gs-collection-exists? db)
           cached-collection-attributes (cached cache gs-collection-attributes db)
           batched-add-feature
-          (with-batch insert-batch insert-batch-size (partial gs-add-feature db cached-collection-attributes) flush-fn)]
+          (with-batch insert-batch insert-batch-size (partial gs-add-feature db proj-fn cached-collection-attributes) flush-fn)]
       (do (when (not (cached-dataset-exists? dataset))
             (gs-create-dataset db dataset)
             (cached-dataset-exists? :reload dataset))
           (when (not (cached-collection-exists? dataset collection))
-            (gs-create-collection db dataset collection)
+            (gs-create-collection db ndims srid dataset collection)
             (cached-collection-exists? :reload dataset collection))
           (let [current-attributes (cached-collection-attributes dataset collection)
                 new-attributes (filter #(not (some #{(first %)} current-attributes)) attributes)]
@@ -223,7 +224,7 @@
     (let [{:keys [dataset collection attributes]} feature
           cached-collection-attributes (cached cache gs-collection-attributes db)
           batched-update-feature (with-batch update-batch update-batch-size
-                                   (partial gs-update-feature db) flush-fn)]
+                                   (partial gs-update-feature db proj-fn) flush-fn)]
       (let [current-attributes (cached-collection-attributes dataset collection)
             new-attributes (filter #(not (some #{(first %)} current-attributes)) attributes)]
         (doseq [a new-attributes]
@@ -252,8 +253,11 @@
         update-batch (ref (clojure.lang.PersistentQueue/EMPTY))
         delete-batch-size (or (:delete-batch-size config) (:batch-size config) 10000)
         delete-batch (ref (clojure.lang.PersistentQueue/EMPTY))
-        flush-fn #(flush-all db cache insert-batch update-batch delete-batch)]
+        ndims (or (:ndims config) 2)
+        srid (or (:srid config) 28992)
+        proj-fn (or (:proj-fn config) identity)
+        flush-fn #(flush-all db proj-fn cache insert-batch update-batch delete-batch)]
     (->GeoserverProjector db cache insert-batch insert-batch-size
                           update-batch update-batch-size
                           delete-batch delete-batch-size
-                          flush-fn)))
+                          flush-fn proj-fn ndims srid)))

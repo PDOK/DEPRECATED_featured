@@ -71,7 +71,7 @@
   org.joda.time.LocalDate
   (sql-value [v] (tc/to-sql-date v))
   com.vividsolutions.jts.geom.Geometry
-  (sql-value [v] (str "SRID=28992;" (.write wkt-writer v)))
+  (sql-value [v] (str "SRID=" (.getSRID v) ";" (.write wkt-writer v)))
   clojure.lang.Keyword
   (sql-value [v] (name v))
   clojure.lang.IPersistentMap
@@ -197,12 +197,12 @@
    :_geometry_line "'LINESTRING'::text, 'MULTILINESTRING'::text, 'LINESTRINGM'::text, 'MULTILINESTRINGM'::text"
    :_geometry_polygon "'POLYGON'::text, 'MULTIPOLYGON'::text, 'CIRCULARSTRING'::text, 'COMPOUNDCURVE'::text, 'MULTICURVE'::text, 'CURVEPOLYGON'::text, 'MULTISURFACE'::text, 'GEOMETRY'::text, 'GEOMETRYCOLLECTION'::text, 'POLYGONM'::text, 'MULTIPOLYGONM'::text, 'CIRCULARSTRINGM'::text, 'COMPOUNDCURVEM'::text, 'MULTICURVEM'::text, 'CURVEPOLYGONM'::text, 'MULTISURFACEM'::text, 'GEOMETRYCOLLECTIONM'::text"})
 
-(defn add-geo-constraints [db schema table geometry-column]
+(defn add-geo-constraints [db schema table geometry-column ndims srid]
   (let [column-name (-> geometry-column name)
-        ndims (db-constraint schema table geometry-column (str "enforce_dims_" column-name) "public.st_ndims" "= 2")
-        srid (db-constraint schema table geometry-column (str "enforce_srid_" column-name) "public.st_srid" "= 28992")
-        geotype (db-constraint schema table geometry-column (str "enforce_geotype_" column-name) "public.geometrytype" (str "IN (" (-> column-name keyword geo-constraints) ")" ) )
-        constraints (vector ndims srid geotype)]
+        cndims (db-constraint schema table geometry-column (str "enforce_dims_" column-name) "public.st_ndims" (str "= " ndims))
+        csrid (db-constraint schema table geometry-column (str "enforce_srid_" column-name) "public.st_srid" (str  "= " srid))
+        cgeotype (db-constraint schema table geometry-column (str "enforce_geotype_" column-name) "public.geometrytype" (str "IN (" (-> column-name keyword geo-constraints) ")" ) )
+        constraints (vector cndims csrid cgeotype)]
   (try
     (doseq [c constraints]
       (j/db-do-commands db c))

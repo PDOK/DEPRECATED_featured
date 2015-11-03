@@ -9,6 +9,7 @@
             [clojure.tools.logging :as log])
   (:import [nl.pdok.gml3 GML3Parser]
            [pdok.featured.xslt TransformXSLT]
+           [pdok.featured.converters Transformer]
            [com.vividsolutions.jts.geom Geometry]
            [com.vividsolutions.jts.io WKTWriter]))
 
@@ -76,6 +77,19 @@
   (gml3-as-jts gml)))
 (defmethod as-jts "jts" [obj]
   (get obj "jts"))
+
+(defn as-rd [^Geometry geometry]
+  (when geometry
+    (if (= 28992 (.getSRID geometry))
+      geometry
+      (.transform Transformer/ETRS89ToRD geometry))))
+
+(defn as-etrs89 [^Geometry geometry]
+  (when geometry
+    (if (= 4258 (.getSRID geometry))
+      geometry
+      (.transform Transformer/RDToETRS89 geometry))))
+
 
 (defmulti as-simple-gml (fn [obj] lower-case (get obj "type")))
 (defmethod as-simple-gml "gml" [obj]

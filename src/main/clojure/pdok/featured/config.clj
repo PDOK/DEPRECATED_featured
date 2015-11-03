@@ -53,5 +53,24 @@
   ([persistence]
     (timeline/create-chunked {:db-config processor-db :persistence persistence})))
 
-(defn projectors [persistence]
-  [(proj/geoserver-projector {:db-config data-db})])
+(def projections
+  {:RD {:proj-fn pdok.featured.feature/as-rd
+        :ndims 2
+        :srid 28992}
+   :ETRS89 {:proj-fn pdok.featured.feature/as-etrs89
+            :ndims 2
+            :srid 4258}})
+
+(def default-projection
+  {:proj-fn identity
+   :ndims 2
+   :srid 28992})
+
+(defn projectors
+  ([persistence] (projectors persistence nil))
+  ([persistence projection]
+   (let [{:keys [proj-fn ndims srid]} (get projections (keyword projection))]
+     [(proj/geoserver-projector {:db-config data-db
+                                 :proj-fn proj-fn
+                                 :ndims ndims
+                                 :srid srid})])))
