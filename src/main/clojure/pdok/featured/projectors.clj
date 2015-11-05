@@ -168,7 +168,7 @@
         (let [keyed (group-by feature-keys collection-features)]
           (doseq [[columns vals] keyed]
             (when (< 0 (count columns))
-               (let [update-vals (map feature-to-update-record proj-fn vals)]
+              (let [update-vals (map (partial feature-to-update-record proj-fn) vals)]
                  (execute-update-sql db dataset collection columns update-vals)
                )))))))
 
