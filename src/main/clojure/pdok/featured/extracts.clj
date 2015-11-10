@@ -6,7 +6,10 @@
             [pdok.featured.json-reader :as json-reader]
             [pdok.featured.mustache  :as m]
             [pdok.featured.timeline :as timeline]
-            [pdok.postgres :as pg]))
+            [pdok.postgres :as pg]
+            [pdok.cache :as cache]
+            [clojure.core.async :as a
+             :refer [>! <! >!! <!! go chan]]))
 
 
 (def ^{:private true } extract-schema "extractmanagement")
@@ -67,8 +70,7 @@
 (defn add-extract-records [db dataset feature-type extract-type version rendered-features]
   "Inserts the xml-features and tile-set in an extract schema based on dataset, extract-type, version and feature-type,
    if schema or table doesn't exists it will be created."
-  (let [_ (println rendered-features)
-        collection (str dataset "_" extract-type)
+  (let [collection (str dataset "_" extract-type)
         table (str collection "_v" version)
         extractset-id (get-or-add-extractset db collection version) ]
     (do
@@ -76,10 +78,8 @@
       (add-metadata-extract-records db extractset-id rendered-features))
     (count rendered-features)))
 
-(defn fill-extract [dataset collection extract-type extract-version]
-  (let [feature-type collection
-        features (timeline/all (config/timeline) dataset collection)
-        [error features-for-extract] (features-for-extract dataset
+(defn transform-and-add-extract [dataset feature-type extract-type extract-version features]
+    (let [[error features-for-extract] (features-for-extract dataset
                                                            feature-type
                                                            extract-type
                                                            features)]
@@ -87,7 +87,21 @@
       (if (nil? features-for-extract)
         {:status "ok" :count 0}
         {:status "ok" :count (add-extract-records config/data-db dataset feature-type extract-type extract-version features-for-extract)})
-      {:status "error" :msg error :count 0})))
+      {:status "error" :msg error :count 0})))  
+
+ 
+(defn fill-extract [dataset collection extract-type extract-version]
+  (let [chunk (ref (clojure.lang.PersistentQueue/EMPTY))
+        batched-fn (partial transform-and-add-extract dataset collection extract-type extract-version)
+        cached-fn (cache/with-batch chunk 10000 batched-fn) 
+        rc (chan)]
+    (go (loop [feature (<! rc)]
+          (when feature 
+            (cached-fn feature)
+            (recur (<! rc)))))
+    (timeline/all (config/timeline) dataset collection rc)
+    (cache/flush-batch chunk batched-fn)))
+
 
 (defn file-to-features [path dataset]
   "Helper function to read features from a file.

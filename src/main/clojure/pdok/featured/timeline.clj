@@ -9,7 +9,9 @@
             [clojure.core.cache :as cache]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [clj-time.core :as t]))
+            [clj-time.core :as t]
+             [clojure.core.async :as a
+             :refer [>!! close!]]))
 
 (declare create)
 
@@ -98,16 +100,26 @@
                     "WHERE " (map->where-clause selector))]
      (execute-query timeline query))))
 
+(defn- feature-on-channel [rc feature]
+  (>!! rc (pg/from-json (:feature feature))))
+
+(defn- execute-query-result-on-channel [timeline query rc]
+  (try (j/with-db-connection [c (:db timeline)]
+         (j/query c [query] :row-fn (partial feature-on-channel rc))
+         (close! rc))
+       (catch java.sql.SQLException e
+          (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
+
 (defn all
-  ([timeline dataset collection] (all timeline {:dataset dataset :collection collection}))
-  ([timeline selector]
+  ([timeline dataset collection result-channel] (all timeline {:dataset dataset :collection collection} result-channel))
+  ([timeline selector result-channel]
    (let [clause (map->where-clause selector)
          query (str "SELECT feature FROM " (qualified-history) " "
                     "WHERE " clause
-                    "UNION "
+                    " UNION "
                     "SELECT feature FROM " (qualified-current) " "
                     "WHERE " clause)]
-     (execute-query timeline query))))
+     (execute-query-result-on-channel timeline query result-channel))))
 
 (defn- init-root
   ([feature]

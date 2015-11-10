@@ -136,7 +136,7 @@
              (GET "/stats" [] (r/response @stats))
              (POST "/process" [] (partial process-request ProcessRequest process-chan))
              (POST "/extract" [] (partial process-request ExtractRequest extract-chan ))
-             (POST "/template" [] (fn [r] (log/info "Template request: " (:body r)) (r/response (template-request r)))))
+             (POST "/template" [] (fn [r] (r/response (template-request r)))))
     (route/not-found "NOT FOUND")))
 
 (defn rest-handler [& more]
