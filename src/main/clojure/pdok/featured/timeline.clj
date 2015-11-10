@@ -185,6 +185,9 @@
 (defn- sync-valid-to [acc feature]
   (assoc acc :_valid_to (:validity feature)))
 
+(defn- reset-valid-to [acc]
+  (assoc acc :_valid_to nil))
+
 (defn- new-current-sql []
   (str "INSERT INTO " (qualified-current)
        " (dataset, collection, feature_id, version, valid_from, valid_to, feature, tiles)
@@ -327,9 +330,11 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
             (if (t/before? (:_valid_from current) (:validity feature))
               (do ;(println "NOT-SAME")
                 (batched-history (sync-valid-to current feature))
-                (cache-batched-update (sync-valid-from new-current feature)))
+                ;; reset valid-to for new-current.
+                (cache-batched-update (reset-valid-to (sync-valid-from new-current feature))))
               (do ;(println "SAME")
-                (cache-batched-update (sync-valid-from new-current feature))))))
+                ;; reset valid-to because it might be closed because of nested features.
+                (cache-batched-update (reset-valid-to (sync-valid-from new-current feature)))))))
         (cache-batched-new (sync-valid-from (merge (init-root dataset root-col root-id) path feature) feature)))))
   (proj/change-feature [_ feature]
     ;; change can be the same, because a new nested feature validity change will also result in a new validity
