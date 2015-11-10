@@ -27,14 +27,15 @@
   "Returns the rendered representation of the collection of features for a given feature-type inclusive tiles-set"
   (if (empty? features)
     [nil nil]
-    (let [template-key (template-key dataset extract-type feature-type)]
+    (let [template-key (template-key dataset extract-type feature-type)
+          _ (println (first features))]
       [nil (map #(vector feature-type (:_tiles %) (m/render template-key %)
-                           (:_valid_from %) (:_valid_to %)) features)])))
+                           (:_valid_from %) (:_valid_to %) (:lv-publicatiedatum %)) features)])))
 
 (defn- jdbc-insert-extract [db table entries]
    (try (j/with-db-connection [c db]
           (apply (partial j/insert! c (str extract-schema "." table) :transaction? false
-                    [:feature_type :valid_from :valid_to :tiles :xml])
+                    [:feature_type :valid_from :valid_to :publication :tiles :xml])
                     entries))
         (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
 
@@ -64,8 +65,8 @@
    (let [tiles (reduce clojure.set/union (map tiles-from-feature rendered-features))]
      (add-extractset-area db extractset-id tiles)))
 
-(defn- tranform-feature-for-db [[feature-type tiles xml-feature valid-from valid-to]]
-  [feature-type valid-from valid-to (vec tiles) xml-feature])
+(defn- tranform-feature-for-db [[feature-type tiles xml-feature valid-from valid-to publication-date]]
+  [feature-type valid-from valid-to publication-date (vec tiles) xml-feature])
 
 (defn add-extract-records [db dataset feature-type extract-type version rendered-features]
   "Inserts the xml-features and tile-set in an extract schema based on dataset, extract-type, version and feature-type,
