@@ -94,7 +94,7 @@
 (defn fill-extract [dataset collection extract-type extract-version]
   (let [chunk (ref (clojure.lang.PersistentQueue/EMPTY))
         batched-fn (partial transform-and-add-extract dataset collection extract-type extract-version)
-        cached-fn (cache/with-batch chunk 10000 batched-fn) 
+        cached-fn (cache/with-batch chunk 100000 batched-fn) 
         rc (chan)]
     (go (loop [feature (<! rc)]
           (when feature 
