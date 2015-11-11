@@ -75,7 +75,8 @@
         zip-file? (= (:format request) "zip")]
     (try
           (with-open [input (io/input-stream (:file request))]
-            (let [in (if zip-file? (zipfiles/zip-as-input input) input)
+            (let [_ (log/info "processing file: " (:file request))
+                  in (if zip-file? (zipfiles/zip-as-input input) input)
                   features (reader/features-from-stream in :dataset (:dataset request))
                   _ (dorun (consume processor features))
                   _ (if zip-file? (zipfiles/close-zip in))
@@ -111,6 +112,7 @@
                                           (:collection request)
                                           (:extractType request)
                                           (read-string (:extractVersion request)))
+          _ (println "response: " response)
           extract-stats (assoc request :response response)]
        (stats-on-callback callback-chan request extract-stats))
     (catch Exception e

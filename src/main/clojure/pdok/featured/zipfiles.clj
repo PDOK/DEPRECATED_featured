@@ -1,4 +1,5 @@
 (ns pdok.featured.zipfiles
+  (:require  [clojure.tools.logging :as log])
   (:import [java.util.zip ZipInputStream]))
 
 (defn zip-as-input [inputstream] 
@@ -8,6 +9,8 @@
     (throw (Exception. "No entries in zipfile."))
     zip)))
 
+
 (defn close-zip [zip]
-    (do (.closeEntry zip)
+    (do (log/info "close zip")
+      	(.closeEntry zip)
         (.close zip)))           
