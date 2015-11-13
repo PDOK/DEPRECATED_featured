@@ -86,7 +86,8 @@
              (swap! stats assoc-in [:processing] nil)
              (stats-on-callback callback-chan request run-stats)))
          (catch Exception e
-           (let [error-stats (assoc request :error (str e))]
+           (let [processor (shutdown processor)
+                 error-stats (assoc request :error (str e))]
              (log/warn error-stats)
              (swap! stats update-in [:errored] #(conj % error-stats))
              (swap! stats assoc-in [:processing] nil)
@@ -112,7 +113,7 @@
                                           (:collection request)
                                           (:extractType request)
                                           (read-string (:extractVersion request)))
-          _ (println "response: " response)
+          _ (log/info "response: " response)
           extract-stats (assoc request :response response)]
        (stats-on-callback callback-chan request extract-stats))
     (catch Exception e
