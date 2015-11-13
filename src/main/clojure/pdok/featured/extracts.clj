@@ -8,6 +8,7 @@
             [pdok.featured.timeline :as timeline]
             [pdok.postgres :as pg]
             [pdok.cache :as cache]
+            [clojure.tools.logging :as log]
             [clojure.core.async :as a
              :refer [>! <! >!! <!! go chan]]))
 
@@ -27,8 +28,7 @@
   "Returns the rendered representation of the collection of features for a given feature-type inclusive tiles-set"
   (if (empty? features)
     [nil nil]
-    (let [template-key (template-key dataset extract-type feature-type)
-          _ (println (first features))]
+    (let [template-key (template-key dataset extract-type feature-type)]
       [nil (map #(vector feature-type (:_tiles %) (m/render template-key %)
                            (:_valid_from %) (:_valid_to %) (:lv-publicatiedatum %)) features)])))
 
@@ -90,18 +90,23 @@
         {:status "ok" :count (add-extract-records config/data-db dataset feature-type extract-type extract-version features-for-extract)})
       {:status "error" :msg error :count 0})))  
 
- 
-(defn fill-extract [dataset collection extract-type extract-version]
+ (defn fill-extract [dataset collection extract-type extract-version]
   (let [chunk (ref (clojure.lang.PersistentQueue/EMPTY))
         batched-fn (partial transform-and-add-extract dataset collection extract-type extract-version)
-        cached-fn (cache/with-batch chunk 100000 batched-fn) 
-        rc (chan)]
+        cached-fn (cache/with-batch chunk 10000 batched-fn) 
+        rc (chan)
+        cc (chan)]
     (go (loop [feature (<! rc)]
-          (when feature 
-            (cached-fn feature)
-            (recur (<! rc)))))
+          (if feature
+            (do 
+              (cached-fn feature)
+              (recur (<! rc)))
+            (do 
+              (cache/flush-batch chunk batched-fn)
+              (Thread/sleep 5000)
+              (>! cc :done)))))
     (timeline/all (config/timeline) dataset collection rc)
-    (cache/flush-batch chunk batched-fn)
+    (<!! cc)
     {:status "ok" :count 777}))
 
 (defn file-to-features [path dataset]
