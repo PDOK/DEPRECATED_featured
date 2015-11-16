@@ -25,7 +25,7 @@
         projectors (cond-> [] (not no-projectors) (conj (config/projectors persistence projection))
                            (not (or no-timeline no-state)) (conj (config/timeline persistence)))
         processor (processor/create persistence projectors)]
-    (with-open [s (file-stream json-file)]
+    (with-open [s (if json-file (file-stream json-file) (clojure.java.io/reader *in*))]
       (dorun (consume processor (features-from-stream s :dataset dataset-name)))
       (do (log/info "Shutting down.")
           (shutdown processor))))
@@ -41,11 +41,12 @@
   (let [{:keys [options arguments summary options]} (parse-opts args cli-options)]
     (cond
       (:help options) (exit 0 summary)
-      (not (:json-file options)) (exit 0 "json-file required")
+      (not (or (:json-file options) (:std-in options))) (exit 0 "json-file or std-in required")
       :else (execute options))))
 
 (def cli-options
   [["-f" "--json-file FILE" "required JSON-file with features"]
+   [nil "--std-in" "Read from std-in"]
    ["-d" "--dataset-name DATASET" "dataset"]
    [nil "--no-projectors"]
    [nil "--no-timeline"]
