@@ -32,13 +32,20 @@
   (log/info "done")
   )
 
+(defn exit [status msg]
+  (println msg)
+  (System/exit status))
+
 (defn -main [& args]
 ;  (println "ENV-test" (config/env :pdok-test))
-  (let [parameters (parse-opts args cli-options)]
-    (execute (:options parameters))))
+  (let [{:keys [options arguments summary options]} (parse-opts args cli-options)]
+    (cond
+      (:help options) (exit 0 summary)
+      (not (:json-file options)) (exit 0 "json-file required")
+      :else (execute options))))
 
 (def cli-options
-  [["-f" "--json-file FILE" "JSON-file with features"]
+  [["-f" "--json-file FILE" "required JSON-file with features"]
    ["-d" "--dataset-name DATASET" "dataset"]
    [nil "--no-projectors"]
    [nil "--no-timeline"]
