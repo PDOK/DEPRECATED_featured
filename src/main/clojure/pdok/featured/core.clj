@@ -4,6 +4,7 @@
              [config :as config]
              [json-reader :refer [features-from-stream file-stream]]
              [processor :as processor :refer [consume shutdown]]
+             [persistence :as pers]
              [generator :refer [random-json-feature-stream]]]
             [clojure.tools.cli :refer [parse-opts]]
             [clojure.tools.logging :as log])
@@ -15,13 +16,14 @@
                        dataset-name
                        no-projectors
                        no-timeline
+                       no-state
                        projection]}]
   (log/info (str "start" (when dataset-name (str " - dataset: " dataset-name)) " - file: " json-file
                  (when no-projectors " without projectors")
                  (when projection (str " as " projection))))
-  (let [persistence (config/persistence)
+  (let [persistence (if no-state (pers/make-no-state) (config/persistence))
         projectors (cond-> [] (not no-projectors) (conj (config/projectors persistence projection))
-                           (not no-timeline) (conj (config/timeline persistence)))
+                           (not (or no-timeline no-state)) (conj (config/timeline persistence)))
         processor (processor/create persistence projectors)]
     (with-open [s (file-stream json-file)]
       (dorun (consume processor (features-from-stream s :dataset dataset-name)))
@@ -40,7 +42,9 @@
    ["-d" "--dataset-name DATASET" "dataset"]
    [nil "--no-projectors"]
    [nil "--no-timeline"]
-   [nil "--projection PROJ" "RD / ETRS89 / SOURCE"]])
+   [nil "--no-state" "Also sets --no-timeline. Use only with no nesting and action :new only"]
+   [nil "--projection PROJ" "RD / ETRS89 / SOURCE"]
+   ["-h" "--help"]])
 
 (defn performance-test [n & args]
   (with-open [json (apply random-json-feature-stream "perftest" "col1" n args)]

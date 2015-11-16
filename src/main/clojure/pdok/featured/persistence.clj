@@ -320,6 +320,36 @@ WHERE rn = 1"
                                      link-batch link-batch-size childs-cache childs-load-cache?
                                      parent-cache parent-load-cache?)))
 
+(defrecord NoStatePersistence []
+    ProcessorPersistence
+  (init [this]
+    this)
+  (stream-exists? [persistence dataset collection id]
+    false)
+  (create-stream [persistence dataset collection id]
+    nil)
+  (create-stream [persistence dataset collection id parent-collection parent-id parent-field]
+    nil)
+  (append-to-stream [persistence version action dataset collection id validity geometry attributes]
+    nil)
+  (current-validity [persistence dataset collection id]
+    nil)
+  (last-action [persistence dataset collection id]
+    nil)
+  (current-version [persistence dataset collection id]
+    nil)
+  (childs [persistence dataset parent-collection parent-id child-collection]
+    nil)
+  (childs [persistence dataset parent-collection parent-id]
+    nil)
+  (parent [persistence dataset collection id]
+    nil)
+  (close [this]
+    this))
+
+
+(defn make-no-state []
+  (->NoStatePersistence))
 ;; (def ^:private pgdb {:subprotocol "postgresql"
 ;;                      :subname "//localhost:5432/pdok"
 ;;                      :user "postgres"
