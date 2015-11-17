@@ -103,10 +103,9 @@
               (recur (<! rc)))
             (do 
               (cache/flush-batch chunk batched-fn)
-              (Thread/sleep 5000)
               (>! cc :done)))))
     (timeline/all (config/timeline) dataset collection rc)
-    (<!! cc)
+    (<!! cc) ; block until consumer ends
     {:status "ok" :count 777}))
 
 (defn file-to-features [path dataset]
