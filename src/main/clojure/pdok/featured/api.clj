@@ -86,7 +86,8 @@
              (swap! stats assoc-in [:processing] nil)
              (stats-on-callback callback-chan request run-stats)))
          (catch Exception e
-           (let [processor (shutdown processor)
+           (let [ _ (log/error e)
+                 processor (shutdown processor)
                  error-stats (assoc request :error (str e))]
              (log/warn error-stats)
              (swap! stats update-in [:errored] #(conj % error-stats))
