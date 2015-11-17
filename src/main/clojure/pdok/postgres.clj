@@ -28,6 +28,15 @@
 (def joda-local-date-reader
   (transit/read-handler #(tc/to-local-date (tc/from-long %))))
 
+(def int-writer
+  (transit/write-handler
+   (constantly "I")
+   identity
+   str))
+
+(def int-reader
+  (transit/read-handler #(Integer. %)))
+
 (def transit-write-handlers (atom {}))
 (def transit-read-handlers (atom {}))
 
@@ -43,6 +52,9 @@
 
 (register-transit-write-handler org.joda.time.LocalDate joda-local-date-writer)
 (register-transit-read-handler "ld" joda-local-date-reader)
+
+(register-transit-write-handler java.lang.Integer int-writer)
+(register-transit-read-handler "I" int-reader)
 
 (defn to-json [obj]
   (let [out (ByteArrayOutputStream. 1024)
@@ -134,7 +146,8 @@
   java.sql.Timestamp
   (result-set-read-column [v _ _] (LocalDateTime. v nlZone))
   java.sql.Array
-  (result-set-read-column [v _ _] (into [] (.getArray v))))
+  (result-set-read-column [v _ _]
+    (into [] (.getArray v))))
 
 (defn clj-to-pg-type [clj-type]
   (condp = clj-type
