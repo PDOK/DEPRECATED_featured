@@ -21,7 +21,7 @@
         <entry key="DEFAULT-FATAL">{{logging.default-FATAL}}</entry>
       </logging>
     </tomcat.LoggingSpec>
-    <tomcat.War name="featured-war" file="uberjar/featured.war">
+    <tomcat.War name="featured-war" file="featured.war">
       <tags />
       <scanPlaceholders>true</scanPlaceholders>
       <excludeFileNamesRegex>.*\.(jar|xsl|template)</excludeFileNamesRegex>
