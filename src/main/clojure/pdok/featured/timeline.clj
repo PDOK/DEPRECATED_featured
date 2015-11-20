@@ -116,7 +116,7 @@
    (let [clause (map->where-clause selector)
          query (str "SELECT feature FROM " (qualified-history) " "
                     "WHERE " clause
-                    " UNION "
+                    " UNION ALL "
                     "SELECT feature FROM " (qualified-current) " "
                     "WHERE " clause)]
      (execute-query-result-on-channel timeline query result-channel))))
