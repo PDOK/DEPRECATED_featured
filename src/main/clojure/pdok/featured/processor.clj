@@ -128,8 +128,10 @@
 (defn- process-close-feature [{:keys [persistence projectors] :as processor} feature]
   (let [change-before-close (if-not (empty? (:attributes feature))
                                (process-change-feature processor 
-                                                       (assoc feature :action :change 
-                                                                      :version (random/UUID))))
+                                                       (-> feature 
+                                                           (assoc :action :change)
+                                                           (dissoc :src)
+                                                           (assoc :version (random/UUID)))))
         enriched-feature (->> feature 
                               (with-current-version persistence))]
     (append-feature persistence enriched-feature)
