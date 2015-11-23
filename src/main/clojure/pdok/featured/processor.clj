@@ -125,12 +125,18 @@
   "Nested change is the same a nested new"
   (process-new-feature processor (assoc feature :action :change)))
 
-(defn- process-close-feature [{:keys [persistence projectors]} feature]
-  (let [enriched-feature (->> feature
-              (with-current-version persistence))]
+(defn- process-close-feature [{:keys [persistence projectors] :as processor} feature]
+  (let [change-before-close (if-not (empty? (:attributes feature))
+                               (process-change-feature processor 
+                                                       (assoc feature :action :change 
+                                                                      :version (random/UUID))))
+        enriched-feature (->> feature 
+                              (with-current-version persistence))]
     (append-feature persistence enriched-feature)
     (doseq [p projectors] (proj/close-feature p enriched-feature))
-    enriched-feature))
+    (if change-before-close
+      (list change-before-close enriched-feature)
+      (list enriched-feature))))
 
 (defn- process-nested-close-feature [processor feature]
   (let [nw (process-new-feature processor (assoc feature :action :new))
