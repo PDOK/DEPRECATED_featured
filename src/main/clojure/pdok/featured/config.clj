@@ -51,7 +51,9 @@
   ([]
    (timeline (persistence)))
   ([persistence]
-    (timeline/create-chunked {:db-config processor-db :persistence persistence})))
+   (timeline/create-chunked {:chunk-size (or (env :processor-batch-size) 10000)
+                             :db-config processor-db
+                             :persistence persistence})))
 
 (def projections
   {:RD {:proj-fn pdok.featured.feature/as-rd

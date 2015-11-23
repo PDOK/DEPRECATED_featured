@@ -1,4 +1,5 @@
 (ns pdok.featured.persistence
+  (:refer-clojure :exclude [flush])
   (:require [pdok.cache :refer :all]
             [pdok.postgres :as pg]
             [clojure.core.cache :as cache]
@@ -8,8 +9,12 @@
             [cognitect.transit :as transit])
   (:import [java.io ByteArrayOutputStream]))
 
+(declare prepare-caches)
+
 (defprotocol ProcessorPersistence
   (init [this])
+  (prepare [this features] "Called before processing this feature batch")
+  (flush [persistence])
   (stream-exists? [persistence dataset collection id])
   (create-stream
     [persistence dataset collection id]
@@ -92,12 +97,13 @@
         (catch java.sql.SQLException e
           (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))))))
 
-(defn- jdbc-load-childs-cache [db dataset parent-collection]
+(defn- jdbc-load-childs-cache [db dataset parent-collection parent-ids]
   (try (j/with-db-connection [c db]
          (let [results
-               (j/query c [(str "SELECT parent_id, collection, feature_id FROM " (qualified-features)
-                                " WHERE dataset = ?  AND parent_collection = ?")
-                           dataset parent-collection])
+               (j/query c (apply vector (str "SELECT parent_id, collection, feature_id FROM " (qualified-features)
+                                " WHERE dataset = ?  AND parent_collection = ? AND parent_id in ("
+                                (clojure.string/join "," (repeat (count parent-ids) "?")) ")")
+                           dataset parent-collection parent-ids))
                per-id (group-by :parent_id results)
                for-cache (map (fn [[parent-id values]]
                                 [[dataset parent-collection parent-id]
@@ -126,12 +132,14 @@
        (catch java.sql.SQLException e
           (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
 
-(defn- jdbc-load-parent-cache [db dataset collection]
+(defn- jdbc-load-parent-cache [db dataset collection ids]
   (j/with-db-connection [c db]
     (let [results
-          (j/query c [(str "SELECT feature_id, parent_collection, parent_id, parent_field FROM " (qualified-features)
-                           " WHERE dataset = ? AND collection = ?")
-                      dataset collection] :as-arrays? true)
+          (j/query c (apply vector (str "SELECT feature_id, parent_collection, parent_id, parent_field FROM "
+                           (qualified-features)
+                           " WHERE dataset = ? AND collection = ? AND feature_id in ("
+                           (clojure.string/join "," (repeat (count ids) "?")) ")")
+                      dataset collection ids) :as-arrays? true)
           for-cache (map (fn [[feature-id parent-collection parent-id parent-field]]
                            [[dataset collection feature-id] [parent-collection parent-id parent-field]])
                          (drop 1 results))]
@@ -161,16 +169,17 @@
         (catch java.sql.SQLException e
           (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))))))
 
-(defn- jdbc-load-cache [db dataset collection]
+(defn- jdbc-load-cache [db dataset collection ids]
   (try (let [results
              (j/with-db-connection [c db]
-               (j/query c [(str "SELECT dataset, collection, feature_id, validity, action, version FROM (
+               (j/query c (apply vector (str "SELECT dataset, collection, feature_id, validity, action, version FROM (
  SELECT dataset, collection, feature_id, action, validity, version,
  row_number() OVER (PARTITION BY dataset, collection, feature_id ORDER BY id DESC) AS rn
  FROM " (qualified-feature-stream)
- " WHERE dataset = ? AND collection = ?) a
-WHERE rn = 1")
-                           dataset collection] :as-arrays? true))]
+ " WHERE dataset = ? AND collection = ? and feature_id in ("
+ (clojure.string/join "," (repeat (count ids) "?"))
+ ")) a WHERE rn = 1")
+                           dataset collection ids) :as-arrays? true))]
          (map (fn [[dataset collection id validity action version]] [[dataset collection id]
                                                                     [validity (keyword action) version]] )
               (drop 1 results))
@@ -197,6 +206,8 @@ WHERE rn = 1"
 (deftype JdbcProcessorPersistence [db]
   ProcessorPersistence
   (init [this] (jdbc-init db) this)
+  (prepare [this features] this)
+  (flush [this] this)
   (stream-exists? [_ dataset collection id]
     (let [current-validity (partial jdbc-current-stream-state db)]
       (not (nil? (current-validity dataset collection id)))))
@@ -230,18 +241,58 @@ WHERE rn = 1"
     (conj acc [collection id])))
 
 (defn- current-state [persistence dataset collection id]
-    (let [key-fn (fn [dataset collectioni id] [dataset collection id])
-          load-cache (fn [dataset collection id]
-                       (when ((.stream-load-cache? persistence) dataset collection)
-                         (jdbc-load-cache (.db persistence) dataset collection)))
-          cached (use-cache (.stream-cache persistence) key-fn load-cache)]
+  (let [key-fn (fn [dataset collectioni id] [dataset collection id])
+        cached (use-cache (.stream-cache persistence) key-fn)]
       (cached dataset collection id)))
 
-(deftype CachedJdbcProcessorPersistence [db stream-batch stream-batch-size stream-cache stream-load-cache?
-                                         link-batch link-batch-size childs-cache childs-load-cache?
-                                         parent-cache parent-load-cache?]
+(defn prepare-childs-cache [persistence dataset collection ids]
+  (when (and (not (nil? dataset)) (not (nil? collection)) (seq ids))
+    (when-let [not-nil-ids (seq (filter (complement nil?) ids))]
+      (let [{:keys [db stream-cache childs-cache]} persistence
+            for-childs-cache (jdbc-load-childs-cache db dataset collection not-nil-ids)
+            as-parents (group-by first (mapcat second for-childs-cache))]
+        (apply-to-cache childs-cache for-childs-cache)
+        (doseq [[collection grouped] as-parents]
+          (let [new-ids (map second grouped)]
+            (apply-to-cache stream-cache (jdbc-load-cache db dataset collection new-ids))
+            (prepare-childs-cache persistence dataset collection new-ids)))))))
+
+(defn prepare-parent-cache [persistence dataset collection ids]
+  (when (and (not (nil? dataset)) (not (nil? collection)) (seq ids))
+    (when-let [not-nil-ids (seq (filter (complement nil?) ids))]
+      (let [{:keys [db stream-cache parent-cache]} persistence
+            for-parents-cache (jdbc-load-parent-cache db dataset collection not-nil-ids)
+            as-childs (group-by first (map second for-parents-cache))]
+        (apply-to-cache parent-cache for-parents-cache)
+        (doseq [[collection grouped] as-childs]
+          (let [new-ids (map second grouped)]
+            (apply-to-cache stream-cache (jdbc-load-cache db dataset collection new-ids))
+            (prepare-parent-cache persistence dataset collection new-ids)))))))
+
+(defn prepare-caches [persistence dataset-collection-id]
+  (let [{:keys [db stream-cache childs-cache parent-cache]} persistence
+        dataset-collection (group-by #(subvec % 0 2) dataset-collection-id)]
+    (doseq [[[dataset collection] grouped] dataset-collection]
+      (let [ids (filter (complement nil?) (map #(nth % 2) grouped))]
+        (apply-to-cache stream-cache (jdbc-load-cache db dataset collection ids))
+        (prepare-childs-cache persistence dataset collection ids)
+        (prepare-parent-cache persistence dataset collection ids)))))
+
+(defrecord CachedJdbcProcessorPersistence [db stream-batch stream-batch-size stream-cache
+                                         link-batch link-batch-size childs-cache parent-cache]
   ProcessorPersistence
   (init [this] (jdbc-init db) this)
+  (prepare [this features]
+    (prepare-caches this (map (juxt :dataset :collection :id) features))
+    this)
+  (flush [this]
+    (flush-batch stream-batch (partial jdbc-insert db))
+    (flush-batch link-batch (partial jdbc-create-stream db))
+    (dosync
+     (ref-set stream-cache (cache/basic-cache-factory {}))
+     (ref-set childs-cache (cache/basic-cache-factory {}))
+     (ref-set parent-cache (cache/basic-cache-factory {})))
+    this)
   (stream-exists? [this dataset collection id]
     (not (nil? (current-validity this dataset collection id))))
   (create-stream [this dataset collection id]
@@ -256,6 +307,7 @@ WHERE rn = 1"
           double-cache-batched (with-cache parent-cache cache-batched parent-key-fn parent-value-fn)]
       (double-cache-batched dataset collection id parent-collection parent-id parent-field)))
   (append-to-stream [_ version action dataset collection id validity geometry attributes]
+    ;(println "APPEND: " id)
     (let [key-fn   (fn [_ _ dataset collection id _ _ _] [dataset collection id])
           value-fn (fn [_ version action _ _ _ validity _ _] [validity action version])
           batched (with-batch stream-batch stream-batch-size (partial jdbc-insert db))
@@ -270,35 +322,24 @@ WHERE rn = 1"
   (childs [_ dataset parent-collection parent-id child-collection]
     (let [key-fn (fn [dataset parent-collection parent-id _]
                    [dataset parent-collection parent-id])
-          load-cache (fn [dataset parent-collection _ _]
-                       (when (childs-load-cache? dataset parent-collection)
-                         (jdbc-load-childs-cache db dataset parent-collection)))
-          cached (use-cache childs-cache key-fn load-cache)]
+          cached (use-cache childs-cache key-fn)]
       (->> (cached dataset parent-collection parent-id child-collection)
           (filter #(= (first %)))
           (map second))))
   (childs [_ dataset parent-collection parent-id]
     (let [key-fn (fn [dataset parent-collection parent-id]
                    [dataset parent-collection parent-id])
-          load-cache (fn [dataset parent-collection _]
-                       (when (childs-load-cache? dataset parent-collection)
-                         (jdbc-load-childs-cache db dataset parent-collection)))
-          cached (use-cache childs-cache key-fn load-cache)]
+          cached (use-cache childs-cache key-fn)]
       (cached dataset parent-collection parent-id)))
   (parent [_ dataset collection id]
     (let [key-fn (fn [dataset collection id] [dataset collection id])
-          load-cache (fn [dataset collection _]
-                       (when (parent-load-cache? dataset collection)
-                         (jdbc-load-parent-cache db dataset collection)))
-          cached (use-cache parent-cache key-fn load-cache)
+          cached (use-cache parent-cache key-fn)
           q-result (cached dataset collection id)]
       (if (some #(= nil %) q-result)
         nil
         q-result)))
   (close [this]
-    (flush-batch stream-batch (partial jdbc-insert db))
-    (flush-batch link-batch (partial jdbc-create-stream db))
-    this))
+    (flush this)))
 
 (defn jdbc-processor-persistence [config]
   (let [db (:db-config config)]
@@ -309,20 +350,20 @@ WHERE rn = 1"
         stream-batch-size (or (:stream-batch-size config) (:batch-size config) 10000)
         stream-batch (ref (clojure.lang.PersistentQueue/EMPTY))
         stream-cache (ref (cache/basic-cache-factory {}))
-        stream-load-cache? (once-true-fn)
         link-batch-size (or (:link-batch-size config) (:batch-size config) 10000)
         link-batch (ref (clojure.lang.PersistentQueue/EMPTY))
         childs-cache (ref (cache/basic-cache-factory {}))
-        childs-load-cache? (once-true-fn)
-        parent-cache (ref (cache/basic-cache-factory {}))
-        parent-load-cache? (once-true-fn)]
-    (CachedJdbcProcessorPersistence. db stream-batch stream-batch-size stream-cache stream-load-cache?
-                                     link-batch link-batch-size childs-cache childs-load-cache?
-                                     parent-cache parent-load-cache?)))
+        parent-cache (ref (cache/basic-cache-factory {}))]
+    (CachedJdbcProcessorPersistence. db stream-batch stream-batch-size stream-cache
+                                     link-batch link-batch-size childs-cache parent-cache)))
 
 (defrecord NoStatePersistence []
     ProcessorPersistence
   (init [this]
+    this)
+  (prepare [this _]
+    this)
+  (flush [this]
     this)
   (stream-exists? [persistence dataset collection id]
     false)

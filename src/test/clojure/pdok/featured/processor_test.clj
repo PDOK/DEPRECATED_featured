@@ -1,7 +1,7 @@
 (ns pdok.featured.processor-test
   (:require [clj-time.local :as tl]
             [pdok.featured.json-reader :as reader]
-            [pdok.featured.processor :as processor :refer [consume shutdown]]
+            [pdok.featured.processor :as processor :refer [consume consume* shutdown]]
             [pdok.featured.persistence :as pers]
             [pdok.featured.projectors :as proj]
             [clojure.test :refer :all]
@@ -10,6 +10,8 @@
 (defrecord MockedPersistence [streams streams-n state events-n]
   pers/ProcessorPersistence
   (init [this] (assoc this :initialized true))
+  (prepare [this features] this)
+  (flush [this] this)
   (stream-exists? [this dataset collection id] (get @streams [dataset collection id]))
   (create-stream [this dataset collection id]
     (pers/create-stream this dataset collection id nil nil nil))
@@ -46,8 +48,12 @@
 (defn create-processor
   ([] (create-processor 1))
   ([n-projectors]
-    {:persistence (create-persistence)
-     :projectors (create-projectors n-projectors)}))
+   {:batch-size 1
+    :persistence (create-persistence)
+    :projectors (create-projectors n-projectors)}))
+
+(defn consume-single [processor feature]
+  (->> [feature] (consume* processor) (first)))
 
 (def default-validity (tl/local-now))
 
@@ -99,7 +105,7 @@
 
 (deftest ok-new-feature
   (let [processor (create-processor)
-        processed (first (consume processor valid-new-feature))]
+        processed (consume* processor [valid-new-feature])]
     (new-should-be-ok processor processed)))
 
 (def still-valid-new-transformations
@@ -110,7 +116,7 @@
   (doseq [[name transform] still-valid-new-transformations]
     (let [processor (create-processor)
           also-valid-new-feature (transform valid-new-feature)
-          processed (first (consume processor also-valid-new-feature))]
+          processed (consume-single processor also-valid-new-feature)]
       (testing (str name " should be ok for " processed)
         (new-should-be-ok processor processed)))))
 
@@ -127,7 +133,7 @@
   (doseq [[name transform] make-broken-new-transformations]
     (let [processor (create-processor)
           invalid-new-feature (transform valid-new-feature)
-          processed (first(consume processor invalid-new-feature))]
+          processed (consume-single processor invalid-new-feature)]
       (testing (str name " should break")
         (is (= false (nil? processed)))
         (is (:invalid? processed))
@@ -147,7 +153,7 @@
   (let [processor (create-processor)
         persistence (:persistence processor)
         _ (init-with-feature persistence valid-new-feature)
-        processed (first (consume processor valid-change-feature))]
+        processed (consume-single processor valid-change-feature)]
     (change-should-be-ok processor processed)
     ))
 
@@ -156,7 +162,7 @@
     (let [processor (create-processor)
           _ (init-with-feature (:persistence processor) valid-new-feature)
           also-valid-change-feature (transform valid-change-feature)
-          processed (first (consume processor also-valid-change-feature))]
+          processed (consume-single processor also-valid-change-feature)]
       (testing (str name " should be ok")
         (change-should-be-ok processor processed)))))
 
@@ -170,7 +176,7 @@
     (let [processor (create-processor)
           _ (init-with-feature (:persistence processor) valid-new-feature)
           invalid-change-feature (transform valid-change-feature)
-          processed (first (consume processor invalid-change-feature))]
+          processed (consume-single processor invalid-change-feature)]
       (testing (str name " should break")
         (is (not (nil? processed)))
         (is (:invalid? processed))

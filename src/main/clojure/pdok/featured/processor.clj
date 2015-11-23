@@ -13,7 +13,7 @@
 (def ^:private pdok-fields [:action :id :dataset :collection :validity :version :geometry :current-validity
                             :parent-id :parent-collection :parent-field :attributes :src])
 
-(declare consume process pre-process append-feature)
+(declare consume consume* process pre-process append-feature)
 
 (defn- make-invalid [feature reason]
   (let [current-reasons (or (:invalid-reasons feature) [])
@@ -127,15 +127,14 @@
 
 (defn- process-close-feature [{:keys [persistence projectors] :as processor} feature]
   (let [change-before-close (when-not (empty? (:attributes feature))
-                               (process-change-feature processor 
+                               (process-change-feature processor
                                                        (-> feature
-                                                           (transient) 
+                                                           (transient)
                                                            (assoc! :action :change)
                                                            (dissoc! :src)
                                                            (assoc! :version (random/UUID))
                                                            (persistent!))))
-        enriched-feature (->> feature 
-                              (with-current-version persistence))]
+        enriched-feature (->> feature (with-current-version persistence))]
     (append-feature persistence enriched-feature)
     (doseq [p projectors] (proj/close-feature p enriched-feature))
     (if change-before-close
@@ -244,13 +243,13 @@
         validity (pers/current-validity persistence dataset collection id)
         state (pers/last-action persistence dataset collection id)]
         (if-not (= state :close)
-          (consume processor (conj metas {:action :close
+          (consume* processor (conj metas {:action :close
                                             :dataset dataset
                                             :collection collection
                                             :id id
                                             :current-validity validity
                                             :validity close-time}))
-          (consume processor metas))))
+          (consume* processor metas))))
 
 (defn- close-childs [processor meta-record]
   (let [{:keys [dataset collection parent-collection parent-id validity]} meta-record
@@ -262,7 +261,7 @@
 (defn- delete-child* [processor dataset collection id]
   (let [persistence (:persistence processor)
         validity (pers/current-validity persistence dataset collection id)]
-    (consume processor (list
+    (consume* processor (list
                         {:action :delete-childs
                          :dataset dataset
                          :parent-collection collection
@@ -282,24 +281,25 @@
 (defn make-seq [obj]
   (if (seq? obj) obj (list obj)))
 
-(defn process [processor feature]
-  "Processes feature event. Should return the feature, possibly with added data"
-  (if (:invalid? feature)
-    feature
-    (let [vf (assoc feature :version (random/UUID))
-          processed
-          (condp = (:action vf)
-            :new (process-new-feature processor vf)
-            :change (process-change-feature processor vf)
-            :close (process-close-feature processor vf)
-            :delete (process-delete-feature processor vf)
-            :nested-new (process-nested-new-feature processor vf)
-            :nested-change (process-nested-new-feature processor vf)
-            :nested-close  (process-nested-close-feature processor vf)
-            :close-childs (close-childs processor vf);; should save this too... So we can backtrack actions. Right?
-            :delete-childs (delete-childs processor vf)
-            (make-invalid vf (str "Unknown action:" (:action vf))))]
-      processed)))
+(defn process [processor feature ]
+  "Processes feature events. Should return the feature, possibly with added data"
+  (let [validated (validate processor feature)]
+    (if (:invalid? validated)
+      validated
+      (let [vf (assoc validated :version (random/UUID))
+            processed
+            (condp = (:action vf)
+              :new (process-new-feature processor vf)
+              :change (process-change-feature processor vf)
+              :close (process-close-feature processor vf)
+              :delete (process-delete-feature processor vf)
+              :nested-new (process-nested-new-feature processor vf)
+              :nested-change (process-nested-new-feature processor vf)
+              :nested-close  (process-nested-close-feature processor vf)
+              :close-childs (close-childs processor vf);; should save this too... So we can backtrack actions. Right?
+              :delete-childs (delete-childs processor vf)
+              (make-invalid vf (str "Unknown action:" (:action vf))))]
+        processed))))
 
 
 (defn rename-keys [src-map change-key]
@@ -317,12 +317,8 @@
             (update-in [:dataset] str/lower-case))))
 
 (defn pre-process [processor feature]
-  (let [validated ((comp (partial validate processor) lower-case collect-attributes) feature)]
-    (if (:invalid? validated)
-      (vector validated)
-      (flatten processor validated))))
-
-(defmulti consume (fn [_ features] (type features)))
+  (let [prepped ((comp lower-case collect-attributes) feature)]
+    (flatten processor prepped)))
 
 (defn- append-feature [persistence feature]
   (let [{:keys [version action dataset collection id validity geometry attributes]} feature]
@@ -338,21 +334,34 @@
       (swap! statistics update :errored #(conj % (:id feature)))))
   )
 
-(defmethod consume clojure.lang.IPersistentMap [processor feature]
-  (let [pre-processed (pre-process processor feature)
-        consumed (filter (complement nil?) (mapcat #(make-seq (process processor %)) pre-processed))]
-    (doseq [f consumed]
-      (if (:invalid? f) (log/warn (:id f) (:invalid-reasons f)))
-      (update-statistics processor f))
-    consumed))
+(defn consume* [processor features]
+  (letfn [(consumer [feature]
+            (let [consumed (make-seq (process processor feature))]
+              (doseq [f consumed]
+                (if (:invalid? f) (log/warn (:id f) (:invalid-reasons f)))
+                (update-statistics processor f))
+              consumed))]
+    (mapcat consumer features)))
 
-(defmethod consume clojure.lang.ISeq [processor features]
-  (mapcat #(consume processor %) features))
+(defn consume-partition [processor features]
+  (when (seq? features)
+    (let [prepped (mapcat (partial pre-process processor) features)
+          _ (pers/flush (:persistence processor)) ;; flush before run, to save cache in shutdown
+          _ (pers/prepare (:persistence processor) prepped)
+          consumed (doall (consume* processor prepped))]
+      consumed)))
+
+(defn consume [processor features]
+  (let [n (:batch-size processor)]
+    (when (seq features)
+      (concat (consume-partition processor (take n features))
+              (lazy-seq (consume processor (drop n features)))))))
 
 (defn shutdown [{:keys [persistence projectors statistics]}]
   "Shutdown feature store. Make sure all data is processed and persisted"
-  (let [closed-persistence (pers/close persistence)
-        closed-projectors (doall (map proj/close projectors))
+  (let [closed-projectors (doall (map proj/close projectors))
+        ;; timeline uses persistence, close persistence after projectors
+        closed-persistence (pers/close persistence)
         _ (when statistics (log/info @statistics))]
     {:persistence closed-persistence
      :projectors closed-projectors
@@ -366,9 +375,9 @@
   ([persistence] (create persistence []))
   ([persistence & projectors]
    (let [initialized-persistence (pers/init persistence)
-         initialized-projectors (doall (map proj/init (clojure.core/flatten projectors)))]
+         initialized-projectors (doall (map proj/init (clojure.core/flatten projectors)))
+         batch-size (or (pdok.featured.config/env :processor-batch-size) 10000)]
      {:persistence initialized-persistence
       :projectors initialized-projectors
+      :batch-size batch-size
       :statistics (atom {:n-src 0 :n-processed 0 :n-errored 0 :errored '()})})))
-
-; features-from-stream
