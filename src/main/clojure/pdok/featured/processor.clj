@@ -126,7 +126,7 @@
   (process-new-feature processor (assoc feature :action :change)))
 
 (defn- process-close-feature [{:keys [persistence projectors] :as processor} feature]
-  (let [change-before-close (if-not (empty? (:attributes feature))
+  (let [change-before-close (when-not (empty? (:attributes feature))
                                (process-change-feature processor 
                                                        (-> feature 
                                                            (assoc :action :change)
