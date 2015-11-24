@@ -68,7 +68,6 @@
   :ring {:handler pdok.featured.api/app
          :uberwar-name ~uberwar-name}
   :main ^:skip-aot pdok.featured.core
-  :target-path "target/%s"
   :source-paths ["src/main/clojure"]
   :java-source-paths ["src/main/java"]
   :resource-paths ["config" "src/main/resources"]

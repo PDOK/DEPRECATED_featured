@@ -12,23 +12,26 @@
 
 (declare cli-options)
 
-(defn execute [{:keys [json-file
+(defn execute [{:keys [json-files
                        dataset-name
                        no-projectors
                        no-timeline
                        no-state
                        projection]}]
-  (log/info (str "start" (when dataset-name (str " - dataset: " dataset-name)) " - file: " json-file
+  (log/info (str "start" (when dataset-name (str " - dataset: " dataset-name))
                  (when no-projectors " without projectors")
+                 (when no-state " without state")
                  (when projection (str " as " projection))))
   (let [persistence (if no-state (pers/make-no-state) (config/persistence))
         projectors (cond-> [] (not no-projectors) (conj (config/projectors persistence projection))
-                           (not (or no-timeline no-state)) (conj (config/timeline persistence)))
+                           (not no-timeline) (conj (config/timeline persistence)))
         processor (processor/create persistence projectors)]
-    (with-open [s (if json-file (file-stream json-file) (clojure.java.io/reader *in*))]
-      (dorun (consume processor (features-from-stream s :dataset dataset-name)))
-      (do (log/info "Shutting down.")
-          (shutdown processor))))
+    (doseq [json-file json-files]
+      (log/info "Processing " json-file)
+      (with-open [s (clojure.java.io/reader json-file)]
+        (dorun (consume processor (features-from-stream s :dataset dataset-name)))))
+    (do (log/info "Shutting down.")
+        (shutdown processor)))
   (log/info "done")
   )
 
@@ -41,16 +44,19 @@
   (let [{:keys [options arguments summary options]} (parse-opts args cli-options)]
     (cond
       (:help options) (exit 0 summary)
-      (not (or (:json-file options) (:std-in options))) (exit 0 "json-file or std-in required")
-      :else (execute options))))
+      (not (or (seq arguments) (:std-in options))) (exit 0 "json-file or std-in required")
+      :else
+      (let [files (if (:std-in options)
+                    [*in*]
+                    arguments)]
+        (execute (assoc options :json-files files))))))
 
 (def cli-options
-  [["-f" "--json-file FILE" "required JSON-file with features"]
-   [nil "--std-in" "Read from std-in"]
+  [[nil "--std-in" "Read from std-in"]
    ["-d" "--dataset-name DATASET" "dataset"]
    [nil "--no-projectors"]
    [nil "--no-timeline"]
-   [nil "--no-state" "Also sets --no-timeline. Use only with no nesting and action :new only"]
+   [nil "--no-state" "Use only with no nesting and action :new"]
    [nil "--projection PROJ" "RD / ETRS89 / SOURCE"]
    ["-h" "--help"]])
 
