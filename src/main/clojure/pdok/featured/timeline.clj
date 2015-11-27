@@ -105,7 +105,8 @@
 
 (defn- execute-query-result-on-channel [timeline query rc]
   (try (j/with-db-connection [c (:db timeline)]
-         (j/query c [query] :row-fn (partial feature-on-channel rc))
+         (let [statement (j/prepare-statement (doto (j/get-connection c) (.setAutoCommit false)) query :fetch-size *batch-size-read*)]
+           (j/query c [statement] :row-fn (partial feature-on-channel rc)) )     
          (close! rc))
        (catch java.sql.SQLException e
           (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
