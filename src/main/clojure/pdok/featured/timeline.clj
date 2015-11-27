@@ -105,7 +105,7 @@
 
 (defn- execute-query-result-on-channel [timeline query rc]
   (try (j/with-db-connection [c (:db timeline)]
-         (let [statement (j/prepare-statement (doto (j/get-connection c) (.setAutoCommit false)) query :fetch-size *batch-size-read*)]
+         (let [statement (j/prepare-statement (doto (j/get-connection c) (.setAutoCommit false)) query :fetch-size 10000)]
            (j/query c [statement] :row-fn (partial feature-on-channel rc)) )     
          (close! rc))
        (catch java.sql.SQLException e
