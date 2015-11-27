@@ -12,7 +12,7 @@
             [clojure.tools.logging :as log])
   (:gen-class))
 
-(declare cli-options)
+(declare cli-options features-from-files)
 
 (defn execute [{:keys [json-files
                        dataset-name
@@ -28,10 +28,7 @@
         projectors (cond-> [] (not no-projectors) (conj (config/projectors persistence projection))
                            (not no-timeline) (conj (config/timeline persistence)))
         processor (processor/create persistence projectors)]
-    (doseq [json-file json-files]
-      (log/info "Processing " json-file)
-      (with-open [s (clojure.java.io/reader json-file)]
-        (dorun (consume processor (features-from-stream s :dataset dataset-name)))))
+    (dorun (consume processor (features-from-files json-files :dataset dataset-name)))
     (do (log/info "Shutting down.")
         (shutdown processor)))
   (log/info "done")
@@ -77,9 +74,34 @@
 
 (defn add-templates-and-create-extract [template-location dataset collection extract-type extract-version]
   (let [templates-with-metadata (template/templates-with-metadata dataset template-location)]
-    (do 
-      (doseq [t templates-with-metadata] 
+    (do
+      (doseq [t templates-with-metadata]
         (template/add-or-update-template t))
       (extracts/fill-extract dataset collection extract-type (read-string extract-version)))))
- 
+
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))
+
+(deftype CloseableSeq [delegate-seq close-fn]
+  clojure.lang.ISeq
+    (next [this]
+      (if-let [n (next delegate-seq)]
+        (CloseableSeq. n close-fn)
+        (.close this)))
+    (first [this] (if-let [f (first delegate-seq)] f (.close this)))
+    (more [this] (if-let [n (next this)] n '()))
+    (cons [this obj] (CloseableSeq. (cons obj delegate-seq) close-fn))
+    (count [this] (count delegate-seq))
+    (empty [this] (CloseableSeq. '() close-fn))
+    (equiv [this obj] (= delegate-seq obj))
+  clojure.lang.Seqable
+    (seq [this] this)
+  java.io.Closeable
+    (close [this] (close-fn)))
+
+(defn features-from-files [files & args]
+  (when (seq files)
+    (let [f (first files)
+          fs (clojure.java.io/reader f)]
+      (log/info "Processing " f)
+      (concat (CloseableSeq. (apply features-from-stream f args) #(.close fs))
+              (lazy-seq (apply features-from-files (rest files) args))))))
