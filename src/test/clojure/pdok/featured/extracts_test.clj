@@ -1,6 +1,7 @@
 (ns pdok.featured.extracts-test
    (:require [pdok.featured.json-reader :refer [features-from-stream file-stream]]
              [pdok.featured.extracts :refer :all]
+             [pdok.featured.template :as template]
              [pdok.featured.feature :as f]
              [pdok.featured.config :as config]
              [pdok.featured.projectors :as p]
@@ -26,9 +27,18 @@
 
 
 (deftest test-two-rendered-features 
-  (let [_ (add-or-update-template "test" "gml2extract" "dummy" test-gml2extract-dummy-template)
-        _ (add-or-update-template "test" "gml2extract" "start" test-gml2extract-start-partial)
-        _ (add-or-update-template "test" "gml2extract" "end" test-gml2extract-end-partial)
+  (let [_ (template/add-or-update-template {:dataset "test" 
+                                            :extract-type "gml2extract" 
+                                            :name "dummy" 
+                                            :template test-gml2extract-dummy-template})
+        _ (template/add-or-update-template {:dataset "test" 
+                                            :extract-type "gml2extract" 
+                                            :name "start" 
+                                            :template test-gml2extract-start-partial})
+        _ (template/add-or-update-template {:dataset "test" 
+                                            :extract-type "gml2extract" 
+                                            :name "end" 
+                                            :template test-gml2extract-end-partial})
         [error features] (features-for-extract "test" "dummy" "gml2extract" (two-features))
         rendered-feature (nth (first features) 2)]
     (is (= 2 (count features)))

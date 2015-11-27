@@ -313,8 +313,10 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
   (proj/init [this]
     (init db) this)
   (proj/new-feature [_ feature]
-    (let [[dataset collection id] (feature-key feature)
+    (let [_ (println "---> " (:version feature))
+          [dataset collection id] (feature-key feature)
           [root-col root-id] (root-fn dataset collection id)
+          _ (println "root-col: " root-col  " ,root-id: " root-id)
           path (path-fn dataset collection id)
           batched-new (with-batch new-current-batch new-current-batch-size (partial new-current db) flush-fn)
           cache-batched-new (with-cache feature-cache batched-new cache-store-key cache-value)
@@ -324,7 +326,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
           batched-history (with-batch new-history-batch new-history-batch-size (partial new-history db) flush-fn)
           cached-get-current (use-cache feature-cache cache-use-key)]
       (if-let [current (cached-get-current dataset root-col root-id)]
-        (let [new-current (merge current path feature)]
+        (let [_ (println "current: " (:version feature))
+              new-current (merge current path feature)]
           (if (= (:action feature) :close)
             (cache-batched-update (sync-valid-to new-current feature))
             (if (t/before? (:_valid_from current) (:validity feature))

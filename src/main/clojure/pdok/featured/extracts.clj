@@ -1,12 +1,10 @@
 (ns pdok.featured.extracts
-  (:require [clojure.edn :as edn]
-            [clojure.java.jdbc :as j]
-            [clojure.string :as str]
+  (:require [clojure.java.jdbc :as j]
             [pdok.featured.config :as config]
             [pdok.featured.json-reader :as json-reader]
             [pdok.featured.mustache  :as m]
             [pdok.featured.timeline :as timeline]
-            [pdok.postgres :as pg]
+            [pdok.featured.template :as template]
             [pdok.cache :as cache]
             [clojure.tools.logging :as log]
             [clojure.core.async :as a
@@ -17,20 +15,14 @@
 (def ^{:private true } extractset-table "extractmanagement.extractset")
 (def ^{:private true } extractset-area-table "extractmanagement.extractset_area")
 
-
-(defn- template-qualifier [dataset extract-type]
-  (str dataset "-" extract-type "-" ))
-
-(defn- template-key [dataset extract-type name]
-  (str (template-qualifier dataset extract-type) name))
-
 (defn features-for-extract [dataset feature-type extract-type features]
   "Returns the rendered representation of the collection of features for a given feature-type inclusive tiles-set"
   (if (empty? features)
     [nil nil]
-    (let [template-key (template-key dataset extract-type feature-type)]
+    (let [template-key (template/template-key dataset extract-type feature-type)]
       [nil (map #(vector feature-type (:_tiles %) (m/render template-key %)
                            (:_valid_from %) (:_valid_to %) (:lv-publicatiedatum %)) features)])))
+
 
 (defn- jdbc-insert-extract [db table entries]
    (try (j/with-db-connection [c db]
@@ -113,15 +105,6 @@
    Returns features read from file."
   (with-open [s (json-reader/file-stream path)]
    (doall (json-reader/features-from-stream s :dataset dataset))))
-
-(defn add-or-update-template [dataset extract-type name template]
-  (let [template (m/replace-in-template template (template-qualifier dataset extract-type) "{{>")]
-    (m/register (template-key dataset extract-type name) template)))
-
-(defn create-template-store []
-  {:templates (atom {}) :partials (atom {})})
-
-
 
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))

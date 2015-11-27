@@ -5,7 +5,9 @@
              [json-reader :refer [features-from-stream file-stream]]
              [processor :as processor :refer [consume shutdown]]
              [persistence :as pers]
-             [generator :refer [random-json-feature-stream]]]
+             [generator :refer [random-json-feature-stream]]
+             [extracts :as extracts]
+             [template :as template]]
             [clojure.tools.cli :refer [parse-opts]]
             [clojure.tools.logging :as log])
   (:gen-class))
@@ -73,4 +75,11 @@
                 ))
       )))
 
+(defn add-templates-and-create-extract [template-location dataset collection extract-type extract-version]
+  (let [templates-with-metadata (template/templates-with-metadata dataset template-location)]
+    (do 
+      (doseq [t templates-with-metadata] 
+        (template/add-or-update-template t))
+      (extracts/fill-extract dataset collection extract-type (read-string extract-version)))))
+ 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))

@@ -14,6 +14,7 @@
              [config :as config]
              [processor :as processor :refer [consume shutdown]]
              [extracts :as extracts]
+             [template :as template]
              [json-reader :as reader]
              [zipfiles :as zipfiles]]
             [ring.middleware.defaults :refer :all]
@@ -103,9 +104,6 @@
       (r/status (r/response invalid) 400)
       (do (go (>! request-chan request)) (r/response {:result :ok})))))
 
-
-(def ^{:private true} template-store (extracts/create-template-store))
-
 (defn- extract* [callback-chan request]
   (log/info "Processing extract: " request)
 
@@ -127,10 +125,10 @@
         invalid (s/check TemplateRequest request)]
     (if invalid
       (r/status (r/response invalid) 400)
-      (r/response (extracts/add-or-update-template (:dataset request)
-                                                   (:extractType request)
-                                                   (:templateName request)
-                                                   (:template request))))))
+      (r/response (template/add-or-update-template {:dataset (:dataset request)
+                                                    :extract-type (:extractType request)
+                                                    :name (:templateName request)
+                                                    :template (:template request)})))))
 
 (defn api-routes [process-chan extract-chan callback-chan stats]
   (defroutes api-routes
