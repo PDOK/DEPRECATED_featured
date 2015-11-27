@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [merge])
   (:require [pdok.cache :refer :all]
             [pdok.postgres :as pg]
+            [pdok.util :refer [with-bench]]
             [pdok.featured.projectors :as proj]
             [pdok.featured.persistence :as pers]
             [pdok.featured.tiles :as tiles]
@@ -386,7 +387,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
     (proj/close timeline)))
 
 (defn process-chunk [config chunk]
-  (flush-batch chunk (partial process-chunk* config)))
+  (with-bench t (log/debug "Processed chunk in" t "ms")
+    (flush-batch chunk (partial process-chunk* config))))
 
 (defrecord ChunkedTimeline [config db chunk process-fn]
   proj/Projector

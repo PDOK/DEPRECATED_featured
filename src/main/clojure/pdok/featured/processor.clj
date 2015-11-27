@@ -1,6 +1,7 @@
 (ns pdok.featured.processor
   (:refer-clojure :exclude [flatten])
   (:require [pdok.random :as random]
+            [pdok.util :refer [with-bench]]
             [pdok.featured.feature :as feature]
             [pdok.featured.persistence :as pers]
             [pdok.featured.json-reader :refer :all]
@@ -346,10 +347,12 @@
 
 (defn consume-partition [processor features]
   (when (seq? features)
-    (let [prepped (mapcat (partial pre-process processor) features)
+    (let [prepped (with-bench t (log/debug "Preprocessed batch in" t "ms")
+                    (mapcat (partial pre-process processor) features))
           _ (pers/flush (:persistence processor)) ;; flush before run, to save cache in shutdown
           _ (pers/prepare (:persistence processor) prepped)
-          consumed (doall (consume* processor prepped))]
+          consumed (with-bench t (log/debug "Consumed batch in" t "ms")
+                     (doall (consume* processor prepped)))]
       consumed)))
 
 (defn consume [processor features]

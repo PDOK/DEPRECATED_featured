@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [flush])
   (:require [pdok.cache :refer :all]
             [pdok.postgres :as pg]
+            [pdok.util :refer [with-bench]]
             [clojure.core.cache :as cache]
             [clojure.java.jdbc :as j]
             [clojure.tools.logging :as log]
@@ -90,12 +91,13 @@
   ([db dataset collection id parent-collection parent-id parent-field]
    (jdbc-create-stream db (list [dataset collection id parent-collection parent-id parent-field])))
   ([db entries]
-   (try (j/with-db-connection [c db]
-          (apply ( partial j/insert! c (qualified-features) :transaction? false?
-                           [:dataset :collection :feature_id :parent_collection :parent_id :parent_field])
-                 entries))
-        (catch java.sql.SQLException e
-          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))))))
+   (with-bench t (log/debug "Created streams in" t "ms")
+     (try (j/with-db-connection [c db]
+            (apply ( partial j/insert! c (qualified-features) :transaction? false?
+                             [:dataset :collection :feature_id :parent_collection :parent_id :parent_field])
+                   entries))
+          (catch java.sql.SQLException e
+            (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))))
 
 (defn- jdbc-load-childs-cache [db dataset parent-collection parent-ids]
   (try (j/with-db-connection [c db]
@@ -160,14 +162,15 @@
   ([db version action dataset collection id validity geometry attributes]
    (jdbc-insert db (list [version action dataset collection id validity geometry attributes])))
   ([db entries]
-   (try (j/with-db-connection [c db]
-          (apply
-           (partial j/insert! c (qualified-feature-stream) :transaction? false
-                    [:version :action :dataset :collection :feature_id :validity :geometry :attributes])
-           entries)
+   (with-bench t (log/debug "Inserted events in" t "ms")
+     (try (j/with-db-connection [c db]
+            (apply
+             (partial j/insert! c (qualified-feature-stream) :transaction? false
+                      [:version :action :dataset :collection :feature_id :validity :geometry :attributes])
+             entries)
             )
-        (catch java.sql.SQLException e
-          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))))))
+          (catch java.sql.SQLException e
+            (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))))
 
 (defn- jdbc-load-cache [db dataset collection ids]
   (try (let [results
@@ -283,7 +286,8 @@ WHERE rn = 1"
   ProcessorPersistence
   (init [this] (jdbc-init db) this)
   (prepare [this features]
-    (prepare-caches this (map (juxt :dataset :collection :id) features))
+    (with-bench t (log/debug "Prepared cache in" t "ms")
+      (prepare-caches this (map (juxt :dataset :collection :id) features)))
     this)
   (flush [this]
     (flush-batch stream-batch (partial jdbc-insert db))
