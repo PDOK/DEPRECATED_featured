@@ -140,7 +140,14 @@
         result (reduce (fn [acc [k v]] (assoc acc (keyword k) v)) result (:attributes feature))]
     result))
 
-(defn- path->merge-fn [target path]
+(defn drop-nth [v n]
+  (into [] (concat (subvec v 0 n) (subvec v (inc n) (count v)))))
+
+
+;; we only check for close in an existing vector, so we can remove the entry
+;; we should check everywhere, but it is very unlikely that such a case can exist, because the processor
+;; does not allow a close before a new.
+(defn- path->merge-fn [target path action]
   (if-not (empty? path)
     (loop [[[field id] & rest] path
            t target
@@ -151,22 +158,21 @@
             (cond
              (vector? field-value)
              (if-let [i (index-of #(= id (:_id %)) field-value)]
-               (recur rest (get field-value i) #(f (update-in t [field i] (fn [v] (clojure.core/merge v %)))))
-               (do ;(println "vector: not found")
-                   (recur rest {} #(f (assoc-in t [field (count field-value)] %)))))
+               (if (and (= :close action) (not (seq rest)))
+                 (recur rest nil (fn [_] (f (update-in t [field] (fn [v] (drop-nth v i))))))
+                 (recur rest (get field-value i) #(f (update-in t [field i] (fn [v] (clojure.core/merge v %))))))
+               ;; not found -> append
+               (recur rest {} #(f (assoc-in t [field (count field-value)] %))))
              ;; if it is not a vector we are probable replacing existing values.
              ;; Treat this as a non existing value, ie. override value;
              :else (do ;(println "override:" field (f {}))
                        (recur rest (init-root field id) #(f (assoc t field (vector %)))))
              )
             ;; no field-value => we are working with child objects, place it in a vector
-            (do ;(println "no-value: " field (f {}))
-                (recur rest nil #(f (assoc t field (vector %))))
-              )
-            ))
-        (do ;(println "no path: "(f {}))
-            f
-          )))
+            (recur rest nil #(f (assoc t field (vector %))))  ))
+        ;; no path (f {})
+        f
+          ))
     #(clojure.core/merge target %))
   )
 
@@ -174,7 +180,7 @@
   ([target path feature]
    (let [keyworded-path (map (fn [[_ _ field id]] [(keyword field) id]) path)
          mustafied (mustafy feature)
-         merger (path->merge-fn target keyworded-path)
+         merger (path->merge-fn target keyworded-path (:action feature))
          merged (merger mustafied)
          merged (assoc merged :_version (:version feature))
          merged (update-in merged [:_all_versions] (fnil conj '()) (:version feature))
