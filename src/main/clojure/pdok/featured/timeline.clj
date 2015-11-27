@@ -107,7 +107,7 @@
 (defn- execute-query-result-on-channel [timeline query rc]
   (try (j/with-db-connection [c (:db timeline)]
          (let [statement (j/prepare-statement (doto (j/get-connection c) (.setAutoCommit false)) query :fetch-size 10000)]
-           (j/query c [statement] :row-fn (partial feature-on-channel rc)) )     
+           (j/query c [statement] :row-fn (partial feature-on-channel rc)) )
          (close! rc))
        (catch java.sql.SQLException e
           (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
@@ -315,10 +315,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
   (proj/init [this]
     (init db) this)
   (proj/new-feature [_ feature]
-    (let [_ (println "---> " (:version feature))
-          [dataset collection id] (feature-key feature)
+    (let [[dataset collection id] (feature-key feature)
           [root-col root-id] (root-fn dataset collection id)
-          _ (println "root-col: " root-col  " ,root-id: " root-id)
           path (path-fn dataset collection id)
           batched-new (with-batch new-current-batch new-current-batch-size (partial new-current db) flush-fn)
           cache-batched-new (with-cache feature-cache batched-new cache-store-key cache-value)
@@ -328,8 +326,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
           batched-history (with-batch new-history-batch new-history-batch-size (partial new-history db) flush-fn)
           cached-get-current (use-cache feature-cache cache-use-key)]
       (if-let [current (cached-get-current dataset root-col root-id)]
-        (let [_ (println "current: " (:version feature))
-              new-current (merge current path feature)]
+        (let [new-current (merge current path feature)]
           (if (= (:action feature) :close)
             (cache-batched-update (sync-valid-to new-current feature))
             (if (t/before? (:_valid_from current) (:validity feature))
