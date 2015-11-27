@@ -5,6 +5,7 @@
             [pdok.featured.persistence :as pers]
             [pdok.featured.json-reader :refer :all]
             [pdok.featured.projectors :as proj]
+            [pdok.featured.config :as config]
             [clj-time [core :as t] [local :as tl] [coerce :as tc]]
             [clojure.string :as str]
             [clojure.tools.logging :as log])
@@ -376,7 +377,7 @@
   ([persistence & projectors]
    (let [initialized-persistence (pers/init persistence)
          initialized-projectors (doall (map proj/init (clojure.core/flatten projectors)))
-         batch-size (or (pdok.featured.config/env :processor-batch-size) 10000)]
+         batch-size (or (config/env :processor-batch-size) 10000)]
      {:persistence initialized-persistence
       :projectors initialized-projectors
       :batch-size batch-size
