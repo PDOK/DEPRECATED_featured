@@ -38,11 +38,15 @@
   (println msg)
   (System/exit status))
 
+(defn implementation-version []
+  (-> (eval 'pdok.featured.core) .getPackage .getImplementationVersion))
+
 (defn -main [& args]
 ;  (println "ENV-test" (config/env :pdok-test))
   (let [{:keys [options arguments summary options]} (parse-opts args cli-options)]
     (cond
       (:help options) (exit 0 summary)
+      (:version options) (exit 0 (implementation-version))
       (not (or (seq arguments) (:std-in options))) (exit 0 "json-file or std-in required")
       :else
       (let [files (if (:std-in options)
@@ -57,7 +61,8 @@
    [nil "--no-timeline"]
    [nil "--no-state" "Use only with no nesting and action :new"]
    [nil "--projection PROJ" "RD / ETRS89 / SOURCE"]
-   ["-h" "--help"]])
+   ["-h" "--help"]
+   ["-v" "--version"]])
 
 (defn performance-test [n & args]
   (with-open [json (apply random-json-feature-stream "perftest" "col1" n args)]
@@ -71,13 +76,6 @@
                 (shutdown processor)
                 ))
       )))
-
-(defn add-templates-and-create-extract [template-location dataset collection extract-type extract-version]
-  (let [templates-with-metadata (template/templates-with-metadata dataset template-location)]
-    (do
-      (doseq [t templates-with-metadata]
-        (template/add-or-update-template t))
-      (extracts/fill-extract dataset collection extract-type (read-string extract-version)))))
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))
 

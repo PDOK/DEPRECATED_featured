@@ -8,7 +8,8 @@
             [pdok.cache :as cache]
             [clojure.tools.logging :as log]
             [clojure.core.async :as a
-             :refer [>! <! >!! <!! go chan]]))
+             :refer [>! <! >!! <!! go chan]])
+  (:gen-class))
 
 
 (def ^{:private true } extract-schema "extractmanagement")
@@ -80,20 +81,20 @@
       (if (nil? features-for-extract)
         {:status "ok" :count 0}
         {:status "ok" :count (add-extract-records config/data-db dataset feature-type extract-type extract-version features-for-extract)})
-      {:status "error" :msg error :count 0})))  
+      {:status "error" :msg error :count 0})))
 
  (defn fill-extract [dataset collection extract-type extract-version]
   (let [chunk (ref (clojure.lang.PersistentQueue/EMPTY))
         batched-fn (partial transform-and-add-extract dataset collection extract-type extract-version)
-        cached-fn (cache/with-batch chunk 10000 batched-fn) 
+        cached-fn (cache/with-batch chunk 10000 batched-fn)
         rc (chan)
         cc (chan)]
     (go (loop [feature (<! rc)]
           (if feature
-            (do 
+            (do
               (cached-fn feature)
               (recur (<! rc)))
-            (do 
+            (do
               (cache/flush-batch chunk batched-fn)
               (>! cc :done)))))
     (timeline/all (config/timeline) dataset collection rc)
@@ -106,5 +107,12 @@
   (with-open [s (json-reader/file-stream path)]
    (doall (json-reader/features-from-stream s :dataset dataset))))
 
+
+(defn -main [template-location dataset collection extract-type extract-version & args]
+  (let [templates-with-metadata (template/templates-with-metadata dataset template-location)]
+    (do
+      (doseq [t templates-with-metadata]
+        (template/add-or-update-template t))
+      (fill-extract dataset collection extract-type (read-string extract-version)))))
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))

@@ -3,7 +3,7 @@
 (def change-number (or (System/getenv "CHANGE_NUMBER") "031415"))
 (def release-version (str feature-version "." build-number))
 (def project-name "featured")
-(def uberjar-name (str project-name "-" release-version "-standalone.jar"))
+(def uberjar-name (str project-name "-standalone.jar"))
 (def uberwar-name (str project-name ".war"))
 
 (create-ns 'pdok.lein)
