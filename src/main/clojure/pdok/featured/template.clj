@@ -1,6 +1,7 @@
 (ns pdok.featured.template
   (:require [pdok.featured.mustache :as m]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io]
+            [clojure.string :as s]))
 
 
 (defn- template-qualifier [dataset extract-type]
@@ -25,8 +26,12 @@
   (let [template-files (filter #(.isFile %) (file-seq (io/file template-location)))]
     (map (partial template-with-metadata* dataset) template-files)))
 
+(defn- clean-up [source]
+    (s/trim (reduce str (s/split-lines (s/trim-newline (s/replace source #"\t" ""))))))
+
 (defn add-or-update-template [{:keys [dataset extract-type name template]}]
-  (let [template (m/replace-in-template template (template-qualifier dataset extract-type) "{{>")]
+  (let [template (clean-up template)
+        template (m/replace-in-template template (template-qualifier dataset extract-type) "{{>")]
     (m/register (template-key dataset extract-type name) template)))
 
 
