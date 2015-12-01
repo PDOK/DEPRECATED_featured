@@ -83,23 +83,35 @@
         {:status "ok" :count (add-extract-records config/data-db dataset feature-type extract-type extract-version features-for-extract)})
       {:status "error" :msg error :count 0})))
 
+
+(defn throw-err [e]
+  (when (instance? Throwable e) (throw e))
+  e)
+
+(defmacro <?? [ch]
+  `(throw-err (<!! ~ch)))
+
+
  (defn fill-extract [dataset collection extract-type extract-version]
   (let [chunk (ref (clojure.lang.PersistentQueue/EMPTY))
         batched-fn (partial transform-and-add-extract dataset collection extract-type extract-version)
         cached-fn (cache/with-batch chunk 10000 batched-fn)
         rc (chan)
-        cc (chan)]
-    (go (loop [feature (<! rc)]
-          (if feature
-            (do
-              (cached-fn feature)
-              (recur (<! rc)))
-            (do
-              (cache/flush-batch chunk batched-fn)
-              (>! cc :done)))))
+        cc (go (try
+                 (loop [feature (<! rc)]
+                   (if feature
+                     (do
+                       (cached-fn feature)
+                       (recur (<! rc)))
+                     (cache/flush-batch chunk batched-fn)))
+                   (catch Exception e e)))]
     (timeline/all (config/timeline) dataset collection rc)
-    (<!! cc) ; block until consumer ends
-    {:status "ok" :count 777}))
+    (try
+      (<?? cc)  ; block until consumer ends
+      {:status "ok" :count 777}
+    (catch Exception e
+      (log/error e)
+      (throw e)))))
 
 (defn file-to-features [path dataset]
   "Helper function to read features from a file.
@@ -110,9 +122,7 @@
 
 (defn -main [template-location dataset collection extract-type extract-version & args]
   (let [templates-with-metadata (template/templates-with-metadata dataset template-location)]
-    (do
-      (doseq [t templates-with-metadata]
-        (template/add-or-update-template t))
-      (fill-extract dataset collection extract-type (read-string extract-version)))))
+        (when-not (some false? (map template/add-or-update-template templates-with-metadata))
+          (fill-extract dataset collection extract-type (read-string extract-version)))))
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))

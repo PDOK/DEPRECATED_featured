@@ -120,15 +120,18 @@
         (log/warn error-stats)
         (stats-on-callback callback-chan request error-stats)))))
 
+
 (defn- template-request [http-req]
   (let [request (:body http-req)
         invalid (s/check TemplateRequest request)]
     (if invalid
       (r/status (r/response invalid) 400)
-      (r/response (template/add-or-update-template {:dataset (:dataset request)
+      (r/response (if (template/add-or-update-template {:dataset (:dataset request)
                                                     :extract-type (:extractType request)
                                                     :name (:templateName request)
-                                                    :template (:template request)})))))
+                                                    :template (:template request)})
+                    {:status "ok"}
+                    {:status "error"})))))
 
 (defn api-routes [process-chan extract-chan callback-chan stats]
   (defroutes api-routes

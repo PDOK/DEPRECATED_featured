@@ -1,7 +1,8 @@
 (ns pdok.featured.template
   (:require [pdok.featured.mustache :as m]
             [clojure.java.io :as io]
-            [clojure.string :as s]))
+            [clojure.string :as s]
+            [clojure.tools.logging :as log]))
 
 
 (defn- template-qualifier [dataset extract-type]
@@ -31,8 +32,16 @@
 
 (defn add-or-update-template [{:keys [dataset extract-type name template]}]
   (let [template (clean-up template)
-        template (m/replace-in-template template (template-qualifier dataset extract-type) "{{>")]
-    (m/register (template-key dataset extract-type name) template)))
+        template (m/replace-in-template template (template-qualifier dataset extract-type) "{{>")
+        template-key (template-key dataset extract-type name)]
+      (try 
+        (m/register template-key template)
+        (m/render template-key {}) ;check template can be rendered with empty map
+        {:template template-key :status "registered"}
+      (catch Exception e
+        (log/error "Template: " template-key " cannot be registered")
+        (log/error e)
+        false))))
 
 
 
