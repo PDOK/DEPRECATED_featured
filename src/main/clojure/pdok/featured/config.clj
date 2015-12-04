@@ -6,13 +6,23 @@
              [persistence :as pers]
              [projectors :as proj]
              [timeline :as timeline]]
-            [environ.core :as environ]))
+            [environ.core :as environ]
+             [clojure.core.async :as a
+             :refer [<!!]]))
 
 (Thread/setDefaultUncaughtExceptionHandler
  (reify Thread$UncaughtExceptionHandler
    (uncaughtException [_ thread throwable]
      (log/error throwable "Stacktrace:"
                 (print-str (clojure.stacktrace/print-stack-trace throwable))))))
+
+
+(defn throw-err [e]
+  (when (instance? Throwable e) (throw e))
+  e)
+
+(defmacro <?? [ch]
+  `(throw-err (<!! ~ch)))
 
 (defn- keywordize [s]
   (-> (str/lower-case s)
