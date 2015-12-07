@@ -4,7 +4,7 @@
             [clojure.tools.logging :as log]
             [pdok.featured
              [persistence :as pers]
-             [projectors :as proj]
+             [geoserver :as gs]
              [timeline :as timeline]]
             [environ.core :as environ]
              [clojure.core.async :as a
@@ -82,7 +82,7 @@
   ([persistence] (projectors persistence nil))
   ([persistence projection]
    (let [{:keys [proj-fn ndims srid]} (get projections (keyword projection))]
-     [(proj/geoserver-projector {:db-config data-db
+     [(gs/geoserver-projector {:db-config data-db
                                  :proj-fn proj-fn
                                  :ndims ndims
                                  :srid srid})])))

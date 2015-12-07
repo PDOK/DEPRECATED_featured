@@ -10,7 +10,7 @@
             [clj-time [core :as t] [local :as tl] [coerce :as tc]]
             [clojure.string :as str]
             [clojure.tools.logging :as log])
-  (:import  [pdok.featured.projectors GeoserverProjector]))
+  (:import  [pdok.featured.geoserver GeoserverProjector]))
 
 (def ^:private pdok-fields [:action :id :dataset :collection :validity :version :geometry :current-validity
                             :parent-id :parent-collection :parent-field :attributes :src])

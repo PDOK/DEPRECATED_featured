@@ -359,6 +359,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
           cached-get-current (use-cache feature-cache cache-use-key)]
       (when-let [current (cached-get-current dataset root-col root-id)]
         (cache-batched-delete current))))
+  (proj/accept? [_ feature] true)
   (proj/close [this]
     (flush-fn)
     this)
