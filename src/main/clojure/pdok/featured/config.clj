@@ -78,11 +78,11 @@
    :ndims 2
    :srid 28992})
 
-(defn projectors
-  ([persistence] (projectors persistence nil))
-  ([persistence projection]
-   (let [{:keys [proj-fn ndims srid]} (get projections (keyword projection))]
+(defn projectors [persistence & {:keys [projection no-visualization]}]
+   (let [{:keys [proj-fn ndims srid]} (get projections (keyword projection))
+         _ (println "no-vis: " no-visualization)]
      [(gs/geoserver-projector {:db-config data-db
-                                 :proj-fn proj-fn
-                                 :ndims ndims
-                                 :srid srid})])))
+                               :proj-fn proj-fn
+                               :ndims ndims
+                               :srid srid
+                               :no-visualization no-visualization})]))

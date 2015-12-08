@@ -25,7 +25,7 @@
                  (when no-state " without state")
                  (when projection (str " as " projection))))
   (let [persistence (if no-state (pers/make-no-state) (config/persistence))
-        projectors (cond-> [] (not no-projectors) (conj (config/projectors persistence projection))
+        projectors (cond-> [] (not no-projectors) (conj (config/projectors persistence :projection projection))
                            (not no-timeline) (conj (config/timeline persistence)))
         processor (processor/create persistence projectors)]
     (dorun (consume processor (features-from-files json-files :dataset dataset-name)))

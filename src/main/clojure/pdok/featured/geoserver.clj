@@ -26,6 +26,9 @@
         k-dataset (keyword dataset)]
     (or (get-in visualization-table [k-dataset k-collection] collection))))
 
+(defn do-visualization? [options] 
+  (if (some #{"visualization"} options) true))
+
 (defn- gs-dataset-exists? [db dataset]
   ;(println "dataset exists?")
   (pg/schema-exists? db dataset))
@@ -191,48 +194,53 @@
 (deftype GeoserverProjector [db cache insert-batch insert-batch-size
                              update-batch update-batch-size
                              delete-batch delete-batch-size
-                             flush-fn proj-fn ndims srid]
+                             flush-fn proj-fn no-visualization ndims srid]
   proj/Projector
   (proj/init [this] this)
-  (proj/new-feature [_ feature]
-    (let [{:keys [dataset collection attributes]} feature
-          cached-dataset-exists? (cached cache gs-dataset-exists? db)
-          cached-collection-exists? (cached cache gs-collection-exists? db)
-          cached-collection-attributes (cached cache gs-collection-attributes db)
-          batched-add-feature
-          (with-batch insert-batch insert-batch-size (partial gs-add-feature db proj-fn cached-collection-attributes) flush-fn)]
-      (do (when (not (cached-dataset-exists? dataset))
-            (gs-create-dataset db dataset)
-            (cached-dataset-exists? :reload dataset))
-          (when (not (cached-collection-exists? dataset collection))
-            (gs-create-collection db ndims srid dataset collection)
-            (cached-collection-exists? :reload dataset collection))
-          (let [current-attributes (cached-collection-attributes dataset collection)
-                new-attributes (filter #(not (some #{(first %)} current-attributes)) attributes)]
-            (doseq [a new-attributes]
-              (gs-add-attribute db dataset collection (first a) (-> a second type)))
-            (when (not-empty new-attributes) (cached-collection-attributes :reload dataset collection)))
-          (batched-add-feature feature))))
-  (proj/change-feature [_ feature]
-    (let [{:keys [dataset collection attributes]} feature
-          cached-collection-attributes (cached cache gs-collection-attributes db)
-          batched-update-feature (with-batch update-batch update-batch-size
-                                   (partial gs-update-feature db proj-fn) flush-fn)]
-      (let [current-attributes (cached-collection-attributes dataset collection)
-            new-attributes (filter #(not (some #{(first %)} current-attributes)) attributes)]
-        (doseq [a new-attributes]
-          (gs-add-attribute db dataset collection (first a) (-> a second type)))
-        (when (not-empty new-attributes) (cached-collection-attributes :reload dataset collection)))
-      (batched-update-feature feature)))
-  (proj/close-feature [_ feature]
-    (let [batched-delete-feature (with-batch delete-batch delete-batch-size
-                                   (partial gs-delete-feature db) flush-fn)]
-      (batched-delete-feature feature)))
-  (proj/delete-feature [_ feature]
-    (let [batched-delete-feature (with-batch delete-batch delete-batch-size
-                                   (partial gs-delete-feature db) flush-fn)]
-      (batched-delete-feature feature)))
-  (proj/accept? [_ feature] true)
+  (proj/new-feature [p feature]
+    (if (proj/accept? p feature)
+      (let [{:keys [dataset collection attributes]} feature
+            cached-dataset-exists? (cached cache gs-dataset-exists? db)
+            cached-collection-exists? (cached cache gs-collection-exists? db)
+            cached-collection-attributes (cached cache gs-collection-attributes db)
+            batched-add-feature
+            (with-batch insert-batch insert-batch-size (partial gs-add-feature db proj-fn cached-collection-attributes) flush-fn)]
+        (do (when (not (cached-dataset-exists? dataset))
+              (gs-create-dataset db dataset)
+              (cached-dataset-exists? :reload dataset))
+            (when (not (cached-collection-exists? dataset collection))
+              (gs-create-collection db ndims srid dataset collection)
+              (cached-collection-exists? :reload dataset collection))
+            (let [current-attributes (cached-collection-attributes dataset collection)
+                  new-attributes (filter #(not (some #{(first %)} current-attributes)) attributes)]
+              (doseq [a new-attributes]
+                (gs-add-attribute db dataset collection (first a) (-> a second type)))
+              (when (not-empty new-attributes) (cached-collection-attributes :reload dataset collection)))
+            (batched-add-feature feature)))))
+  (proj/change-feature [p feature]
+    (if (proj/accept? p feature)
+      (let [{:keys [dataset collection attributes]} feature
+            cached-collection-attributes (cached cache gs-collection-attributes db)
+            batched-update-feature (with-batch update-batch update-batch-size
+                                     (partial gs-update-feature db proj-fn) flush-fn)]
+        (let [current-attributes (cached-collection-attributes dataset collection)
+              new-attributes (filter #(not (some #{(first %)} current-attributes)) attributes)]
+          (doseq [a new-attributes]
+            (gs-add-attribute db dataset collection (first a) (-> a second type)))
+          (when (not-empty new-attributes) (cached-collection-attributes :reload dataset collection)))
+        (batched-update-feature feature))))
+  (proj/close-feature [p feature]
+    (if (proj/accept? p feature)
+      (let [batched-delete-feature (with-batch delete-batch delete-batch-size
+                                     (partial gs-delete-feature db) flush-fn)]
+        (batched-delete-feature feature))))
+  (proj/delete-feature [p feature]
+    (if (proj/accept? p feature)
+      (let [batched-delete-feature (with-batch delete-batch delete-batch-size
+                                     (partial gs-delete-feature db) flush-fn)]
+        (batched-delete-feature feature))))
+  (proj/accept? [_ feature]
+         (not (some #{(:collection feature)} no-visualization)))
   (proj/close [this]
     (flush-fn)
     this))
@@ -250,8 +258,9 @@
         ndims (or (:ndims config) 2)
         srid (or (:srid config) 28992)
         proj-fn (or (:proj-fn config) identity)
+        no-visualization (:no-visualization config)
         flush-fn #(flush-all db proj-fn cache insert-batch update-batch delete-batch)]
     (->GeoserverProjector db cache insert-batch insert-batch-size
                           update-batch update-batch-size
                           delete-batch delete-batch-size
-                          flush-fn proj-fn ndims srid)))
+                          flush-fn proj-fn no-visualization ndims srid)))

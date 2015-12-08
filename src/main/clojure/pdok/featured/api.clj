@@ -42,6 +42,8 @@
   {:dataset s/Str
    :file URI
    (s/optional-key :format) (s/enum "json" "zip")
+   (s/optional-key :processingOptions) [{:collection s/Str 
+                                         :options [(s/enum "no-visualization")]}]
    (s/optional-key :callback) URI})
 
 (def ExtractRequest
@@ -67,11 +69,16 @@
   (when (:callback request)
           (go (>! callback-chan [(:callback request) stats]))))
 
+(defn collections-with-option [filter-option processing-options]
+  (map :collection (filter (fn [p] (some #(= filter-option %) (:options p))) processing-options)))
+  
 (defn- process* [stats callback-chan request]
   (log/info "Processsing: " request)
   (swap! stats assoc-in [:processing] request)
   (let [persistence (config/persistence)
-        projectors [(config/projectors persistence) (config/timeline persistence)]
+        projectors [(config/projectors persistence 
+                                       :no-visualization (collections-with-option "no-visualization" (:processingOptions request))) 
+                    (config/timeline persistence)]
         processor (processor/create persistence projectors)
         zip-file? (= (:format request) "zip")]
     (try
@@ -132,6 +139,7 @@
                                                     :template (:template request)})
                     {:status "ok"}
                     {:status "error"})))))
+
 
 (defn api-routes [process-chan extract-chan callback-chan stats]
   (defroutes api-routes
