@@ -10,7 +10,7 @@
             [cognitect.transit :as transit])
   (:import [java.io ByteArrayOutputStream]))
 
-(declare prepare-caches)
+(declare prepare-caches prepare-childs-cache prepare-parent-cache)
 
 (defprotocol ProcessorPersistence
   (init [this])
@@ -248,7 +248,7 @@ WHERE rn = 1"
         cached (use-cache (.stream-cache persistence) key-fn)]
       (cached dataset collection id)))
 
-(defn prepare-childs-cache [persistence dataset collection ids]
+(defn prepare-childs-cache [persistence dataset collection ids recur?]
   (when (and (not (nil? dataset)) (not (nil? collection)) (seq ids))
     (when-let [not-nil-ids (seq (filter (complement nil?) ids))]
       (let [{:keys [db stream-cache childs-cache]} persistence
@@ -258,9 +258,11 @@ WHERE rn = 1"
         (doseq [[collection grouped] as-parents]
           (let [new-ids (map second grouped)]
             (apply-to-cache stream-cache (jdbc-load-cache db dataset collection new-ids))
-            (prepare-childs-cache persistence dataset collection new-ids)))))))
+            (when recur?
+              (prepare-parent-cache persistence dataset collection new-ids false)
+              (prepare-childs-cache persistence dataset collection new-ids true))))))))
 
-(defn prepare-parent-cache [persistence dataset collection ids]
+(defn prepare-parent-cache [persistence dataset collection ids recur?]
   (when (and (not (nil? dataset)) (not (nil? collection)) (seq ids))
     (when-let [not-nil-ids (seq (filter (complement nil?) ids))]
       (let [{:keys [db stream-cache parent-cache]} persistence
@@ -270,7 +272,9 @@ WHERE rn = 1"
         (doseq [[collection grouped] as-childs]
           (let [new-ids (map second grouped)]
             (apply-to-cache stream-cache (jdbc-load-cache db dataset collection new-ids))
-            (prepare-parent-cache persistence dataset collection new-ids)))))))
+            (when recur?
+              (prepare-childs-cache persistence dataset collection new-ids false)
+              (prepare-parent-cache persistence dataset collection new-ids true))))))))
 
 (defn prepare-caches [persistence dataset-collection-id]
   (let [{:keys [db stream-cache childs-cache parent-cache]} persistence
@@ -278,8 +282,8 @@ WHERE rn = 1"
     (doseq [[[dataset collection] grouped] dataset-collection]
       (let [ids (filter (complement nil?) (map #(nth % 2) grouped))]
         (apply-to-cache stream-cache (jdbc-load-cache db dataset collection ids))
-        (prepare-childs-cache persistence dataset collection ids)
-        (prepare-parent-cache persistence dataset collection ids)))))
+        (prepare-childs-cache persistence dataset collection ids true)
+        (prepare-parent-cache persistence dataset collection ids true)))))
 
 (defrecord CachedJdbcProcessorPersistence [db stream-batch stream-batch-size stream-cache
                                          link-batch link-batch-size childs-cache parent-cache]
