@@ -42,7 +42,7 @@ FIXME: description
 ####Maven Settings
 Leiningen uses maven's settings.xml
 Set the proxy and nonproxyhosts as follows, making sure to replace the {username} placeholder with your own:
-
+```
 <?xml version="1.0" encoding="UTF-8"?>
 <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -70,6 +70,7 @@ Set the proxy and nonproxyhosts as follows, making sure to replace the {username
 		</proxy>
 	</proxies> 
 </settings>
+````
 
 No mirror is used, references to the kadaster nexus repository should be configured in each project to prevent configuration issues
 
