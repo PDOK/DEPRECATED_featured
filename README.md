@@ -76,7 +76,9 @@ No mirror is used, references to the kadaster nexus repository should be configu
 
 ##Building the project
 Use "lein deps" to download the project dependencies (optional)
+
 Use "lein compile" and then "lein uberjar" to compile and create the jar file
+
  
 ## Usage
 
