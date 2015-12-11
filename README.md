@@ -39,6 +39,44 @@ FIXME: description
 		keytool -keystore "C:\Program Files\Java\jre1.8.0_31\lib\security\cacerts" -importcert -alias kadaster_proxy -file kadaster_proxy.cer
 		keytool -keystore "C:\Program Files\Java\jre1.8.0_31\lib\security\cacerts" -importcert -alias kadaster_ca -file kadaster_ca.cer
 
+####Maven Settings
+Leiningen uses maven's settings.xml
+Set the proxy and nonproxyhosts as follows, making sure to replace the {username} placeholder with your own:
+
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
+
+	<localRepository>C:\Users\{username}\.m2\repository</localRepository>
+
+	<interactiveMode>false</interactiveMode>
+
+	<offline>false</offline>
+
+	<pluginGroups>
+		<pluginGroup>nl.kadaster.maven.plugins</pluginGroup>
+	</pluginGroups>
+
+	<!-- All traffic goes through the Nexus Repository Manager -->
+	<proxies>
+		<proxy>
+		  <id>https-proxy</id>
+		  <active>true</active>
+		  <protocol>https</protocol>
+		  <host>www-proxy.cs.kadaster.nl</host>
+		  <port>8082</port>
+		  <nonProxyHosts>*.kadaster.nl</nonProxyHosts>
+		</proxy>
+	</proxies> 
+</settings>
+
+No mirror is used, references to the kadaster nexus repository should be configured in each project to prevent configuration issues
+
+##Building the project
+Use "lein deps" to download the project dependencies (optional)
+Use "lein compile" and then "lein uberjar" to compile and create the jar file
+ 
 ## Usage
 
 https://github.com/technomancy/leiningen
