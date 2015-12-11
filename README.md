@@ -41,14 +41,14 @@ FIXME: description
 
 ####Maven Settings
 Leiningen uses maven's settings.xml
-Set the proxy and nonproxyhosts as follows, making sure to replace the {username} placeholder with your own:
+Set the proxy and nonproxyhosts as follows, make sure to replace the {pathToLocalRepository} placeholder with your local repository location:
 ```
 <?xml version="1.0" encoding="UTF-8"?>
 <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
           xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
 
-	<localRepository>C:\Users\{username}\.m2\repository</localRepository>
+	<localRepository>{pathToLocalRepository}</localRepository>
 
 	<interactiveMode>false</interactiveMode>
 
