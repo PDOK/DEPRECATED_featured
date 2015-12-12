@@ -18,13 +18,6 @@
       (conj! target x)
       (recur (conj! target x) (first xs) (rest xs)))))
 
-(def visualization-table
-  {:bgt {:wegdeel$kruinlijn "kruinlijn"}})
-
-(defn visualization [dataset collection]
-  (let [k-collection (keyword collection)
-        k-dataset (keyword dataset)]
-    (or (get-in visualization-table [k-dataset k-collection] collection))))
 
 (defn do-visualization? [options] 
   (if (some #{"visualization"} options) true))
@@ -37,12 +30,12 @@
   (pg/create-schema db dataset))
 
 (defn- gs-collection-exists? [db dataset collection]
-  (let [table (visualization dataset collection)]
+  (let [table collection]
     (pg/table-exists? db dataset table)))
 
 (defn- gs-create-collection [db ndims srid dataset collection]
   "Create table with default fields"
-  (let [table (visualization dataset collection)]
+  (let [table collection]
 
       (pg/create-table db dataset table
                 [:gid "serial" :primary :key]
@@ -61,7 +54,7 @@
 
 (defn- gs-collection-attributes [db dataset collection]
   ;(println "attributes")
-  (let [table (visualization dataset collection)
+  (let [table collection
         columns (pg/table-columns db dataset table)
         no-defaults (filter #(not (some #{(:column_name %)} ["gid"
                                                              "_id"
@@ -74,7 +67,7 @@
     attributes))
 
 (defn- gs-add-attribute [db dataset collection attribute-name attribute-type]
-  (let [table (visualization dataset collection)]
+  (let [table collection]
     (try
       (pg/add-column db dataset table attribute-name attribute-type)
       (catch java.sql.SQLException e
@@ -136,8 +129,9 @@
                                  (map #(feature-to-sparse-record proj-fn % (all-fields-constructor all-attributes)) grouped-features))]
               (if (not (empty? records))
                 (let [fields (concat [:_id :_version :_geometry_point :_geometry_line :_geometry_polygon :_geo_group]
-                                   (map pg/quoted all-attributes))]
-                  (apply (partial j/insert! c (str dataset "." (pg/quoted (visualization dataset collection))) fields)
+                                   (map pg/quoted all-attributes))
+                      table collection]
+                  (apply (partial j/insert! c (str dataset "." (pg/quoted table)) fields)
                        records)))))))
      (catch java.sql.SQLException e
        (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e))))))
@@ -150,7 +144,8 @@
 
 (defn- execute-update-sql [db dataset collection columns update-vals]
   (try
-    (let [sql (gs-update-sql dataset (visualization dataset collection) (map name columns))]
+    (let [table collection
+          sql (gs-update-sql dataset table (map name columns))]
       (j/execute! db (cons sql update-vals) :multi? true :transaction? false))
     (catch java.sql.SQLException e
       (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e)))))
@@ -178,7 +173,8 @@
     (let [selector (juxt :dataset :collection)
           per-dataset-collection (group-by selector features)]
        (doseq [[[dataset collection] collection-features] per-dataset-collection]
-        (let [sql (gs-delete-sql dataset (visualization dataset collection))
+        (let [table collection
+              sql (gs-delete-sql dataset table)
               ids (map #(vector (:id %1) (:current-version %1)) collection-features)]
           (j/execute! db (cons sql ids) :multi? true :transaction? false))))
     (catch java.sql.SQLException e
