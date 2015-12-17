@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <udm.DeploymentPackage version="${RELEASE_VERSION}" application="pdok-featured">
-  <orchestrator />
+  <orchestrator>sequential-by-container</orchestrator>
   <satisfiesApprovalByChangemanager>true</satisfiesApprovalByChangemanager>
   <satisfiesChangeTicketNumber>${CHANGE_NUMBER}</satisfiesChangeTicketNumber>
   <deployables>
