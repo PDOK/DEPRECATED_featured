@@ -6,6 +6,8 @@
             [pdok.featured.projectors :as proj]
             [pdok.featured.persistence :as pers]
             [pdok.featured.tiles :as tiles]
+            [joplin.core :as joplin]
+            [joplin.jdbc.database]
             [clojure.java.jdbc :as j]
             [clojure.core.cache :as cache]
             [clojure.string :as str]
@@ -26,42 +28,15 @@
 (def ^:dynamic *history-table* "timeline")
 (def ^:dynamic *current-table* "timeline_current")
 
-(defn- create-history-table [db]
-  "Create table with default fields"
-  (pg/create-table db *timeline-schema* *history-table*
-               [:id "serial" :primary :key]
-               [:dataset "varchar(100)"]
-               [:collection "varchar(255)"]
-               [:feature_id "varchar(100)"]
-               [:version "uuid"]
-               [:valid_from "timestamp without time zone"]
-               [:valid_to "timestamp without time zone"]
-               [:feature "text"]
-               [:tiles "integer[]"])
-  (pg/create-index db *timeline-schema* *history-table* :dataset :collection :feature_id)
-  (pg/create-index db *timeline-schema* *history-table* :version))
-
-(defn- create-current-table [db]
-  (pg/create-table db *timeline-schema* *current-table*
-               [:id "serial" :primary :key]
-               [:dataset "varchar(100)"]
-               [:collection "varchar(255)"]
-               [:feature_id "varchar(100)"]
-               [:version "uuid"]
-               [:valid_from "timestamp without time zone"]
-               [:valid_to "timestamp without time zone"]
-               [:feature "text"]
-               [:tiles "integer[]"])
-  (pg/create-index db *timeline-schema* *current-table* :dataset :collection :feature_id)
-  (pg/create-index db *timeline-schema* *current-table* :version))
-
 (defn- init [db]
   (when-not (pg/schema-exists? db *timeline-schema*)
     (pg/create-schema db *timeline-schema*))
-  (when-not (pg/table-exists? db *timeline-schema* *history-table*)
-    (create-history-table db))
-  (when-not (pg/table-exists? db *timeline-schema* *current-table*)
-    (create-current-table db)))
+  (let [jdb {:db (assoc db
+                        :type :jdbc
+                        :url (pg/dbspec->url db))
+             :migrator "/pdok/featured/migrations/timeline"
+             :migrations-table "featured.timeline_migrations"}]
+    (joplin/migrate-db jdb)))
 
 (defn- qualified-history []
   (str (name *timeline-schema*) "." (name *history-table*)))
@@ -383,7 +358,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
 
 (defn process-chunk* [config chunk]
   (let [cache (create-cache (:db-config config) chunk)
-        timeline (proj/init (create config cache))]
+        timeline (create config cache)]
     (doseq [f chunk]
       (condp = (:action f)
         :new (proj/new-feature timeline f)

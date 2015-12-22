@@ -3,6 +3,8 @@
   (:require [pdok.cache :refer :all]
             [pdok.postgres :as pg]
             [pdok.util :refer [with-bench]]
+            [joplin.core :as joplin]
+            [joplin.jdbc.database]
             [clojure.core.cache :as cache]
             [clojure.java.jdbc :as j]
             [clojure.tools.logging :as log]
@@ -63,29 +65,12 @@
 (defn- jdbc-init [db]
   (when-not (pg/schema-exists? db *jdbc-schema*)
     (pg/create-schema db *jdbc-schema*))
-  (when-not (pg/table-exists? db *jdbc-schema* *jdbc-features*)
-    (pg/create-table db *jdbc-schema* *jdbc-features*
-                     [:id "bigserial" :primary :key]
-                     [:dataset "varchar(100)"]
-                     [:collection "varchar(100)"]
-                     [:feature_id "varchar(50)"]
-                     [:parent_collection "varchar(255)"]
-                     [:parent_id "varchar(50)"]
-                     [:parent_field "varchar(255)"])
-    (pg/create-index db *jdbc-schema* *jdbc-features* :dataset :collection :feature_id)
-    (pg/create-index db *jdbc-schema* *jdbc-features* :dataset :parent_collection :parent_id))
-  (when-not (pg/table-exists? db *jdbc-schema* *jdbc-feature-stream*)
-    (pg/create-table db *jdbc-schema* *jdbc-feature-stream*
-                     [:id "bigserial" :primary :key]
-                     [:version "uuid"]
-                     [:action "varchar(12)"]
-                     [:dataset "varchar(100)"]
-                     [:collection "varchar(255)"]
-                     [:feature_id "varchar(50)"]
-                     [:validity "timestamp without time zone"]
-                     [:geometry "text"]
-                     [:attributes "text"])
-    (pg/create-index db *jdbc-schema* *jdbc-feature-stream* :dataset :collection :feature_id)))
+  (let [jdb {:db (assoc db
+                        :type :jdbc
+                        :url (pg/dbspec->url db))
+             :migrator "/pdok/featured/migrations/persistence"
+             :migrations-table "featured.persistence_migrations"}]
+    (joplin/migrate-db jdb)))
 
 (defn- jdbc-create-stream
   ([db dataset collection id parent-collection parent-id parent-field]

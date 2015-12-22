@@ -8,6 +8,9 @@
            [java.util Calendar TimeZone]
            [org.joda.time DateTimeZone LocalDate LocalDateTime]))
 
+(defn dbspec->url [{:keys [subprotocol subname user password]}]
+  (str "jdbc:" subprotocol ":" subname "?user=" user "&password=" password))
+
 (def wkt-writer (WKTWriter.))
 
 (def joda-time-writer

@@ -40,6 +40,8 @@
                  [stencil "0.4.0"]
                  [environ "1.0.1"]
                  [http-kit "2.1.18"]
+                 [joplin.core "0.3.5"]
+                 [joplin.jdbc "0.3.5"]
                  [org.clojure/clojure "1.7.0"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [org.clojure/core.cache "0.6.4"]
