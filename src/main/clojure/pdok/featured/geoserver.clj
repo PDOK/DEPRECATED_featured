@@ -39,12 +39,12 @@
 
       (pg/create-table db dataset table
                 [:gid "serial" :primary :key]
-                [:_id "text"]
-                [:_version "text"]
+                [:_id "varchar(100)"]
+                [:_version "uuid"]
                 [:_geometry_point "geometry"]
                 [:_geometry_line "geometry"]
                 [:_geometry_polygon "geometry"]
-                [:_geo_group "text"])
+                [:_geo_group "varchar (20)"])
 
       (pg/create-index db dataset table "_id")
       (pg/add-geo-constraints db dataset table :_geometry_point ndims srid)
