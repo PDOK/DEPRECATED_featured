@@ -14,13 +14,12 @@
 
 (declare cli-options features-from-files)
 
-(defn execute [{:keys [json-files
-                       dataset-name
-                       no-projectors
-                       no-timeline
-                       no-state
-                       projection]}]
-  (log/info (str "start" (when dataset-name (str " - dataset: " dataset-name))
+(defn setup-processor [{:keys [dataset-name
+                               no-projectors
+                               no-timeline
+                               no-state
+                               projection]}]
+  (log/info (str "Configuring:" (when dataset-name (str " - dataset: " dataset-name))
                  (when no-projectors " without projectors")
                  (when no-state " without state")
                  (when projection (str " as " projection))))
@@ -28,11 +27,25 @@
         projectors (cond-> [] (not no-projectors) (conj (config/projectors persistence :projection projection))
                            (not no-timeline) (conj (config/timeline persistence)))
         processor (processor/create persistence projectors)]
+    processor))
+
+(defn process [{:keys [json-files dataset-name] :as options}]
+  (log/info "Processing mode")
+  (let [processor (setup-processor options)]
     (dorun (consume processor (features-from-files json-files :dataset dataset-name)))
     (do (log/info "Shutting down.")
         (shutdown processor)))
-  (log/info "done")
+  (log/info "Done processing")
   )
+
+(defn replay [{:keys [replay dataset-name] :as options}]
+  (log/info "Replay mode")
+  (let [n (Integer/parseInt replay)
+        processor (setup-processor options)]
+    (processor/replay processor dataset-name n)
+    (log/info "Shutting down")
+    (shutdown processor)
+    (log/info "Done replaying")))
 
 (defn exit [status msg]
   (println msg)
@@ -43,16 +56,23 @@
 
 (defn -main [& args]
 ;  (println "ENV-test" (config/env :pdok-test))
-  (let [{:keys [options arguments summary options]} (parse-opts args cli-options)]
+  (let [{:keys [options arguments summary]} (parse-opts args cli-options)]
     (cond
-      (:help options) (exit 0 summary)
-      (:version options) (exit 0 (implementation-version))
-      (not (or (seq arguments) (:std-in options))) (exit 0 "json-file or std-in required")
+      (:help options)
+        (exit 0 summary)
+      (:version options)
+        (exit 0 (implementation-version))
+      (:replay options)
+        (if (not (:dataset-name options))
+          (exit 0 "replaying requires dataset")
+          (replay options))
+      (not (or (seq arguments) (:std-in options)))
+        (exit 0 "json-file or std-in required")
       :else
-      (let [files (if (:std-in options)
-                    [*in*]
-                    arguments)]
-        (execute (assoc options :json-files files))))))
+        (let [files (if (:std-in options)
+                      [*in*]
+                      arguments)]
+          (process (assoc options :json-files files))))))
 
 (def cli-options
   [[nil "--std-in" "Read from std-in"]
@@ -61,6 +81,7 @@
    [nil "--no-timeline"]
    [nil "--no-state" "Use only with no nesting and action :new"]
    [nil "--projection PROJ" "RD / ETRS89 / SOURCE"]
+   ["-r" "--replay N" "Replay last N events from persistence to projectors"]
    ["-h" "--help"]
    ["-v" "--version"]])
 

@@ -7,6 +7,7 @@
             [pdok.featured.json-reader :refer :all]
             [pdok.featured.projectors :as proj]
             [pdok.featured.config :as config]
+            [clojure.core.async :as a]
             [clj-time [core :as t] [local :as tl] [coerce :as tc]]
             [clojure.string :as str]
             [clojure.tools.logging :as log])
@@ -361,6 +362,23 @@
       (concat (consume-partition processor (take n features))
               (lazy-seq (consume processor (drop n features)))))))
 
+(defn replay [{:keys [persistence projectors batch-size statistics]} dataset last-n]
+  "Sends the last n events from persistence to the projectors"
+  (let [features (pers/get-last-n persistence dataset last-n)
+        parts (a/pipe features (a/chan batch-size (partition-all batch-size)))]
+    (loop [part (a/<!! parts)]
+      (when (seq part)
+        (pers/flush persistence)
+        (pers/prepare persistence part)
+        (doseq [f part]
+          (condp = (:action f)
+            :new (doseq [p projectors] (proj/new-feature p f))
+            :change (doseq [p projectors] (proj/change-feature p f))
+            :close (doseq [p projectors] (proj/close-feature p f))
+            :delete (doseq [p projectors] (proj/delete-feature p f)))
+          (swap! statistics update :replayed inc))
+        (recur (a/<!! parts))))))
+
 (defn shutdown [{:keys [persistence projectors statistics]}]
   "Shutdown feature store. Make sure all data is processed and persisted"
   (let [closed-projectors (doall (map proj/close projectors))
@@ -384,4 +402,4 @@
      {:persistence initialized-persistence
       :projectors initialized-projectors
       :batch-size batch-size
-      :statistics (atom {:n-src 0 :n-processed 0 :n-errored 0 :errored '()})})))
+      :statistics (atom {:n-src 0 :n-processed 0 :n-errored 0 :errored '() :replayed 0})})))

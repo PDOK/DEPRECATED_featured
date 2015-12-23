@@ -9,7 +9,9 @@
             [clojure.java.jdbc :as j]
             [clojure.tools.logging :as log]
             [clj-time [coerce :as tc]]
-            [cognitect.transit :as transit])
+            [cognitect.transit :as transit]
+            [clojure.core.async :as a
+             :refer [>!! close! go chan]])
   (:import [java.io ByteArrayOutputStream]))
 
 (declare prepare-caches prepare-childs-cache prepare-parent-cache)
@@ -30,8 +32,8 @@
     [persistence dataset parent-collection parent-id child-collection]
     [persistence dataset parent-collection parent-id])
   (parent [persistence dataset collection id] "Returns [collection id field] tuple or nil")
-  (close [persistence])
-  )
+  (get-last-n [persistence dataset n] "Returns channel with n last stream entries")
+  (close [persistence]))
 
 (defn path [persistence dataset collection id]
   "Returns sequence of [collection id field child-id] tuples. Parents first. Root only means empty sequence"
@@ -71,6 +73,50 @@
              :migrator "/pdok/featured/migrations/persistence"
              :migrations-table "featured.persistence_migrations"}]
     (joplin/migrate-db jdb)))
+
+(defn record->feature [c record]
+  (let [f (transient {})
+        f (assoc! f
+                 :dataset (:dataset record)
+                 :collection (:collection record)
+                 :id (:feature_id record)
+                 :action (keyword (:action record))
+                 :version (:version record)
+                 :validity (:validity record)
+                 :geometry (pg/from-json (:geometry record))
+                 :attributes (pg/from-json (:attributes record)))
+        f (cond-> f
+            (:parent_collection record) (assoc! :parent-collection (:parent_collection record))
+            (:parent_id record) (assoc! :parent-id (:parent_id record)))]
+    (>!! c (persistent! f))))
+
+(defn jdbc-get-last-n [persistence dataset n]
+  (let [query (str "SELECT fs.dataset,
+       fs.collection,
+       fs.feature_id,
+       fs.action,
+       f.parent_collection,
+       f.parent_id,
+       fs.version,
+       fs.validity,
+       fs.attributes,
+       fs.geometry
+  from featured.feature_stream fs
+  join featured.feature f on fs.dataset = f.dataset and
+			     fs.collection = f.collection and
+			     fs.feature_id = f.feature_id
+  where fs.dataset = ?
+  order by fs.id desc
+  limit " n)
+        result-chan (chan)]
+    (a/thread
+      (j/with-db-connection [c (:db persistence)]
+        (let [statement (j/prepare-statement
+                         (doto (j/get-connection c) (.setAutoCommit false))
+                         query :fetch-size 10000)]
+          (j/query c [statement dataset] :row-fn (partial record->feature result-chan))
+          (close! result-chan))))
+    result-chan))
 
 (defn- jdbc-create-stream
   ([db dataset collection id parent-collection parent-id parent-field]
@@ -221,6 +267,8 @@ WHERE rn = 1"
     (jdbc-get-childs db dataset parent-collection parent-id))
   (parent [_ dataset collection id]
     (jdbc-get-parent db dataset collection id))
+  (get-last-n [this dataset n]
+    (jdbc-get-last-n this dataset n))
   (close [this] this)
   )
 
@@ -331,6 +379,8 @@ WHERE rn = 1"
       (if (some #(= nil %) q-result)
         nil
         q-result)))
+  (get-last-n [this dataset n]
+    (jdbc-get-last-n this dataset n))
   (close [this]
     (flush this)))
 
