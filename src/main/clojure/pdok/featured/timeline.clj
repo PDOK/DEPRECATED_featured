@@ -309,17 +309,18 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
           batched-history (with-batch new-history-batch new-history-batch-size (partial new-history db) flush-fn)
           cached-get-current (use-cache feature-cache cache-use-key)]
       (if-let [current (cached-get-current dataset root-col root-id)]
-        (let [new-current (merge current path feature)]
-          (if (= (:action feature) :close)
-            (cache-batched-update (sync-valid-to new-current feature))
-            (if (t/before? (:_valid_from current) (:validity feature))
-              (do ;(println "NOT-SAME")
-                        (batched-history (sync-valid-to current feature))
-                ;; reset valid-to for new-current.
-                        (cache-batched-update (reset-valid-to (sync-valid-from new-current feature))))
-              (do ;(println "SAME")
-                        ;; reset valid-to because it might be closed because of nested features.
-                        (cache-batched-update (reset-valid-to (sync-valid-from new-current feature)))))))
+        (when-not (some #{(:version feature)} (:_all_versions current))
+          (let [new-current (merge current path feature)]
+            (if (= (:action feature) :close)
+              (cache-batched-update (sync-valid-to new-current feature))
+              (if (t/before? (:_valid_from current) (:validity feature))
+                (do ;(println "NOT-SAME")
+                  (batched-history (sync-valid-to current feature))
+                  ;; reset valid-to for new-current.
+                  (cache-batched-update (reset-valid-to (sync-valid-from new-current feature))))
+                (do ;(println "SAME")
+                  ;; reset valid-to because it might be closed because of nested features.
+                  (cache-batched-update (reset-valid-to (sync-valid-from new-current feature))))))))
         (cache-batched-new (sync-valid-from (merge (init-root dataset root-col root-id) path feature) feature)))))
   (proj/change-feature [_ feature]
     ;; change can be the same, because a new nested feature validity change will also result in a new validity
