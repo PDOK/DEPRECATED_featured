@@ -1,5 +1,5 @@
 (ns pdok.featured.geoserver
-  (:require [pdok.featured.projectors :as proj] 
+  (:require [pdok.featured.projectors :as proj]
             [pdok.cache :refer :all]
             [pdok.featured.feature :as f :refer [as-jts]]
             [pdok.postgres :as pg]
@@ -19,7 +19,7 @@
       (recur (conj! target x) (first xs) (rest xs)))))
 
 
-(defn do-visualization? [options] 
+(defn do-visualization? [options]
   (if (some #{"visualization"} options) true))
 
 (defn- gs-dataset-exists? [db dataset]
@@ -85,7 +85,8 @@
                             (when (= :line geo-group)  geometry)
                             (when (= :polygon geo-group)  geometry)
                             geo-group]
-                           sparse-attributes)]
+                           sparse-attributes
+                           [id])]
         record))))
 
 (defn- feature-keys [feature]
@@ -117,22 +118,26 @@
 (defn- geo-column [geo-group]
    (str "_geometry_" (name geo-group)))
 
+(defn gs-insert-sql [schema table columns]
+  (str "INSERT INTO " (pg/quoted schema) "." (pg/quoted table)
+       " ("  (str/join "," (map #(pg/quoted (name %)) columns)) ")"
+       " SELECT " (str/join "," (repeat (count columns) "?"))
+       " WHERE NOT EXISTS (SELECT 1 FROM " (pg/quoted schema) "." (pg/quoted table) " WHERE _id = ?)" ))
+
 (defn- gs-add-feature
   ([db proj-fn all-attributes-fn features]
    (try
      (let [selector (juxt :dataset :collection)
            per-dataset-collection (group-by selector features)]
         (doseq [[[dataset collection] grouped-features] per-dataset-collection]
-         (j/with-db-connection [c db]
-           (let [all-attributes (all-attributes-fn dataset collection)
-                 records (filter (comp not nil?)
-                                 (map #(feature-to-sparse-record proj-fn % (all-fields-constructor all-attributes)) grouped-features))]
-              (if (not (empty? records))
-                (let [fields (concat [:_id :_version :_geometry_point :_geometry_line :_geometry_polygon :_geo_group]
-                                   (map pg/quoted all-attributes))
-                      table collection]
-                  (apply (partial j/insert! c (str dataset "." (pg/quoted table)) fields)
-                       records)))))))
+         (let [all-attributes (all-attributes-fn dataset collection)
+               records (filter (comp not nil?)
+                               (map #(feature-to-sparse-record proj-fn % (all-fields-constructor all-attributes)) grouped-features))]
+           (if (not (empty? records))
+             (let [fields (concat [:_id :_version :_geometry_point :_geometry_line :_geometry_polygon :_geo_group]
+                                  all-attributes)
+                   sql (gs-insert-sql dataset collection fields)]
+               (j/execute! db (cons sql records) :multi? true :transaction? false))))))
      (catch java.sql.SQLException e
        (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e))))))
 
