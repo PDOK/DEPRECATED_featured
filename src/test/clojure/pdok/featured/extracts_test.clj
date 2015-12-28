@@ -26,18 +26,18 @@
 (def test-gml2extract-end-partial (slurp (io/resource "templates/test/gml2extract/partials/end.mustache")))
 
 
-(deftest test-two-rendered-features 
-  (let [_ (template/add-or-update-template {:dataset "test" 
-                                            :extract-type "gml2extract" 
-                                            :name "dummy" 
+(deftest test-two-rendered-features
+  (let [_ (template/add-or-update-template {:dataset "test"
+                                            :extract-type "gml2extract"
+                                            :name "dummy"
                                             :template test-gml2extract-dummy-template})
-        _ (template/add-or-update-template {:dataset "test" 
-                                            :extract-type "gml2extract" 
-                                            :name "start" 
+        _ (template/add-or-update-template {:dataset "test"
+                                            :extract-type "gml2extract"
+                                            :name "start"
                                             :template test-gml2extract-start-partial})
-        _ (template/add-or-update-template {:dataset "test" 
-                                            :extract-type "gml2extract" 
-                                            :name "end" 
+        _ (template/add-or-update-template {:dataset "test"
+                                            :extract-type "gml2extract"
+                                            :name "end"
                                             :template test-gml2extract-end-partial})
         [error features] (features-for-extract "test" "dummy" "gml2extract" (two-features))
         rendered-feature (nth (first features) 2)]
@@ -50,7 +50,7 @@
   "Helper function to write features to an extract-schema."
   (let [features (file-to-features path dataset)
        [error features-for-extract] (features-for-extract dataset feature-type extract-type-citygml features template-dir)]
-    (add-extract-records config/data-db dataset feature-type extract-type-citygml 14 features-for-extract)))
+    (add-extract-records config/extracts-db dataset feature-type extract-type-citygml 14 features-for-extract)))
 
 
 ;(write-xml-to-database "bgt" "bord" "D:\\data\\pdok\\bgt\\mutatie-leveringen\\bord\\973140-Bord-1.json" "D:\\projects\\featured\\src\\main\\resources\\pdok\\featured\\templates")

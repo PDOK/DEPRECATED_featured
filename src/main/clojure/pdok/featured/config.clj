@@ -53,6 +53,11 @@
                      :user (or (env :data-database-user) "postgres")
                      :password (or (env :data-database-password) "postgres")})
 
+(def extracts-db {:subprotocol "postgresql"
+                     :subname (or (env :extracts-database-url) "//localhost:5432/pdok")
+                     :user (or (env :extracts-database-user) "postgres")
+                     :password (or (env :extracts-database-password) "postgres")})
+
 (defn persistence []
   (pers/cached-jdbc-processor-persistence
                     {:db-config processor-db :batch-size 10000}))

@@ -1,6 +1,6 @@
 (ns pdok.featured.extracts
   (:require [clojure.java.jdbc :as j]
-            [pdok.featured.config :as config 
+            [pdok.featured.config :as config
               :refer [<??]]
             [pdok.featured.json-reader :as json-reader]
             [pdok.featured.mustache  :as m]
@@ -81,7 +81,7 @@
     (if (nil? error)
       (if (nil? features-for-extract)
         {:status "ok" :count 0}
-        {:status "ok" :count (add-extract-records config/data-db dataset feature-type extract-type extract-version features-for-extract)})
+        {:status "ok" :count (add-extract-records config/extracts-db dataset feature-type extract-type extract-version features-for-extract)})
       {:status "error" :msg error :count 0})))
 
 
