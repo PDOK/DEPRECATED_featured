@@ -27,6 +27,8 @@
 (def ^:dynamic *timeline-schema* "featured")
 (def ^:dynamic *history-table* "timeline")
 (def ^:dynamic *current-table* "timeline_current")
+(def ^:dynamic *current-delta-table* "timeline_current_delta")
+(def ^:dynamic *history-delta-table* "timeline_delta")
 
 (defn- init [db]
   (when-not (pg/schema-exists? db *timeline-schema*)
@@ -41,8 +43,14 @@
 (defn- qualified-history []
   (str (name *timeline-schema*) "." (name *history-table*)))
 
+(defn- qualified-history-delta []
+  (str (name *timeline-schema*) "." (name *history-delta-table*)))
+
 (defn- qualified-current []
   (str (name *timeline-schema*) "." (name *current-table*)))
+
+(defn- qualified-current-delta []
+  (str (name *timeline-schema*) "." (name *current-delta-table*)))
 
 (defn map->where-clause [clauses]
   (str/join " AND " (map #(str (name (first %1)) " = '" (second %1) "'") clauses)))
@@ -178,13 +186,17 @@
        " (dataset, collection, feature_id, version, valid_from, valid_to, feature, tiles)
 VALUES (?, ?, ? ,?, ?, ?, ?, ?)"))
 
+(defn- new-current-delta-sql []
+  (str "INSERT INTO " (qualified-current-delta) " (version, action) VALUES (?, 'I')"))
+
 (defn- new-current
   ([db features]
    (try
      (let [transform-fn (juxt :_dataset :_collection :_id :_version
                               :_valid_from :_valid_to pg/to-json :_tiles)
            records (map transform-fn features)]
-       (j/execute! db (cons (new-current-sql) records) :multi? true :transaction? false))
+       (j/execute! db (cons (new-current-sql) records) :multi? true :transaction? false)
+       (j/execute! db (cons (new-current-delta-sql) versions) :multi? true :transaction? false))
      (catch java.sql.SQLException e
        (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
   )
@@ -229,11 +241,15 @@ VALUES (?, ?, ? ,?, ?, ?, ?, ?)"))
   (str "INSERT INTO " (qualified-history) " (dataset, collection, feature_id, version, valid_from, valid_to, feature, tiles)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
 
+(defn- new-history-delta-sql []
+  (str "INSERT INTO " (qualified-history-delta) " (version, action) VALUES (?, 'I')"))
+
 (defn- new-history [db features]
   (try
     (let [transform-fn (juxt :_dataset :_collection :_id :_version :_valid_from :_valid_to pg/to-json :_tiles)
           records (map transform-fn features)]
-      (j/execute! db (cons (new-history-sql) records) :multi? true :transaction? false))
+      (j/execute! db (cons (new-history-sql) records) :multi? true :transaction? false)
+      (j/execute! db (cons (new-history-delta-sql) versions) :multi? true :transaction? false))
      (catch java.sql.SQLException e
        (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
@@ -241,11 +257,14 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
   (str "DELETE FROM " (qualified-history)
        " WHERE ARRAY[version] <@ ?"))
 
+(defn- delete-history-delta-sql [] (str "INSERT INTO " (qualified-history-delta) " (version, action) VALUES (?, 'D')"))
+
 (defn- delete-history [db features]
   (try
     (let [transform-fn (juxt #(set (:_all_versions %)))
           records (map transform-fn features)]
-      (j/execute! db (cons (delete-history-sql) records) :multi? true :transaction? false))
+      (j/execute! db (cons (delete-history-sql) records) :multi? true :transaction? false)
+      (j/execute! db (cons (delete-history-delta-sql) versions) :multi? true :transaction? false))
      (catch java.sql.SQLException e
        (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
