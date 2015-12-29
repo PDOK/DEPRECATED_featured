@@ -22,14 +22,14 @@
   (if (empty? features)
     [nil nil]
     (let [template-key (template/template-key dataset extract-type feature-type)]
-      [nil (map #(vector feature-type (:_tiles %) (m/render template-key %)
+      [nil (map #(vector feature-type (:_version %) (:_tiles %) (m/render template-key %)
                            (:_valid_from %) (:_valid_to %) (:lv-publicatiedatum %)) features)])))
 
 
 (defn- jdbc-insert-extract [db table entries]
    (try (j/with-db-connection [c db]
           (apply (partial j/insert! c (str extract-schema "." table) :transaction? false
-                    [:feature_type :valid_from :valid_to :publication :tiles :xml])
+                    [:feature_type :version :valid_from :valid_to :publication :tiles :xml])
                     entries))
         (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
 
@@ -52,15 +52,15 @@
         (if (empty? (j/query c [query extractset-id area-id]))
           (j/insert! db extractset-area-table {:extractset_id extractset-id :area_id area-id}))))))
 
-(defn- tiles-from-feature [[type tiles & more]]
+(defn- tiles-from-feature [[type version tiles & more]]
    tiles)
 
 (defn add-metadata-extract-records [db extractset-id rendered-features]
    (let [tiles (reduce clojure.set/union (map tiles-from-feature rendered-features))]
      (add-extractset-area db extractset-id tiles)))
 
-(defn- tranform-feature-for-db [[feature-type tiles xml-feature valid-from valid-to publication-date]]
-  [feature-type valid-from valid-to publication-date (vec tiles) xml-feature])
+(defn- tranform-feature-for-db [[feature-type version tiles xml-feature valid-from valid-to publication-date]]
+  [feature-type version valid-from valid-to publication-date (vec tiles) xml-feature])
 
 (defn add-extract-records [db dataset feature-type extract-type version rendered-features]
   "Inserts the xml-features and tile-set in an extract schema based on dataset, extract-type, version and feature-type,
