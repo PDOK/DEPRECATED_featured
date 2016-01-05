@@ -9,6 +9,8 @@
 (defn- create-history-delta-table [db]
   (pg/create-table db *timeline-schema* *history-delta-table*
                [:id "serial" :primary :key]
+               [:dataset "varchar(100)"]
+               [:collection "varchar(255)"]
                [:version "uuid"]
                [:action "varchar(1)"] ; D(elete) or I(insert)
             )) 
@@ -16,6 +18,8 @@
 (defn- create-current-delta-table [db]
   (pg/create-table db *timeline-schema* *current-delta-table*
                [:id "serial" :primary :key]
+               [:dataset "varchar(100)"]
+               [:collection "varchar(255)"]               
                [:version "uuid"]
                [:action "varchar(1)"] ; D(elete) or I(insert)
             ))

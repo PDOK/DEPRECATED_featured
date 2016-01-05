@@ -51,7 +51,6 @@
   {:dataset s/Str
    :collection s/Str
    :extractType s/Str
-   :extractVersion s/Str
    (s/optional-key :callback) URI})
 
 (def TemplateRequest
@@ -118,8 +117,7 @@
   (try
     (let [response (extracts/fill-extract (:dataset request)
                                           (:collection request)
-                                          (:extractType request)
-                                          (read-string (:extractVersion request)))
+                                          (:extractType request))
           _ (log/info "response: " response)
           extract-stats (assoc request :response response)]
        (stats-on-callback callback-chan request extract-stats))

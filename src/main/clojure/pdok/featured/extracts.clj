@@ -17,6 +17,7 @@
 (def ^{:private true } extractset-table "extractmanagement.extractset")
 (def ^{:private true } extractset-area-table "extractmanagement.extractset_area")
 
+
 (defn features-for-extract [dataset feature-type extract-type features]
   "Returns the rendered representation of the collection of features for a given feature-type inclusive tiles-set"
   (if (empty? features)
@@ -62,32 +63,31 @@
 (defn- tranform-feature-for-db [[feature-type version tiles xml-feature valid-from valid-to publication-date]]
   [feature-type version valid-from valid-to publication-date (vec tiles) xml-feature])
 
-(defn add-extract-records [db dataset feature-type extract-type version rendered-features]
+(defn add-extract-records [db dataset extract-type rendered-features]
   "Inserts the xml-features and tile-set in an extract schema based on dataset, extract-type, version and feature-type,
    if schema or table doesn't exists it will be created."
-  (let [collection (str dataset "_" extract-type)
-        table (str collection "_v" version)
-        extractset-id (get-or-add-extractset db collection version) ]
+  (let [extractset (str dataset "_" extract-type)
+        extractset-id (get-or-add-extractset db extractset 0) ]
     (do
-      (jdbc-insert-extract db table (map tranform-feature-for-db rendered-features))
+      (jdbc-insert-extract db (str extractset "_v0") (map tranform-feature-for-db rendered-features))
       (add-metadata-extract-records db extractset-id rendered-features))
     (count rendered-features)))
 
-(defn transform-and-add-extract [dataset feature-type extract-type extract-version features]
+(defn transform-and-add-extract [dataset feature-type extract-type features]
     (let [[error features-for-extract] (features-for-extract dataset
-                                                           feature-type
-                                                           extract-type
-                                                           features)]
+                                                             feature-type
+                                                             extract-type
+                                                             features)]
     (if (nil? error)
       (if (nil? features-for-extract)
         {:status "ok" :count 0}
-        {:status "ok" :count (add-extract-records config/extracts-db dataset feature-type extract-type extract-version features-for-extract)})
+        {:status "ok" :count (add-extract-records config/extracts-db dataset extract-type features-for-extract)})
       {:status "error" :msg error :count 0})))
 
 
- (defn fill-extract [dataset collection extract-type extract-version]
+ (defn fill-extract [dataset collection extract-type]
   (let [chunk (ref (clojure.lang.PersistentQueue/EMPTY))
-        batched-fn (partial transform-and-add-extract dataset collection extract-type extract-version)
+        batched-fn (partial transform-and-add-extract dataset collection extract-type)
         cached-fn (cache/with-batch chunk 10000 batched-fn)
         rc (chan)
         cc (go (try
@@ -98,7 +98,7 @@
                        (recur (<! rc)))
                      (cache/flush-batch chunk batched-fn)))
                    (catch Exception e e)))]
-    (timeline/all (config/timeline) dataset collection rc)
+    (timeline/delta (config/timeline) dataset collection rc)
     (try
       (<?? cc)  ; block until consumer ends
       {:status "ok" :count 777}
@@ -113,9 +113,9 @@
    (doall (json-reader/features-from-stream s :dataset dataset))))
 
 
-(defn -main [template-location dataset collection extract-type extract-version & args]
+(defn -main [template-location dataset collection extract-type & args]
   (let [templates-with-metadata (template/templates-with-metadata dataset template-location)]
         (when-not (some false? (map template/add-or-update-template templates-with-metadata))
-          (fill-extract dataset collection extract-type (read-string extract-version)))))
+          (fill-extract dataset collection extract-type))))
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))

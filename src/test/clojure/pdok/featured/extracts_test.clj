@@ -40,9 +40,12 @@
                                             :name "end"
                                             :template test-gml2extract-end-partial})
         [error features] (features-for-extract "test" "dummy" "gml2extract" (two-features))
-        rendered-feature (nth (first features) 2)]
+        rendered-feature (nth (first features) 3)]
     (is (= 2 (count features)))
     (is (= test-expected-rendered-feature rendered-feature))))
+
+
+
 
 (def ^{:private true} extract-type-citygml "citygml")
 
