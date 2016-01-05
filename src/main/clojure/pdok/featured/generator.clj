@@ -157,7 +157,7 @@
       (random-json-features w "closeset" "collection1" c :close? true))))
 
 (defn generate-test-files-with-deletes []
-  (doseq [c [10 100 1000 10000 100000]]
+  (doseq [c [2 10 100 1000 10000 100000]]
     (with-open [w (clojure.java.io/writer (str ".test-files/delete-features-single-collection-" c ".json"))]
       (random-json-features w "deleteset" "collection1" c :delete? true))))
 

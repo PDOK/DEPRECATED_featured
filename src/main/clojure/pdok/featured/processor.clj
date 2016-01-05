@@ -72,7 +72,7 @@
       feature))
   )
 
-(defn- validate [{:keys [persistence]} feature]
+(defn- validate [{:keys [persistence] :as processor} feature]
   "Validates features. Nested actions are validated against new checks, because we always close the old nested features."
   (condp contains? (:action feature)
     #{:new :nested-new :nested-change :nested-close}
@@ -93,9 +93,10 @@
          (apply-non-new-feature-requires-existing-stream-validation persistence)
          (apply-non-new-feature-current-validity-validation persistence))
     #{:delete}
-    (->> feature
-         (apply-all-features-validation persistence)
-         (apply-non-new-feature-requires-existing-stream-validation persistence)
+    (cond->> feature
+         true (apply-all-features-validation persistence)
+         true (apply-non-new-feature-requires-existing-stream-validation persistence)
+         (:check-validity-on-delete processor)
          (apply-non-new-feature-current-validity-validation persistence))
     feature
     ))
@@ -395,11 +396,14 @@
 
 (defn create
   ([persistence] (create persistence []))
-  ([persistence & projectors]
+  ([persistence projectors] (apply create {} persistence projectors))
+  ([options persistence & projectors]
    (let [initialized-persistence (pers/init persistence)
          initialized-projectors (doall (map proj/init (clojure.core/flatten projectors)))
          batch-size (or (config/env :processor-batch-size) 10000)]
-     {:persistence initialized-persistence
-      :projectors initialized-projectors
-      :batch-size batch-size
-      :statistics (atom {:n-src 0 :n-processed 0 :n-errored 0 :errored '() :replayed 0})})))
+     (merge {:check-validity-on-delete true
+             :persistence initialized-persistence
+             :projectors initialized-projectors
+             :batch-size batch-size
+             :statistics (atom {:n-src 0 :n-processed 0 :n-errored 0 :errored '() :replayed 0})}
+            options))))

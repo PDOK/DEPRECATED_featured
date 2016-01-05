@@ -14,35 +14,36 @@
 
 (declare cli-options features-from-files)
 
-(defn setup-processor [{:keys [dataset-name
+(defn setup-processor [{:keys [dataset
                                no-projectors
                                no-timeline
                                no-state
-                               projection]}]
-  (log/info (str "Configuring:" (when dataset-name (str " - dataset: " dataset-name))
+                               projection] :as meta}]
+  (log/info (str "Configuring:" (when dataset (str " - dataset: " dataset))
                  (when no-projectors " without projectors")
                  (when no-state " without state")
                  (when projection (str " as " projection))))
   (let [persistence (if no-state (pers/make-no-state) (config/persistence))
         projectors (cond-> [] (not no-projectors) (conj (config/projectors persistence :projection projection))
                            (not no-timeline) (conj (config/timeline persistence)))
-        processor (processor/create persistence projectors)]
+        processor (processor/create meta persistence projectors)]
     processor))
 
-(defn process [{:keys [json-files dataset-name] :as options}]
+(defn process [{:keys [json-files dataset] :as options}]
   (log/info "Processing mode")
-  (let [processor (setup-processor options)]
-    (dorun (consume processor (features-from-files json-files :dataset dataset-name)))
+  (let [[meta features] (features-from-files json-files :dataset dataset)
+        processor (setup-processor (merge meta options))]
+    (dorun (consume processor features))
     (do (log/info "Shutting down.")
         (shutdown processor)))
   (log/info "Done processing")
   )
 
-(defn replay [{:keys [replay dataset-name] :as options}]
+(defn replay [{:keys [replay dataset] :as options}]
   (log/info "Replay mode")
   (let [n (Integer/parseInt replay)
         processor (setup-processor options)]
-    (processor/replay processor dataset-name n)
+    (processor/replay processor dataset n)
     (log/info "Shutting down")
     (shutdown processor)
     (log/info "Done replaying")))
@@ -63,7 +64,7 @@
       (:version options)
         (exit 0 (implementation-version))
       (:replay options)
-        (if (not (:dataset-name options))
+        (if (not (:dataset options))
           (exit 0 "replaying requires dataset")
           (replay options))
       (not (or (seq arguments) (:std-in options)))
@@ -76,7 +77,7 @@
 
 (def cli-options
   [[nil "--std-in" "Read from std-in"]
-   ["-d" "--dataset-name DATASET" "dataset"]
+   ["-d" "--dataset DATASET" "dataset"]
    [nil "--no-projectors"]
    [nil "--no-timeline"]
    [nil "--no-state" "Use only with no nesting and action :new"]

@@ -42,7 +42,7 @@
   {:dataset s/Str
    :file URI
    (s/optional-key :format) (s/enum "json" "zip")
-   (s/optional-key :processingOptions) [{:collection s/Str 
+   (s/optional-key :processingOptions) [{:collection s/Str
                                          :options [(s/enum "no-visualization")]}]
    (s/optional-key :callback) URI})
 
@@ -58,7 +58,7 @@
   "A schema for a JSON template request"
   {:dataset s/Str
    :extractType s/Str
-   :templateName s/Str 
+   :templateName s/Str
    :template s/Str})
 
 (defn- callbacker [uri run-stats]
@@ -71,13 +71,13 @@
 
 (defn collections-with-option [filter-option processing-options]
   (map :collection (filter (fn [p] (some #(= filter-option %) (:options p))) processing-options)))
-  
+
 (defn- process* [stats callback-chan request]
   (log/info "Processsing: " request)
   (swap! stats assoc-in [:processing] request)
   (let [persistence (config/persistence)
-        projectors [(config/projectors persistence 
-                                       :no-visualization (collections-with-option "no-visualization" (:processingOptions request))) 
+        projectors [(config/projectors persistence
+                                       :no-visualization (collections-with-option "no-visualization" (:processingOptions request)))
                     (config/timeline persistence)]
         processor (processor/create persistence projectors)
         zip-file? (= (:format request) "zip")]
@@ -85,7 +85,8 @@
           (with-open [input (io/input-stream (:file request))]
             (let [_ (log/info "processing file: " (:file request))
                   in (if zip-file? (zipfiles/zip-as-input input) input)
-                  features (reader/features-from-stream in :dataset (:dataset request))
+                  [meta features] (reader/features-from-stream in :dataset (:dataset request))
+                  processor (merge processor meta) ;; ugly, should move init here, but that doesnt work for the catch
                   _ (dorun (consume processor features))
                   _ (if zip-file? (zipfiles/close-zip in))
                  processor (shutdown processor)

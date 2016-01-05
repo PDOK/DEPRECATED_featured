@@ -43,6 +43,12 @@
   (when-not (clojure.string/blank? datestring)
     (tc/to-local-date (tf/parse date-formatter datestring))))
 
+(defn clojurify [s]
+  (keyword (cond->
+               (clojure.string/replace s #"_" "-")
+               (.startsWith s "_")
+               (.substring 1))))
+
 (defn- parse-object [^JsonParser jp]
   (jparse/parse* jp identity nil nil))
 
@@ -54,7 +60,7 @@
       state
       (let [obj (do (.nextToken jp) (parse-object jp))
             newName (-> (doto jp .nextToken) .getCurrentName .toLowerCase)]
-        (recur (merge state {currentName obj}) newName)))
+        (recur (merge state {(clojurify currentName) obj}) newName)))
     ))
 
 (defn- read-features [^JsonParser jp]
@@ -63,25 +69,25 @@
     [])
   )
 
-(defn- features-from-stream* [^JsonParser jp & {:keys [dataset]}]
+(defn- features-from-stream* [^JsonParser jp & {:keys [dataset] :as overrides}]
   (.nextToken jp)
   (when (= JsonToken/START_OBJECT (.getCurrentToken jp))
     (let [meta (read-meta-data jp)
-          dataset (or dataset (get meta "dataset"))]
+          dataset (or dataset (:dataset meta))]
       (if-not dataset
         (throw (Exception. "dataset needed"))
         ;; features should be array
         (when (= JsonToken/START_ARRAY (.nextToken jp))
-          (map (partial map-to-feature dataset) (read-features jp)))
+          [meta (map (partial map-to-feature dataset) (read-features jp))])
         ))))
 
 (defn features-from-stream [input-stream & args]
-  "Parses until 'features' for state. Then returns lazy sequence of features."
+  "Parses until 'features' for state. Then returns vector [meta <lazy sequence of features>]."
   (let [reader (clojure.java.io/reader input-stream)
         factory jfac/json-factory
         parser (.createParser factory reader)
-        features (apply features-from-stream* parser args)]
-    features))
+        meta-and-features (apply features-from-stream* parser args)]
+    meta-and-features))
 
 (defn file-stream [path]
   (clojure.java.io/reader path))

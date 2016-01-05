@@ -204,22 +204,23 @@
             (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))))
 
 (defn- jdbc-load-cache [db dataset collection ids]
-  (try (let [results
-             (j/with-db-connection [c db]
-               (j/query c (apply vector (str "SELECT dataset, collection, feature_id, validity, action, version FROM (
+  (when (seq ids)
+    (try (let [results
+               (j/with-db-connection [c db]
+                 (j/query c (apply vector (str "SELECT dataset, collection, feature_id, validity, action, version FROM (
  SELECT dataset, collection, feature_id, action, validity, version,
  row_number() OVER (PARTITION BY dataset, collection, feature_id ORDER BY id DESC) AS rn
  FROM " (qualified-feature-stream)
  " WHERE dataset = ? AND collection = ? and feature_id in ("
  (clojure.string/join "," (repeat (count ids) "?"))
  ")) a WHERE rn = 1")
-                           dataset collection ids) :as-arrays? true))]
-         (map (fn [[dataset collection id validity action version]] [[dataset collection id]
-                                                                    [validity (keyword action) version]] )
-              (drop 1 results))
-         )
-       (catch java.sql.SQLException e
-          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
+                                   dataset collection ids) :as-arrays? true))]
+           (map (fn [[dataset collection id validity action version]] [[dataset collection id]
+                                                                      [validity (keyword action) version]] )
+                (drop 1 results))
+           )
+         (catch java.sql.SQLException e
+           (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))))))
 
 (defn- jdbc-current-stream-state
   [db dataset collection id]

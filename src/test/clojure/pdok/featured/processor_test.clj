@@ -189,7 +189,7 @@
 
 (deftest extreme-nested-should-work
   (with-open [in (io/input-stream extreme-nested)]
-    (let [features (reader/features-from-stream in :dataset "extreme-test")
+    (let [[meta features] (reader/features-from-stream in :dataset "extreme-test")
           processor (create-processor)
           processed (into '() (consume processor features))]
       (is (= 4 (count processed)))
