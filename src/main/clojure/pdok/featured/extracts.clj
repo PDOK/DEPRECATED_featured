@@ -105,6 +105,9 @@
     (catch Exception e
       (log/error e)
       (throw e)))))
+ 
+ (defn flush-delta [dataset]
+   (timeline/delete-delta (config/timeline) dataset))
 
 (defn file-to-features [path dataset]
   "Helper function to read features from a file.

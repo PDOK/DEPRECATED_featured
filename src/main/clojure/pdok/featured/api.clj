@@ -60,6 +60,10 @@
    :templateName s/Str
    :template s/Str})
 
+(def FlushRequest
+  "A schema for a JSON flush request"
+  {:dataset s/Str})
+
 (defn- callbacker [uri run-stats]
   (http/post uri {:body (json/generate-string run-stats) :headers {"Content-Type" "application/json"}}))
 
@@ -139,6 +143,13 @@
                     {:status "ok"}
                     {:status "error"})))))
 
+(defn- flush-extract-delta [http-req]
+  (let [request (:body http-req)
+        invalid (s/check FlushRequest request)]
+    (if invalid
+      (r/status (r/response invalid) 400)
+      (r/response (extracts/flush-delta (:dataset request))))))
+
 
 (defn api-routes [process-chan extract-chan callback-chan stats]
   (defroutes api-routes
@@ -147,7 +158,8 @@
              (POST "/ping" [] (fn [r] (log/info "!ping pong!" (:body r)) (r/response {:pong (tl/local-now)})))
              (GET "/stats" [] (r/response @stats))
              (POST "/process" [] (partial process-request ProcessRequest process-chan))
-             (POST "/extract" [] (partial process-request ExtractRequest extract-chan ))
+             (POST "/extract" [] (partial process-request ExtractRequest extract-chan))
+             (POST "/extract/flush-delta" [] (fn [r] (r/response (flush-extract-delta r))))
              (POST "/template" [] (fn [r] (r/response (template-request r)))))
     (route/not-found "NOT FOUND")))
 

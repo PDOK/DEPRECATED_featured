@@ -105,21 +105,23 @@
          current (qualified-current)
          current-delta (qualified-current-delta)
          clause-current (map->where-clause selector current)
-         query (str "SELECT feature " 
-                    "FROM " history ", "
-                            history-delta " "
+         query (str "SELECT feature FROM " history ", " history-delta " "
                     "WHERE " history ".version = " history-delta ".version "
                     "AND " history-delta".action = 'I' " 
                     "AND " clause-history
                     " UNION ALL "
-                    "SELECT feature "
-                    "FROM " current ", "
-                            current-delta " "
+                    "SELECT feature FROM " current ", " current-delta " "
                     "WHERE " current ".version = " current-delta ".version "
                     "AND " current-delta ".action = 'I' "
-                    "AND " clause-current)
-         _ (println query)]
+                    "AND " clause-current)]
      (execute-query-result-on-channel timeline query result-channel))))
+
+(defn delete-delta [timeline dataset]
+     (try
+       (doseq [table (list (qualified-history-delta) (qualified-current-delta))]
+         (j/delete! (:db timeline) table ["dataset = ?" dataset]))
+       (catch java.sql.SQLException e
+         (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
 (defn- init-root
   ([feature]
