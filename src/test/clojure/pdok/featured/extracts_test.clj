@@ -53,11 +53,11 @@
     (add-extract-records config/extracts-db dataset feature-type extract-type-citygml 14 features-for-extract)))
 
 
-;; The elem-at- construction can be used in mustache templates to get an element from a specific position in a list. For instance elem-at-1 returns the second element in list.
+;; The -elem-at- construction can be used in mustache templates to get an element from a specific position in a list. For instance elem-at-1 returns the second element in list.
 ;; In the example template 3 elements are used. In the example input data there are two elements in "nummeraanduidingreeks" present. In the output only these two elements can be found.
 (def elem-at-inputdata  (file-to-features (io/resource "templates/test/elemat/bgt_pand.json") "bgtmutatie" ))
 (def test-indexed-section (slurp (io/resource "templates/test/elemat/indexedsection.mustache")))
-(def elem-at-expectedoutput "<imgeo-s:Pand><elem1>1111111111111111</elem1><elem2>9999999999999999</elem2></imgeo-s:Pand>")
+(def elem-at-expectedoutput "<imgeo-s:Pand><elem1>1111111111111111<hoek1>A</hoek1><hoek2>B</hoek2></elem1><elem2>9999999999999999<hoek3>C</hoek3></elem2></imgeo-s:Pand>")
 (deftest test-elem-at
   (let [_ (template/add-or-update-template {:dataset "bgtmutatie"
                                             :extract-type "testing"
