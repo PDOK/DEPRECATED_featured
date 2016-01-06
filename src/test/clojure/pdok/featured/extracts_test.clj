@@ -53,6 +53,20 @@
     (add-extract-records config/extracts-db dataset feature-type extract-type-citygml 14 features-for-extract)))
 
 
+;; The elem-at- construction can be used in mustache templates to get an element from a specific position in a list. For instance elem-at-1 returns the second element in list.
+;; In the example template 3 elements are used. In the example input data there are two elements in "nummeraanduidingreeks" present. In the output only these two elements can be found.
+(def elem-at-inputdata  (file-to-features (io/resource "templates/test/elemat/bgt_pand.json") "bgtmutatie" ))
+(def test-indexed-section (slurp (io/resource "templates/test/elemat/indexedsection.mustache")))
+(def elem-at-expectedoutput "<imgeo-s:Pand><elem1>1111111111111111</elem1><elem2>9999999999999999</elem2></imgeo-s:Pand>")
+(deftest test-elem-at
+  (let [_ (template/add-or-update-template {:dataset "bgtmutatie"
+                                            :extract-type "testing"
+                                            :name "indexedsection"
+                                            :template test-indexed-section})
+        [error features] (features-for-extract "bgtmutatie" "indexedsection" "testing" elem-at-inputdata)]
+  (is (= elem-at-expectedoutput (clojure.string/replace (nth (first features) 2) " " "")))))
+
+
 ;(write-xml-to-database "bgt" "bord" "D:\\data\\pdok\\bgt\\mutatie-leveringen\\bord\\973140-Bord-1.json" "D:\\projects\\featured\\src\\main\\resources\\pdok\\featured\\templates")
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))

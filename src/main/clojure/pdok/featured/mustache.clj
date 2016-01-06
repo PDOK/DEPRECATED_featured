@@ -37,6 +37,8 @@
     Object
       (toString [_] (str obj))))
 
+(defn create-counter []
+  (let [state (atom -1)] (fn [] (swap! state inc) @state)))
 
 (defn collection-proxy [obj]
   (reify
@@ -45,7 +47,11 @@
       (valAt [_ k] (val-at k obj))
     clojure.lang.IPersistentCollection
       (cons [_ o](mustache-proxy (conj obj o)))
-      (seq [this] (if (or (map? obj) (string? obj)) (list (mustache-proxy obj)) (seq (map mustache-proxy obj))))
+      (seq [this]
+        (let [c1 (create-counter)]
+          (if (or (map? obj) (string? obj))
+            (list (mustache-proxy obj))
+            (seq (map (fn[idx] (mustache-proxy (if (map? idx) (assoc idx (str "elem-at-" (c1)) true) idx))) obj)))))
     Object
       (toString [_] (str obj))))
 
@@ -56,7 +62,7 @@
 (def ^{:private true} registered-templates (atom #{}))
 
 (defn register [name template]
-  (do 
+  (do
     (loader/unregister-template name)
     (loader/register-template name template)))
 
