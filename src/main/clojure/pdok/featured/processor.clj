@@ -109,10 +109,11 @@
 
 (defn- process-new-feature [{:keys [persistence projectors]} feature]
   (let [{:keys [dataset collection id validity geometry attributes]} feature]
+    (when-not (pers/stream-exists? persistence dataset collection id)
       (pers/create-stream persistence dataset collection id
-                          (:parent-collection feature) (:parent-id feature) (:parent-field feature))
-      (append-feature persistence feature)
-      (doseq [p projectors] (proj/new-feature p feature)))
+                          (:parent-collection feature) (:parent-id feature) (:parent-field feature)))
+    (append-feature persistence feature)
+    (doseq [p projectors] (proj/new-feature p feature)))
   feature)
 
 (defn- process-nested-new-feature [processor feature]

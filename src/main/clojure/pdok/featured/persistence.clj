@@ -92,7 +92,8 @@
     (>!! c (persistent! f))))
 
 (defn jdbc-get-last-n [persistence dataset n]
-  (let [query (str "SELECT fs.dataset,
+  (let [query (str "SELECT * FROM (SELECT fs.id,
+       fs.dataset,
        fs.collection,
        fs.feature_id,
        fs.action,
@@ -102,13 +103,14 @@
        fs.validity,
        fs.attributes,
        fs.geometry
-  from featured.feature_stream fs
-  join featured.feature f on fs.dataset = f.dataset and
-			     fs.collection = f.collection and
+  FROM featured.feature_stream fs
+  JOIN featured.feature f ON fs.dataset = f.dataset AND
+			     fs.collection = f.collection AND
 			     fs.feature_id = f.feature_id
-  where fs.dataset = ?
-  order by fs.id desc
-  limit " n)
+  WHERE fs.dataset = ?
+  ORDER BY fs.id DESC
+  LIMIT " n
+  ") AS lastn ORDER BY id ASC")
         result-chan (chan)]
     (a/thread
       (j/with-db-connection [c (:db persistence)]
@@ -259,7 +261,7 @@
      (ref-set parent-cache (cache/basic-cache-factory {})))
     this)
   (stream-exists? [this dataset collection id]
-    (not (nil? (current-validity this dataset collection id))))
+    (not (nil? (last-action this dataset collection id))))
   (create-stream [this dataset collection id]
     (create-stream this dataset collection id nil nil nil))
   (create-stream [_ dataset collection id parent-collection parent-id parent-field]

@@ -1,12 +1,17 @@
 (ns pdok.cache
   (:require [clojure.core.cache :as cache]))
 
+(defn process-batch [batch batched-fn]
+  (let [records (map identity @batch)]
+    (when (not-empty records)
+      (batched-fn records))))
+
 (defn flush-batch [batch batched-fn]
-  (def records (map identity @batch))
-  (dosync
-   (ref-set batch clojure.lang.PersistentQueue/EMPTY))
-  (when (not-empty records)
-    (batched-fn records)))
+  (let [records (map identity @batch)]
+    (dosync
+     (ref-set batch clojure.lang.PersistentQueue/EMPTY))
+    (when (not-empty records)
+      (batched-fn records))))
 
 (defn with-batch
   ([batch batch-size batched-fn]

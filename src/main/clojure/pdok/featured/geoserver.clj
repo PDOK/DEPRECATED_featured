@@ -188,6 +188,7 @@
 (defn- flush-all [db proj-fn cache insert-batch update-batch delete-batch]
   "Used for flushing all batches, so entry order is alway new change close"
   (let [cached-collection-attributes (cached cache gs-collection-attributes db)]
+    (process-batch delete-batch (partial gs-delete-feature db))
     (flush-batch insert-batch (partial gs-add-feature db proj-fn cached-collection-attributes))
     (flush-batch update-batch (partial gs-update-feature db proj-fn))
     (flush-batch delete-batch (partial gs-delete-feature db))))
