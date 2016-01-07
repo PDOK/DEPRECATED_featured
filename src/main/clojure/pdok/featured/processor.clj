@@ -259,7 +259,7 @@
   (let [{:keys [dataset collection parent-collection parent-id validity]} meta-record
         persistence (:persistence processor)
         ids (pers/childs persistence dataset parent-collection parent-id collection)
-        closed (doall (mapcat #(close-child processor dataset collection % validity) ids))]
+        closed (doall (mapcat (fn [[_ id]] (close-child processor dataset collection id validity)) ids))]
      closed))
 
 (defn- delete-child* [processor dataset collection id]

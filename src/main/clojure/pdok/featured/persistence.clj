@@ -30,7 +30,8 @@
   (current-version [persistence dataset collection id])
   (childs
     [persistence dataset parent-collection parent-id child-collection]
-    [persistence dataset parent-collection parent-id])
+    [persistence dataset parent-collection parent-id]
+    "Returns seq of [collection id]")
   (parent [persistence dataset collection id] "Returns [collection id field] tuple or nil")
   (get-last-n [persistence dataset n] "Returns channel with n last stream entries")
   (close [persistence]))
@@ -145,26 +146,6 @@
        (catch java.sql.SQLException e
           (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
 
-(defn- jdbc-get-childs-for-collection [db dataset parent-collection parent-id child-collection]
-  (try (j/with-db-connection [c db]
-         (let [results
-               (j/query c [(str "SELECT feature_id FROM " (qualified-features)
-                                " WHERE dataset = ? AND parent_collection = ?  AND parent_id = ? AND collection = ?")
-                           dataset parent-collection parent-id child-collection] :as-arrays? true)]
-           (drop 1 results)))
-       (catch java.sql.SQLException e
-          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
-
-(defn- jdbc-get-childs [db dataset parent-collection parent-id]
-  (try (j/with-db-connection [c db]
-         (let [results
-               (j/query c [(str "SELECT feature_id FROM " (qualified-features)
-                                " WHERE dataset = ? AND parent_collection = ?  AND parent_id = ?")
-                           dataset parent-collection parent-id] :as-arrays? true)]
-           (drop 1 results)))
-       (catch java.sql.SQLException e
-          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
-
 (defn- jdbc-load-parent-cache [db dataset collection ids]
   (j/with-db-connection [c db]
     (let [results
@@ -177,17 +158,6 @@
                            [[dataset collection feature-id] [parent-collection parent-id parent-field]])
                          (drop 1 results))]
       for-cache)))
-
-(defn- jdbc-get-parent [db dataset collection id]
-  (try (j/with-db-connection [c db]
-         (let [result
-               (j/query c [(str "SELECT parent_collection, parent_id FROM " (qualified-features)
-                                " WHERE dataset = ? AND collection = ? AND feature_id = ?"
-                                " AND parent_collection is not null")
-                           dataset collection id] :as-arrays? true)]
-           (first result)))
-       (catch java.sql.SQLException e
-          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
 
 (defn- jdbc-insert
   ([db version action dataset collection id validity geometry attributes]
@@ -222,56 +192,9 @@
          (catch java.sql.SQLException e
            (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))))))
 
-(defn- jdbc-current-stream-state
-  [db dataset collection id]
-  "Returns the last action, validity and version"
-  (try (j/with-db-connection [c db]
-         (let [results
-               (j/query c ["SELECT action, validity, version FROM (
- SELECT action, validity,
- row_number() OVER (PARTITION BY dataset, collection, feature_id ORDER BY id DESC) AS rn
- FROM " (qualified-feature-stream)
- " WHERE dataset = ? AND collection = ? AND feature_id = ?) a
-WHERE rn = 1"
- dataset collection id] :as-arrays? true)]
-           (first (drop 1 results))))
-       (catch java.sql.SQLException e
-          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
-
-(deftype JdbcProcessorPersistence [db]
-  ProcessorPersistence
-  (init [this] (jdbc-init db) this)
-  (prepare [this features] this)
-  (flush [this] this)
-  (stream-exists? [_ dataset collection id]
-    (let [current-validity (partial jdbc-current-stream-state db)]
-      (not (nil? (current-validity dataset collection id)))))
-  (create-stream [this dataset collection id]
-    (create-stream this dataset collection id nil nil nil))
-  (create-stream [_ dataset collection id parent-collection parent-id parent-field]
-    (jdbc-create-stream db dataset collection id parent-collection parent-id parent-field))
-  (append-to-stream [_ version action dataset collection id validity geometry attributes]
-    ; compose with nil, because insert returns record. Should fix this...
-    (jdbc-insert db version action dataset collection id validity geometry attributes)
-    nil)
-  (current-validity [_ dataset collection id]
-    (-> (jdbc-current-stream-state db dataset collection id) (get 0)))
-  (last-action [_ dataset collection id]
-    (-> (jdbc-current-stream-state db dataset collection id) (get 1)))
-  (current-version [_ dataset collection id]
-    (-> (jdbc-current-stream-state db dataset collection id) (get 2)))
-  (childs
-    [_ dataset parent-collection parent-id child-collection]
-    (jdbc-get-childs-for-collection db dataset parent-collection parent-id child-collection))
-  (childs
-    [_ dataset parent-collection parent-id]
-    (jdbc-get-childs db dataset parent-collection parent-id))
-  (parent [_ dataset collection id]
-    (jdbc-get-parent db dataset collection id))
-  (get-last-n [this dataset n]
-    (jdbc-get-last-n this dataset n))
-  (close [this] this)
-  )
+(defn filter-deleted [persistence dataset childs]
+  (filter (fn [[col id]] (not= :delete (last-action persistence dataset col id)))
+          childs))
 
 (defn- append-cached-child [acc _ collection id _ _ _]
   (let [acc (if acc acc [])]
@@ -361,18 +284,18 @@ WHERE rn = 1"
     (get (current-state this dataset collection id) 1))
   (current-version [this dataset collection id]
     (get (current-state this dataset collection id) 2))
-  (childs [_ dataset parent-collection parent-id child-collection]
+  (childs [this dataset parent-collection parent-id child-collection]
     (let [key-fn (fn [dataset parent-collection parent-id _]
                    [dataset parent-collection parent-id])
           cached (use-cache childs-cache key-fn)]
-      (->> (cached dataset parent-collection parent-id child-collection)
-          (filter #(= (first %)))
-          (map second))))
-  (childs [_ dataset parent-collection parent-id]
+      (filter-deleted this dataset
+                      (->> (cached dataset parent-collection parent-id child-collection)
+                           (filter #(= (first %)))))))
+  (childs [this dataset parent-collection parent-id]
     (let [key-fn (fn [dataset parent-collection parent-id]
                    [dataset parent-collection parent-id])
           cached (use-cache childs-cache key-fn)]
-      (cached dataset parent-collection parent-id)))
+      (filter-deleted this dataset (cached dataset parent-collection parent-id))))
   (parent [_ dataset collection id]
     (let [key-fn (fn [dataset collection id] [dataset collection id])
           cached (use-cache parent-cache key-fn)
@@ -384,10 +307,6 @@ WHERE rn = 1"
     (jdbc-get-last-n this dataset n))
   (close [this]
     (flush this)))
-
-(defn jdbc-processor-persistence [config]
-  (let [db (:db-config config)]
-    (JdbcProcessorPersistence. db)))
 
 (defn cached-jdbc-processor-persistence [config]
   (let [db (:db-config config)
