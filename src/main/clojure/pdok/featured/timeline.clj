@@ -14,7 +14,7 @@
             [clojure.tools.logging :as log]
             [clj-time.core :as t]
              [clojure.core.async :as a
-             :refer [>!! close!]]))
+             :refer [>!! close! chan]]))
 
 (declare create)
 
@@ -85,36 +85,66 @@
                     "WHERE " (map->where-clause selector))]
      (execute-query timeline query))))
 
-(defn- feature-on-channel [rc feature]
-  (>!! rc (pg/from-json (:feature feature))))
+(defn- record->result [fn-transform c record]
+  (>!! c (fn-transform record)))
 
-(defn- execute-query-result-on-channel [timeline query rc]
-  (try (j/with-db-connection [c (:db timeline)]
-         (let [statement (j/prepare-statement (doto (j/get-connection c) (.setAutoCommit false)) query :fetch-size 10000)]
-           (j/query c [statement] :row-fn (partial feature-on-channel rc)) )
-         (close! rc))
-       (catch java.sql.SQLException e
-          (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
+(defn- query-with-results-on-channel [db-config query fn-transform]
+  "Returns a channel which contains the (transformed) results of the query"
+  (let [rc (chan)]
+    (a/thread
+      (j/with-db-connection [c (:db db-config)]
+        (let [statement (j/prepare-statement
+                         (doto (j/get-connection c) (.setAutoCommit false))
+                         query :fetch-size 10000)]
+          (j/query c [statement] :row-fn (partial record->result fn-transform rc))
+          (close! rc))))
+    rc))
 
-(defn delta
-  ([timeline dataset collection result-channel] (delta timeline {:dataset dataset :collection collection} result-channel))
-  ([timeline selector result-channel]
+(defn- feature-from-json [feature]
+  (pg/from-json (:feature feature)))
+
+(defn features-insert-in-delta
+  ([timeline dataset collection] (features-insert-in-delta timeline {:dataset dataset :collection collection}))
+  ([timeline selector]
    (let [history (qualified-history)
          history-delta (qualified-history-delta)
          clause-history (map->where-clause selector history)
          current (qualified-current)
          current-delta (qualified-current-delta)
          clause-current (map->where-clause selector current)
-         query (str "SELECT feature FROM " history ", " history-delta " "
-                    "WHERE " history ".version = " history-delta ".version "
-                    "AND " history-delta".action = 'I' " 
+         query (str "SELECT feature "
+                    "FROM " history ", " history-delta " "
+                    "WHERE " history-delta".action = 'I' " 
+                    "AND " history ".version = " history-delta ".version "
                     "AND " clause-history
                     " UNION ALL "
-                    "SELECT feature FROM " current ", " current-delta " "
-                    "WHERE " current ".version = " current-delta ".version "
-                    "AND " current-delta ".action = 'I' "
+                    "SELECT feature " 
+                    "FROM " current ", " current-delta " "
+                    "WHERE " current-delta ".action = 'I' "
+                    "AND " current ".version = " current-delta ".version "
                     "AND " clause-current)]
-     (execute-query-result-on-channel timeline query result-channel))))
+     (query-with-results-on-channel timeline query feature-from-json))))
+
+(defn versions-deleted-in-delta 
+  ([timeline dataset collection] (versions-deleted-in-delta timeline {:dataset dataset :collection collection}))
+  ([timeline selector]
+   (let [history (qualified-history)
+         history-delta (qualified-history-delta)
+         clause-history (map->where-clause selector history-delta)
+         current (qualified-current)
+         current-delta (qualified-current-delta)
+         clause-current (map->where-clause selector current-delta)
+         query (str "SELECT " history-delta ".version as version " 
+                    "FROM " history ", " history-delta " "
+                    "WHERE " history-delta ".action = 'D' "
+                    "AND " history ".version = " history-delta ".version "
+                    "AND " clause-history
+                    " UNION ALL "
+                    "SELECT " current-delta ".version as version FROM " current ", " current-delta " "
+                    "WHERE " current-delta ".action = 'D' "
+                    "AND " current ".version = " current-delta ".version "
+                    "AND " clause-current)]
+     (query-with-results-on-channel timeline query :version))))
 
 (defn delete-delta [timeline dataset]
      (try

@@ -1,7 +1,6 @@
 (ns pdok.featured.extracts
   (:require [clojure.java.jdbc :as j]
-            [pdok.featured.config :as config
-              :refer [<??]]
+            [pdok.featured.config :as config]
             [pdok.featured.json-reader :as json-reader]
             [pdok.featured.mustache  :as m]
             [pdok.featured.timeline :as timeline]
@@ -17,7 +16,6 @@
 (def ^{:private true } extractset-table "extractmanagement.extractset")
 (def ^{:private true } extractset-area-table "extractmanagement.extractset_area")
 
-
 (defn features-for-extract [dataset feature-type extract-type features]
   "Returns the rendered representation of the collection of features for a given feature-type inclusive tiles-set"
   (if (empty? features)
@@ -25,7 +23,6 @@
     (let [template-key (template/template-key dataset extract-type feature-type)]
       [nil (map #(vector feature-type (:_version %) (:_tiles %) (m/render template-key %)
                            (:_valid_from %) (:_valid_to %) (:lv-publicatiedatum %)) features)])))
-
 
 (defn- jdbc-insert-extract [db table entries]
    (try (j/with-db-connection [c db]
@@ -73,7 +70,8 @@
       (add-metadata-extract-records db extractset-id rendered-features))
     (count rendered-features)))
 
-(defn transform-and-add-extract [dataset feature-type extract-type features]
+ 
+(defn transform-and-add-extract [extracts-db dataset feature-type extract-type features]
     (let [[error features-for-extract] (features-for-extract dataset
                                                              feature-type
                                                              extract-type
@@ -81,32 +79,40 @@
     (if (nil? error)
       (if (nil? features-for-extract)
         {:status "ok" :count 0}
-        {:status "ok" :count (add-extract-records config/extracts-db dataset extract-type features-for-extract)})
+        {:status "ok" :count (add-extract-records extracts-db dataset extract-type features-for-extract)})
       {:status "error" :msg error :count 0})))
-
-
- (defn fill-extract [dataset collection extract-type]
-  (let [chunk (ref (clojure.lang.PersistentQueue/EMPTY))
-        batched-fn (partial transform-and-add-extract dataset collection extract-type)
-        cached-fn (cache/with-batch chunk 10000 batched-fn)
-        rc (chan)
-        cc (go (try
-                 (loop [feature (<! rc)]
-                   (if feature
-                     (do
-                       (cached-fn feature)
-                       (recur (<! rc)))
-                     (cache/flush-batch chunk batched-fn)))
-                   (catch Exception e e)))]
-    (timeline/delta (config/timeline) dataset collection rc)
-    (try
-      (<?? cc)  ; block until consumer ends
-      {:status "ok" :count 777}
-    (catch Exception e
-      (log/error e)
-      (throw e)))))
  
- (defn flush-delta [dataset]
+(defn- insert-extract [dataset collection extract-type]
+  (let [batch-size 10000
+        rc (timeline/features-insert-in-delta (config/timeline) dataset collection)
+        parts (a/pipe rc (a/chan batch-size (partition-all batch-size)))]
+    (loop [features (a/<!! parts)]
+      (when features
+        (transform-and-add-extract config/extracts-db dataset collection extract-type features)
+        (recur (a/<!! parts))))))
+
+(defn- jdbc-udpate-marked-for-deletion [db table versions]
+  (let [versions (set (map #(str "'" % "'") versions))
+        versions (clojure.string/join ", " versions)
+        query (str "UPDATE " extract-schema "." table " SET marked_for_deletion = true WHERE version IN ( " versions " )")]
+   (try (j/with-db-connection [c db]
+          (j/execute! c [query]))
+        (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
+
+(defn- update-extract-marked-for-deletion [db dataset feature-type extract-type versions]
+  (let [table (str dataset "_" extract-type "_v0_" feature-type)]
+    (jdbc-udpate-marked-for-deletion db table versions)))
+ 
+(defn- update-marked-for-deletion [dataset collection extract-type]
+  (let [batch-size 10000
+        rc (timeline/versions-deleted-in-delta (config/timeline) dataset collection)
+        parts (a/pipe rc (a/chan batch-size (partition-all batch-size)))]
+    (loop [versions (a/<!! parts)]
+      (when versions
+        (update-extract-marked-for-deletion config/extracts-db dataset collection extract-type versions)
+        (recur (a/<!! parts))))))
+
+(defn flush-delta [dataset]
    (timeline/delete-delta (config/timeline) dataset))
 
 (defn file-to-features [path dataset]
@@ -114,6 +120,11 @@
    Returns features read from file."
   (with-open [s (json-reader/file-stream path)]
    (doall (json-reader/features-from-stream s :dataset dataset))))
+
+(defn fill-extract [dataset collection extract-type]
+  (do 
+    (insert-extract dataset collection extract-type)
+    (update-marked-for-deletion dataset collection extract-type)))
 
 
 (defn -main [template-location dataset collection extract-type & args]
