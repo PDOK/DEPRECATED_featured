@@ -83,6 +83,7 @@
                  :id (:feature_id record)
                  :action (keyword (:action record))
                  :version (:version record)
+                 :current-version (:prev_version record)
                  :validity (:validity record)
                  :geometry (pg/from-json (:geometry record))
                  :attributes (pg/from-json (:attributes record)))
@@ -92,7 +93,9 @@
     (>!! c (persistent! f))))
 
 (defn jdbc-get-last-n [persistence dataset n]
-  (let [query (str "SELECT * FROM (SELECT fs.id,
+  (let [query (str "SELECT lastn.*,
+  lag(version) OVER (PARTITION BY dataset, collection, feature_id ORDER BY id ASC) prev_version
+  FROM (SELECT fs.id,
        fs.dataset,
        fs.collection,
        fs.feature_id,
