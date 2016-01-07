@@ -281,10 +281,11 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
 (defn- batched-deleter [db dcb dcb-size dhb dhb-size flush-fn feature-cache]
   "Cache batched deleter (thrasher) of current and history"
   (let [batched-delete-cur (with-batch dcb dcb-size (partial delete-current db) flush-fn)
-        cache-batched-delete-cur (with-cache feature-cache batched-delete-cur cache-store-key cache-invalidate)
+        cache-remove-cur (with-cache feature-cache identity cache-store-key cache-invalidate)
         batched-delete-his (with-batch dhb dhb-size (partial delete-history db) flush-fn)]
     (fn [f]
-      (cache-batched-delete-cur (:_version f))
+      (cache-remove-cur f)
+      (batched-delete-cur (:_version f))
       (batched-delete-his f))))
 
 (defrecord Timeline [db root-fn path-fn
