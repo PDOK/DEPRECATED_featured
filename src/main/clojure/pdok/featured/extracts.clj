@@ -113,7 +113,9 @@
         (recur (a/<!! parts))))))
 
 (defn flush-delta [dataset]
-   (timeline/delete-delta (config/timeline) dataset))
+  (do 
+   (log/info "Flush-delta request voor dataset: " dataset)
+   (timeline/delete-delta (config/timeline) dataset)))
 
 (defn file-to-features [path dataset]
   "Helper function to read features from a file.
@@ -124,7 +126,8 @@
 (defn fill-extract [dataset collection extract-type]
   (do 
     (insert-extract dataset collection extract-type)
-    (update-marked-for-deletion dataset collection extract-type)))
+    (update-marked-for-deletion dataset collection extract-type))
+  {:status "ok"})
 
 
 (defn -main [template-location dataset collection extract-type & args]

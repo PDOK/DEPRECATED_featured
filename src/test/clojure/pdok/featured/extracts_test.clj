@@ -67,7 +67,7 @@
                                             :name "indexedsection"
                                             :template test-indexed-section})
         [error features] (features-for-extract "bgtmutatie" "indexedsection" "testing" elem-at-inputdata)]
-  (is (= elem-at-expectedoutput (clojure.string/replace (nth (first features) 2) " " "")))))
+  (is (= elem-at-expectedoutput (clojure.string/replace (nth (first features) 3) " " "")))))
 
 
 ;(write-xml-to-database "bgt" "bord" "D:\\data\\pdok\\bgt\\mutatie-leveringen\\bord\\973140-Bord-1.json" "D:\\projects\\featured\\src\\main\\resources\\pdok\\featured\\templates")
