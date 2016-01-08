@@ -1,0 +1,21 @@
+{
+	"Features": [{
+		"_action": "new",
+		"identificatieBAGPND": "0000000000000001",
+		"nummeraanduidingreeks": [{
+			"reden_leeg": null,
+			"identificatieBAGVBOHoogsteHuisnummer": "1111111111111111",
+			"positie": [{
+				"hoek": "A"
+			}, {
+				"hoek": "B"
+			}]
+		}, {
+			"reden_leeg": null,
+			"identificatieBAGVBOHoogsteHuisnummer": "9999999999999999",
+			"positie": [{
+				"hoek": "C"
+			}]
+		}]
+	}]
+}
