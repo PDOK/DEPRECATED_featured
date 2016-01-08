@@ -73,7 +73,8 @@
                         :url (pg/dbspec->url db))
              :migrator "/pdok/featured/migrations/persistence"
              :migrations-table "featured.persistence_migrations"}]
-    (joplin/migrate-db jdb)))
+    (log/with-logs ['pdok.featured.persistence :trace :error]
+      (joplin/migrate-db jdb))))
 
 (defn record->feature [c record]
   (let [f (transient {})

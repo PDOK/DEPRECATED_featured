@@ -38,7 +38,8 @@
                         :url (pg/dbspec->url db))
              :migrator "/pdok/featured/migrations/timeline"
              :migrations-table "featured.timeline_migrations"}]
-    (joplin/migrate-db jdb)))
+    (log/with-logs ['pdok.featured.timeline :trace :error]
+      (joplin/migrate-db jdb))))
 
 (defn- qualified-history []
   (str (name *timeline-schema*) "." (name *history-table*)))
