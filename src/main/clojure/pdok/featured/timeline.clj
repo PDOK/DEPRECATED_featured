@@ -53,7 +53,7 @@
   (str (name *timeline-schema*) "." (name *current-delta-table*)))
 
 (defn map->where-clause
-  ([clauses] (str/join " AND " (map #(str (name (first %1)) " = '" (second %1) "'") clauses))) 
+  ([clauses] (str/join " AND " (map #(str (name (first %1)) " = '" (second %1) "'") clauses)))
   ([clauses table] (str/join " AND " (map #(str table "." (name (first %1)) " = '" (second %1) "'") clauses))))
 
 (defn- execute-query [timeline query]
@@ -114,18 +114,18 @@
          clause-current (map->where-clause selector current)
          query (str "SELECT feature "
                     "FROM " history ", " history-delta " "
-                    "WHERE " history-delta".action = 'I' " 
+                    "WHERE " history-delta".action = 'I' "
                     "AND " history ".version = " history-delta ".version "
                     "AND " clause-history
                     " UNION ALL "
-                    "SELECT feature " 
+                    "SELECT feature "
                     "FROM " current ", " current-delta " "
                     "WHERE " current-delta ".action = 'I' "
                     "AND " current ".version = " current-delta ".version "
                     "AND " clause-current)]
      (query-with-results-on-channel timeline query feature-from-json))))
 
-(defn versions-deleted-in-delta 
+(defn versions-deleted-in-delta
   ([timeline dataset collection] (versions-deleted-in-delta timeline {:dataset dataset :collection collection}))
   ([timeline selector]
    (let [history (qualified-history)
@@ -134,7 +134,7 @@
          current (qualified-current)
          current-delta (qualified-current-delta)
          clause-current (map->where-clause selector current-delta)
-         query (str "SELECT " history-delta ".version as version " 
+         query (str "SELECT " history-delta ".version as version "
                     "FROM " history ", " history-delta " "
                     "WHERE " history-delta ".action = 'D' "
                     "AND " history ".version = " history-delta ".version "
@@ -311,13 +311,15 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
   (str "DELETE FROM " (qualified-history)
        " WHERE ARRAY[version] <@ ?"))
 
-(defn- delete-history-delta-sql [] (str "INSERT INTO " (qualified-history-delta) " (dataset, collection, version, action) VALUES (?, 'D')"))
+(defn- delete-history-delta-sql [] (str "INSERT INTO " (qualified-history-delta) " (dataset, collection, version, action) VALUES (?, ?, ?, 'D')"))
 
 (defn- delete-history [db features]
   (try
     (let [transform-fn (juxt #(set (:_all_versions %)))
           records (map transform-fn features)
-          versions (vec (set (flatten (map juxt :_dataset :_collection :_all_versions features))))]
+          versions (mapcat
+                    (fn [f] (map #(vector (:_dataset f) (:_collection f) %) (:_all_versions f)))
+                    features)]
       (j/execute! db (cons (delete-history-sql) records) :multi? true :transaction? false)
       (j/execute! db (cons (delete-history-delta-sql) versions) :multi? true :transaction? false))
      (catch java.sql.SQLException e
