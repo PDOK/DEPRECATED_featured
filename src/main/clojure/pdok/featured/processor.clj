@@ -137,7 +137,7 @@
                                                            (transient)
                                                            (assoc! :action :change)
                                                            (dissoc! :src)
-                                                           (assoc! :version (random/UUID))
+                                                           (assoc! :version (random/ordered-UUID))
                                                            (persistent!))))
         enriched-feature (->> feature (with-current-version persistence))]
     (append-feature persistence enriched-feature)
@@ -291,7 +291,7 @@
   (let [validated (validate processor feature)]
     (if (:invalid? validated)
       validated
-      (let [vf (assoc validated :version (random/UUID))
+      (let [vf (assoc validated :version (random/ordered-UUID))
             processed
             (condp = (:action vf)
               :new (process-new-feature processor vf)

@@ -9,4 +9,4 @@
 (defn _version [arg]
   (if-let [version (:_version arg)]
     version
-    (random/UUID)))
+    (random/ordered-UUID)))

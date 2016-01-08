@@ -3,4 +3,4 @@
 
 (def ^:private UUIDGenerator (Generators/timeBasedGenerator))
 
-(defn UUID [] (.generate UUIDGenerator))
+(defn ordered-UUID [] (.generate UUIDGenerator))

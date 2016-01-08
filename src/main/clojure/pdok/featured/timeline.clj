@@ -384,7 +384,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
           batched-history (with-batch new-history-batch new-history-batch-size (partial new-history db) flush-fn)
           cached-get-current (use-cache feature-cache cache-use-key)]
       (if-let [current (cached-get-current dataset root-col root-id)]
-        (when-not (some #{(:version feature)} (:_all_versions current))
+        (when (= 1 (compare (:version feature) (:_version current)))
           (let [new-current (merge current path feature)]
             (if (= (:action feature) :close)
               (cache-batched-update (sync-valid-to new-current feature))
@@ -411,7 +411,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
                                                 flush-fn feature-cache)
           cached-get-current (use-cache feature-cache cache-use-key)]
       (when-let [current (cached-get-current dataset root-col root-id)]
-        (cache-batched-delete current))))
+        (when (= 1 (compare (:version feature) (:_version current)))
+          (cache-batched-delete current)))))
   (proj/accept? [_ feature] true)
   (proj/close [this]
     (flush-fn)
