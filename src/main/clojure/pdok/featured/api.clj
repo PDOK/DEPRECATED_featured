@@ -154,7 +154,7 @@
 (defn api-routes [process-chan extract-chan callback-chan stats]
   (defroutes api-routes
     (context "/api" []
-             (GET "/info" [] (r/response {:version (-> (eval 'pdok.featured.core) .getPackage .getImplementationVersion)}))
+             (GET "/info" [] (r/response {:version (slurp (clojure.java.io/resource "version"))}))
              (GET "/ping" [] (r/response {:pong (tl/local-now)}))
              (POST "/ping" [] (fn [r] (log/info "!ping pong!" (:body r)) (r/response {:pong (tl/local-now)})))
              (GET "/stats" [] (r/response @stats))

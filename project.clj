@@ -82,9 +82,12 @@
              :target "target/deployit-manifest.xml"}
             {:data ~release-version
              :template-fn #(str "FEATURED_VERSION=" %1 "\n")
-             :target "target/featured.properties"}]
-  :aliases {"build" ["do" ["compile"] ["test"]
-                     ["ring" "uberwar"] ["filegen"]]}
+             :target "target/featured.properties"}
+            {:data ~(str release-version "(" git-ref ")")
+             :template-fn #(str %1)
+             :target "src/main/resources/version"}]
+  :aliases {"build" ["do" ["compile"] ["test"] ["filegen"]
+                     ["ring" "uberwar"]]}
   :profiles {:uberjar {:aot :all}
              :test {:resource-paths ["src/test/resources"]}
              :dev {:dependencies [[javax.servlet/servlet-api "2.5"]
