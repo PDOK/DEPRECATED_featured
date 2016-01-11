@@ -1,0 +1,8 @@
+{"features": [
+  {"_action": "new",
+   "_collection": "c1",
+   "_id": "1",
+   "_validity": "2016-01-01T00:00:00.000", 
+   "_geometry": {"type" : "gml", "gml": "<gml:Point srsName=\"urn:ogc:def:crs:EPSG::28992\" xmlns:gml=\"http://www.opengis.net/gml\"><gml:pos>172307.599 509279.740</gml:pos></gml:Point>" },
+   "attribute_1": "value_1" }
+]}

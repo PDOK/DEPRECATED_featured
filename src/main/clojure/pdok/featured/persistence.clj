@@ -1,6 +1,7 @@
 (ns pdok.featured.persistence
   (:refer-clojure :exclude [flush])
   (:require [pdok.cache :refer :all]
+            [pdok.featured.dynamic-config :as dc]
             [pdok.postgres :as pg]
             [pdok.util :refer [with-bench]]
             [joplin.core :as joplin]
@@ -55,24 +56,23 @@
       [collection id]
       (take 2 (first path)))))
 
-(def ^:dynamic *jdbc-schema* :featured)
-(def ^:dynamic *jdbc-features* :feature)
-(def ^:dynamic *jdbc-feature-stream* :feature_stream)
-
 (defn- qualified-features []
-  (str  (name *jdbc-schema*) "." (name *jdbc-features*)))
+  (str  (name dc/*persistence-schema*) "." (name dc/*persistence-features*)))
 
 (defn- qualified-feature-stream []
-  (str  (name *jdbc-schema*) "." (name *jdbc-feature-stream*)))
+  (str  (name dc/*persistence-schema*) "." (name dc/*persistence-feature-stream*)))
+
+(defn- qualified-persistence-migrations []
+  (str (name dc/*persistence-schema*) "." (name dc/*persistence-migrations*)))
 
 (defn- jdbc-init [db]
-  (when-not (pg/schema-exists? db *jdbc-schema*)
-    (pg/create-schema db *jdbc-schema*))
+  (when-not (pg/schema-exists? db dc/*persistence-schema*)
+    (pg/create-schema db dc/*persistence-schema*))
   (let [jdb {:db (assoc db
                         :type :jdbc
                         :url (pg/dbspec->url db))
              :migrator "/pdok/featured/migrations/persistence"
-             :migrations-table "featured.persistence_migrations"}]
+             :migrations-table (qualified-persistence-migrations)}]
     (log/with-logs ['pdok.featured.persistence :trace :error]
       (joplin/migrate-db jdb))))
 

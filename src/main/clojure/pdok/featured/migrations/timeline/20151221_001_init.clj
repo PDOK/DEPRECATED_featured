@@ -1,13 +1,10 @@
 (ns pdok.featured.migrations.timeline.20151221-001-init
-  (:require [pdok.postgres :as pg]))
-
-(def ^:dynamic *timeline-schema* "featured")
-(def ^:dynamic *history-table* "timeline")
-(def ^:dynamic *current-table* "timeline_current")
+  (:require [pdok.postgres :as pg]
+            [pdok.featured.dynamic-config :as dc]))
 
 (defn- create-history-table [db]
   "Create table with default fields"
-  (pg/create-table db *timeline-schema* *history-table*
+  (pg/create-table db dc/*timeline-schema* dc/*timeline-history-table*
                [:id "serial" :primary :key]
                [:dataset "varchar(100)"]
                [:collection "varchar(255)"]
@@ -17,11 +14,11 @@
                [:valid_to "timestamp without time zone"]
                [:feature "text"]
                [:tiles "integer[]"])
-  (pg/create-index db *timeline-schema* *history-table* :dataset :collection :feature_id)
-  (pg/create-index db *timeline-schema* *history-table* :version))
+  (pg/create-index db dc/*timeline-schema* dc/*timeline-history-table* :dataset :collection :feature_id)
+  (pg/create-index db dc/*timeline-schema* dc/*timeline-history-table* :version))
 
 (defn- create-current-table [db]
-  (pg/create-table db *timeline-schema* *current-table*
+  (pg/create-table db dc/*timeline-schema* dc/*timeline-current-table*
                [:id "serial" :primary :key]
                [:dataset "varchar(100)"]
                [:collection "varchar(255)"]
@@ -31,8 +28,8 @@
                [:valid_to "timestamp without time zone"]
                [:feature "text"]
                [:tiles "integer[]"])
-  (pg/create-index db *timeline-schema* *current-table* :dataset :collection :feature_id)
-  (pg/create-index db *timeline-schema* *current-table* :version))
+  (pg/create-index db dc/*timeline-schema* dc/*timeline-current-table* :dataset :collection :feature_id)
+  (pg/create-index db dc/*timeline-schema* dc/*timeline-current-table* :version))
 
 (defn up [db]
   (create-history-table db)

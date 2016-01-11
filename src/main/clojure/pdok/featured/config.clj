@@ -16,7 +16,6 @@
      (log/error throwable "Stacktrace:"
                 (print-str (clojure.stacktrace/print-stack-trace throwable))))))
 
-
 (defn- keywordize [s]
   (-> (str/lower-case s)
       (str/replace "_" "-")

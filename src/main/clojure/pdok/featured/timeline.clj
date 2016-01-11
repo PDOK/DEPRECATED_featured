@@ -1,6 +1,7 @@
 (ns pdok.featured.timeline
   (:refer-clojure :exclude [merge])
   (:require [pdok.cache :refer :all]
+            [pdok.featured.dynamic-config :as dc]
             [pdok.postgres :as pg]
             [pdok.util :refer [with-bench]]
             [pdok.featured.projectors :as proj]
@@ -24,34 +25,31 @@
 (defn index-of [f coll]
   (first (indices-of f coll)))
 
-(def ^:dynamic *timeline-schema* "featured")
-(def ^:dynamic *current-table* "timeline_current")
-(def ^:dynamic *current-delta-table* "timeline_current_delta")
-(def ^:dynamic *history-table* "timeline")
-(def ^:dynamic *history-delta-table* "timeline_delta")
+(defn- qualified-history []
+  (str (name dc/*timeline-schema*) "." (name dc/*timeline-history-table*)))
+
+(defn- qualified-history-delta []
+  (str (name dc/*timeline-schema*) "." (name dc/*timeline-history-delta-table*)))
+
+(defn- qualified-current []
+  (str (name dc/*timeline-schema*) "." (name dc/*timeline-current-table*)))
+
+(defn- qualified-current-delta []
+  (str (name dc/*timeline-schema*) "." (name dc/*timeline-current-delta-table*)))
+
+(defn- qualified-timeline-migrations []
+  (str (name dc/*timeline-schema*) "." (name dc/*timeline-migrations*)))
 
 (defn- init [db]
-  (when-not (pg/schema-exists? db *timeline-schema*)
-    (pg/create-schema db *timeline-schema*))
+  (when-not (pg/schema-exists? db dc/*timeline-schema*)
+    (pg/create-schema db dc/*timeline-schema*))
   (let [jdb {:db (assoc db
                         :type :jdbc
                         :url (pg/dbspec->url db))
              :migrator "/pdok/featured/migrations/timeline"
-             :migrations-table "featured.timeline_migrations"}]
+             :migrations-table (qualified-timeline-migrations)}]
     (log/with-logs ['pdok.featured.timeline :trace :error]
       (joplin/migrate-db jdb))))
-
-(defn- qualified-history []
-  (str (name *timeline-schema*) "." (name *history-table*)))
-
-(defn- qualified-history-delta []
-  (str (name *timeline-schema*) "." (name *history-delta-table*)))
-
-(defn- qualified-current []
-  (str (name *timeline-schema*) "." (name *current-table*)))
-
-(defn- qualified-current-delta []
-  (str (name *timeline-schema*) "." (name *current-delta-table*)))
 
 (defn map->where-clause
   ([clauses] (str/join " AND " (map #(str (name (first %1)) " = '" (second %1) "'") clauses)))
