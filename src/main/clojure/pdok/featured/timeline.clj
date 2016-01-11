@@ -127,21 +127,16 @@
 (defn versions-deleted-in-delta
   ([timeline dataset collection] (versions-deleted-in-delta timeline {:dataset dataset :collection collection}))
   ([timeline selector]
-   (let [history (qualified-history)
-         history-delta (qualified-history-delta)
+   (let [history-delta (qualified-history-delta)
          clause-history (map->where-clause selector history-delta)
-         current (qualified-current)
          current-delta (qualified-current-delta)
          clause-current (map->where-clause selector current-delta)
-         query (str "SELECT " history-delta ".version as version "
-                    "FROM " history ", " history-delta " "
-                    "WHERE " history-delta ".action = 'D' "
-                    "AND " history ".version = " history-delta ".version "
+         query (str "SELECT version FROM " history-delta " "
+                    "WHERE action = 'D' "
                     "AND " clause-history
                     " UNION ALL "
-                    "SELECT " current-delta ".version as version FROM " current ", " current-delta " "
-                    "WHERE " current-delta ".action = 'D' "
-                    "AND " current ".version = " current-delta ".version "
+                    "SELECT version FROM " current-delta " "
+                    "WHERE action = 'D' "
                     "AND " clause-current)]
      (query-with-results-on-channel timeline query :version))))
 
