@@ -5,7 +5,7 @@
 (def project-name "featured")
 (def uberjar-name (str project-name "-standalone.jar"))
 (def uberwar-name (str project-name ".war"))
-(def git-ref (clojure.string/replace (:out (clojure.java.shell/sh "git" "show-ref" "-s" "HEAD"))#"\n" "" ))
+(def git-ref (clojure.string/replace (:out (clojure.java.shell/sh "git" "rev-parse" "HEAD"))#"\n" "" ))
 
 (create-ns 'pdok.lein)
 (defn key->placeholder [k]
