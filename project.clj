@@ -5,6 +5,7 @@
 (def project-name "featured")
 (def uberjar-name (str project-name "-standalone.jar"))
 (def uberwar-name (str project-name ".war"))
+(def git-ref (clojure.string/replace (:out (clojure.java.shell/sh "git" "show-ref" "-s" "HEAD"))#"\n" "" ))
 
 (create-ns 'pdok.lein)
 (defn key->placeholder [k]
@@ -20,7 +21,7 @@
 
 (defproject featured release-version
   :uberjar-name ~uberjar-name
-  :manifest {"Implementation-Version" ~release-version}
+  :manifest {"Implementation-Version" ~(str release-version "(" git-ref ")")}
   :description "PDOK - No FME"
   :url "http://github.so.kadaster.nl/PDOK/featured"
   :license {:name "Eclipse Public License"
