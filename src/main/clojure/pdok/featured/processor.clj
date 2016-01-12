@@ -131,20 +131,23 @@
   (process-new-feature processor (assoc feature :action :change)))
 
 (defn- process-close-feature [{:keys [persistence projectors] :as processor} feature]
-  (let [change-before-close (when-not (empty? (:attributes feature))
-                               (process-change-feature processor
-                                                       (-> feature
-                                                           (transient)
-                                                           (assoc! :action :change)
-                                                           (dissoc! :src)
-                                                           (assoc! :version (random/ordered-UUID))
-                                                           (persistent!))))
-        enriched-feature (->> feature (with-current-version persistence))]
-    (append-feature persistence enriched-feature)
-    (doseq [p projectors] (proj/close-feature p enriched-feature))
-    (if change-before-close
-      (list change-before-close enriched-feature)
-      (list enriched-feature))))
+  (if (empty? (:attributes feature))
+    (let [enriched-feature (->> feature (with-current-version persistence))]
+      (append-feature persistence enriched-feature)
+      (doseq [p projectors] (proj/close-feature p enriched-feature))
+      (list enriched-feature))
+    (let [change-feature (with-current-version persistence 
+                                               (-> feature 
+                                               (transient)
+                                               (assoc! :action :change)
+                                               (dissoc! :src)
+                                               (assoc! :version (:version feature))
+                                               (persistent!)))
+          _ (process-change-feature processor change-feature)
+          close-feature (with-current-version persistence (assoc feature :version (random/ordered-UUID)))]
+      (append-feature persistence close-feature)
+      (doseq [p projectors] (proj/close-feature p close-feature))
+      (list change-feature close-feature))))
 
 (defn- process-nested-close-feature [processor feature]
   (let [nw (process-new-feature processor (assoc feature :action :new))
