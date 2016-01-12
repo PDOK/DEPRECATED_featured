@@ -42,7 +42,50 @@
     (dorun (processor/consume processor features))
     (processor/shutdown processor)))
 
+(defn- query [table collection feature-id]
+  (j/query test-db [ (str "SELECT * FROM featured_regression." table " WHERE dataset = 'regression-set' and collection = ? and feature_id = ?") collection feature-id]))
+
+(defn- test-persistence [collection feature-id {:keys [events features]}]
+    (is (= events (count (query "feature_stream" collection feature-id))))
+    (is (= features (count (query "feature" collection feature-id)))))
+
+(defn- test-timeline [collection feature-id {:keys [timeline-current timeline]}]
+    (is (= timeline-current (count (query "timeline_current" collection feature-id))))
+    (is (= timeline (count (query "timeline" collection feature-id)))))
+
+
+;(defregressiontest new-feature
+;  (let [stats (:statistics (process-resource "regression/new-feature.json"))]
+;    (is (= 1 (:n-processed stats)))
+;    (is (= 0 (:n-errored stats)))))
+
 (defregressiontest new-feature
-  (let [stats (:statistics (process-resource "regression/new-feature.json"))]
+  (let [stats (:statistics (process-resource "regression/col-2_id-b_new.json"))]
     (is (= 1 (:n-processed stats)))
-    (is (= 0 (:n-errored stats)))))
+    (is (= 0 (:n-errored stats)))
+    (test-persistence "col-2" "id-b" {:events 1 :features 1})
+    (test-timeline "col-2" "id-b" {:timeline-current 1 :timeline 0})))
+
+(defregressiontest new-change-feature
+  (let [stats (:statistics (process-resource "regression/col-2_id-b_new-change.json"))]
+    (is (= 2 (:n-processed stats)))
+    (is (= 0 (:n-errored stats)))
+    (test-persistence "col-2" "id-b" {:events 2 :features 1})
+    (test-timeline "col-2" "id-b" {:timeline-current 1 :timeline 1})))
+
+(defregressiontest new-change-close-feature
+  (let [stats (:statistics (process-resource "regression/col-2_id-b_new-change-close.json"))]
+    (is (= 3 (:n-processed stats)))
+    (is (= 0 (:n-errored stats)))
+    (test-persistence "col-2" "id-b" {:events 3 :features 1})
+    (test-timeline "col-2" "id-b" {:timeline-current 1 :timeline 1})))
+
+(defregressiontest new-change-close_with_attributes-feature
+  (let [stats (:statistics (process-resource "regression/col-2_id-b_new-change-close_with_attributes.json"))]
+    (is (= 4 (:n-processed stats)))
+    (is (= 0 (:n-errored stats)))
+    (test-persistence "col-2" "id-b" {:events 4 :features 1})
+    (test-timeline "col-2" "id-b" {:timeline-current 1 :timeline 2})))
+
+
+
