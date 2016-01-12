@@ -39,6 +39,7 @@
     [meta features]))
 
 (defn process-feature-permutation [meta feature-permutation]
+  (println "  " (map #(into [] (map :action %1)) feature-permutation))
   (apply merge-with (fn [a b] (if (seq? a) (conj a b) (+ a b)))
          (map (fn [features]
                 (let [persistence (config/persistence)
@@ -51,6 +52,10 @@
 (defn clean-db []
   (j/execute! test-db ["DROP SCHEMA IF EXISTS featured_regression CASCADE"])
   (j/execute! test-db ["DROP SCHEMA IF EXISTS \"regression-set\" CASCADE"]))
+
+(defmethod  clojure.test/report :begin-test-var [m]
+  (with-test-out
+    (println ">>"(-> m :var meta :name))))
 
 (defmacro defregressiontest [name file stats-var & body]
   `(deftest ~name

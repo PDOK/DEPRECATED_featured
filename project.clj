@@ -90,7 +90,8 @@
                      ["ring" "uberwar"]]}
   :profiles {:uberjar {:aot :all}
              :test {:resource-paths ["src/test/resources"]
-                    :dependencies [[org.clojure/math.combinatorics "0.1.1"]]}
+                    :dependencies [[org.clojure/math.combinatorics "0.1.1"]]
+                    :jvm-opts ["-Dlog4j.configuration=no-logging.properties"]}
              :dev {:dependencies [[javax.servlet/servlet-api "2.5"]
                                   [ring-mock "0.1.5"]
                                   [org.clojure/math.combinatorics "0.1.1"]]
