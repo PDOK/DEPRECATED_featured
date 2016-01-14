@@ -311,9 +311,9 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
   (try
     (let [transform-fn (juxt #(set (:_all_versions %)))
           records (map transform-fn features)
-          versions (mapcat
-                    (fn [f] (map #(vector (:_dataset f) (:_collection f) %) (:_all_versions f)))
-                    features)]
+          versions (mapcat (fn [f] (map #(vector (:_dataset f) (:_collection f) %) (filter #(not= % (:_version f)) (:_all_versions f))))
+                           features)
+          ]
       (j/execute! db (cons (delete-history-sql) records) :multi? true :transaction? false)
       (j/execute! db (cons (delete-history-delta-sql) versions) :multi? true :transaction? false))
      (catch java.sql.SQLException e
