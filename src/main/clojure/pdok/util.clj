@@ -1,4 +1,20 @@
-(ns pdok.util)
+(ns pdok.util
+  (:import com.fasterxml.uuid.UUIDComparator))
+
+(def ^:private uuid-comparator (UUIDComparator.))
+
+(defn uuid> [uuid-a uuid-b]
+  (> (.compare uuid-comparator uuid-a uuid-b) 0))
+
+(defn uuid>= [uuid-a uuid-b]
+  (>= (.compare uuid-comparator uuid-a uuid-b) 0))
+
+(defn uuid< [uuid-a uuid-b]
+  (< (.compare uuid-comparator uuid-a uuid-b) 0))
+
+(defn uuid<= [uuid-a uuid-b]
+  (<= 0 (.compare uuid-comparator uuid-a uuid-b) 0))
+
 
 (defmacro with-bench
   "Evaluates expr, followed by bench-out (setting t to time it took in ms) and returning expr"

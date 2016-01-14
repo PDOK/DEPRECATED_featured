@@ -3,7 +3,7 @@
   (:require [pdok.cache :refer :all]
             [pdok.featured.dynamic-config :as dc]
             [pdok.postgres :as pg]
-            [pdok.util :refer [with-bench]]
+            [pdok.util :refer [with-bench] :as util]
             [pdok.featured.projectors :as proj]
             [pdok.featured.persistence :as pers]
             [pdok.featured.tiles :as tiles]
@@ -380,7 +380,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
           batched-history (with-batch new-history-batch new-history-batch-size (partial new-history db) flush-fn)
           cached-get-current (use-cache feature-cache cache-use-key)]
       (if-let [current (cached-get-current dataset root-col root-id)]
-        (when (= 1 (compare (:version feature) (:_version current)))
+        (when (util/uuid> (:version feature) (:_version current))
           (let [new-current (merge current path feature)]
             (if (= (:action feature) :close)
               (cache-batched-update (sync-valid-to new-current feature))
@@ -407,7 +407,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
                                                 flush-fn feature-cache)
           cached-get-current (use-cache feature-cache cache-use-key)]
       (when-let [current (cached-get-current dataset root-col root-id)]
-        (when (= 1 (compare (:version feature) (:_version current)))
+        (when (util/uuid> (:version feature) (:_version current))
           (cache-batched-delete current)))))
   (proj/accept? [_ feature] true)
   (proj/close [this]
