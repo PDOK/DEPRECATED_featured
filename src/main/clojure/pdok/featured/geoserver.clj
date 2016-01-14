@@ -125,10 +125,11 @@
        " WHERE NOT EXISTS (SELECT 1 FROM " (pg/quoted schema) "." (pg/quoted table) " WHERE _id = ?)" ))
 
 (defn- gs-add-feature
-  ([db proj-fn all-attributes-fn features]
+  ([db proj-fn all-attributes-fn no-insert features]
    (try
-     (let [selector (juxt :dataset :collection)
-           per-dataset-collection (group-by selector features)]
+     (let [filtered-features (filter #(not (@no-insert (:version %))) features)
+           selector (juxt :dataset :collection)
+           per-dataset-collection (group-by selector filtered-features)]
         (doseq [[[dataset collection] grouped-features] per-dataset-collection]
          (let [all-attributes (all-attributes-fn dataset collection)
                records (filter (comp not nil?)
@@ -157,7 +158,7 @@
 
 (defn- gs-update-feature [db proj-fn features]
     (let [selector (juxt :dataset :collection)
-         per-dataset-collection
+          per-dataset-collection
            (group-by selector features)]
      (doseq [[[dataset collection] collection-features] per-dataset-collection]
         ;; group per key collection so we can batch every group
@@ -185,17 +186,31 @@
     (catch java.sql.SQLException e
       (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e)))))
 
-(defn- flush-all [db proj-fn cache insert-batch update-batch delete-batch]
+(defn- flush-all [db proj-fn cache insert-batch update-batch delete-batch no-insert]
   "Used for flushing all batches, so entry order is alway new change close"
   (let [cached-collection-attributes (cached cache gs-collection-attributes db)]
+    
+    (process-batch update-batch (partial gs-update-feature db proj-fn))
     (process-batch delete-batch (partial gs-delete-feature db))
-    (flush-batch insert-batch (partial gs-add-feature db proj-fn cached-collection-attributes))
+    
+    (flush-batch insert-batch (partial gs-add-feature db proj-fn cached-collection-attributes no-insert))
     (flush-batch update-batch (partial gs-update-feature db proj-fn))
-    (flush-batch delete-batch (partial gs-delete-feature db))))
+    (flush-batch delete-batch (partial gs-delete-feature db))
+    
+    (dosync (ref-set no-insert #{}))
+    ))
+
+(defn- versions-in-batch [{:keys [dataset collection id]} batch]
+   (map :version 
+        (filter (fn [f] (and 
+                     (= (:dataset f) dataset)
+                     (= (:collection f) collection)
+                     (= (:id f) id))) 
+                batch)))
 
 (deftype GeoserverProjector [db cache insert-batch insert-batch-size
                              update-batch update-batch-size
-                             delete-batch delete-batch-size
+                             delete-batch delete-batch-size no-insert
                              flush-fn proj-fn no-visualization ndims srid]
   proj/Projector
   (proj/init [this] this)
@@ -206,7 +221,7 @@
             cached-collection-exists? (cached cache gs-collection-exists? db)
             cached-collection-attributes (cached cache gs-collection-attributes db)
             batched-add-feature
-            (with-batch insert-batch insert-batch-size (partial gs-add-feature db proj-fn cached-collection-attributes) flush-fn)]
+            (with-batch insert-batch insert-batch-size (partial gs-add-feature db proj-fn cached-collection-attributes no-insert) flush-fn)]
         (do (when (not (cached-dataset-exists? dataset))
               (gs-create-dataset db dataset)
               (cached-dataset-exists? :reload dataset))
@@ -238,8 +253,11 @@
         (batched-delete-feature feature))))
   (proj/delete-feature [p feature]
     (if (proj/accept? p feature)
-      (let [batched-delete-feature (with-batch delete-batch delete-batch-size
+      (let [versions-in-insert (versions-in-batch feature @insert-batch)
+            batched-delete-feature (with-batch delete-batch delete-batch-size
                                      (partial gs-delete-feature db) flush-fn)]
+        (dosync 
+          (alter no-insert #(clojure.set/union % (into #{} versions-in-insert))))
         (batched-delete-feature feature))))
   (proj/accept? [_ feature]
          (not (some #{(:collection feature)} no-visualization)))
@@ -257,12 +275,13 @@
         update-batch (ref (clojure.lang.PersistentQueue/EMPTY))
         delete-batch-size (or (:delete-batch-size config) (:batch-size config) 10000)
         delete-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+        no-insert (ref #{})
         ndims (or (:ndims config) 2)
         srid (or (:srid config) 28992)
         proj-fn (or (:proj-fn config) identity)
         no-visualization (:no-visualization config)
-        flush-fn #(flush-all db proj-fn cache insert-batch update-batch delete-batch)]
+        flush-fn #(flush-all db proj-fn cache insert-batch update-batch delete-batch no-insert)]
     (->GeoserverProjector db cache insert-batch insert-batch-size
                           update-batch update-batch-size
-                          delete-batch delete-batch-size
+                          delete-batch delete-batch-size no-insert
                           flush-fn proj-fn no-visualization ndims srid)))
