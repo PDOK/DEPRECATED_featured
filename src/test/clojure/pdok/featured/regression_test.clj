@@ -91,37 +91,59 @@
     )
 
 
+(defn- query-geoserver [table]
+  (j/query test-db [ (str "SELECT * FROM \"regression-set\".\"" table "\"" )]))
+
+
+(defn- test-geoserver [collection n]
+  (is (= n (count (query-geoserver collection)))))
+
+
 (defregressiontest new-feature "col-2_id-b_new" stats
   (is (= 1 (:n-processed stats)))
   (is (= 0 (:n-errored stats)))
   (test-persistence "col-2" "id-b" {:events 1 :features 1})
   (test-timeline "col-2" "id-b" {:timeline-current {:n 1 :delete-in-delta 0 :insert-in-delta 1}
-                                 :timeline {:n 0 :delete-in-delta 0 :insert-in-delta 0}}))
+                                 :timeline {:n 0 :delete-in-delta 0 :insert-in-delta 0}})
+  (test-geoserver "col-2" 1))
 
 (defregressiontest new-change-feature "col-2_id-b_new-change" stats
   (is (= 2 (:n-processed stats)))
   (is (= 0 (:n-errored stats)))
   (test-persistence "col-2" "id-b" {:events 2 :features 1})
   (test-timeline "col-2" "id-b" {:timeline-current {:n 1 :delete-in-delta 1 :insert-in-delta 2}
-                                 :timeline {:n 1 :delete-in-delta 0 :insert-in-delta 1}}))
+                                 :timeline {:n 1 :delete-in-delta 0 :insert-in-delta 1}})
+  (test-geoserver "col-2" 1))
 
 (defregressiontest new-change-close-feature "col-2_id-b_new-change-close" stats
   (is (= 3 (:n-processed stats)))
   (is (= 0 (:n-errored stats)))
   (test-persistence "col-2" "id-b" {:events 3 :features 1})
   (test-timeline "col-2" "id-b" {:timeline-current {:n 1 :delete-in-delta 2 :insert-in-delta 3}
-                                 :timeline {:n 1 :delete-in-delta 0 :insert-in-delta 1}}))
+                                 :timeline {:n 1 :delete-in-delta 0 :insert-in-delta 1}})
+  (test-geoserver "col-2" 0))
 
 (defregressiontest new-change-close_with_attributes-feature "col-2_id-b_new-change-close_with_attributes" stats
   (is (= 4 (:n-processed stats)))
   (is (= 0 (:n-errored stats)))
   (test-persistence "col-2" "id-b" {:events 4 :features 1})
   (test-timeline "col-2" "id-b" {:timeline-current {:n 1 :delete-in-delta 3 :insert-in-delta 4}
-                                 :timeline {:n 2 :delete-in-delta 0 :insert-in-delta 2}}))
+                                 :timeline {:n 2 :delete-in-delta 0 :insert-in-delta 2}})
+  (test-geoserver "col-2" 0))
 
 (defregressiontest new-change-change-delete-feature "col-1_id-a_new-change-change-delete" stats
   (is (= 4 (:n-processed stats)))
   (is (= 0 (:n-errored stats)))
   (test-persistence "col-1" "id-a" {:events 4 :features 1})
   (test-timeline "col-1" "id-a" {:timeline-current {:n 0 :delete-in-delta 3 :insert-in-delta 3}
-                                 :timeline {:n 0 :delete-in-delta 3 :insert-in-delta 2}}))
+                                 :timeline {:n 0 :delete-in-delta 2 :insert-in-delta 2}})
+  (test-geoserver "col-1" 0))
+
+
+(defregressiontest new-change-change-delete-new-change-feature "col-1_id-a_new-change-change-delete-new-change" stats
+  (is (= 6 (:n-processed stats)))
+  (is (= 0 (:n-errored stats)))
+  (test-persistence "col-1" "id-a" {:events 6 :features 1})
+  (test-timeline "col-1" "id-a" {:timeline-current {:n 1 :delete-in-delta 4 :insert-in-delta 5}
+                                 :timeline {:n 1 :delete-in-delta 2 :insert-in-delta 3}})
+  (test-geoserver "col-1" 1))
