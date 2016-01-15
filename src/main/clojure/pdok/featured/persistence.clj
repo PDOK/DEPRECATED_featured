@@ -107,8 +107,8 @@
        fs.validity,
        fs.attributes,
        fs.geometry
-  FROM featured.feature_stream fs
-  JOIN featured.feature f ON fs.dataset = f.dataset AND
+  FROM " (qualified-feature-stream) " fs
+  JOIN " (qualified-features) " f ON fs.dataset = f.dataset AND
 			     fs.collection = f.collection AND
 			     fs.feature_id = f.feature_id
   WHERE fs.dataset = ?
