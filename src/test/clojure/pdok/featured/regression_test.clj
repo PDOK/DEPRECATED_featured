@@ -49,6 +49,14 @@
                   (:statistics (processor/shutdown processor))))
               feature-permutation)))
 
+(defn replay []
+  (println "  Replaying")
+  (let [persistence (config/persistence)
+        projectors (conj (config/projectors persistence) (config/timeline persistence))
+        processor (processor/create {} persistence projectors)]
+    (processor/replay processor "regression-set" 1000)
+    (:statistics (processor/shutdown processor))))
+
 (defn clean-db []
   (j/execute! test-db ["DROP SCHEMA IF EXISTS featured_regression CASCADE"])
   (j/execute! test-db ["DROP SCHEMA IF EXISTS \"regression-set\" CASCADE"]))
@@ -63,11 +71,17 @@
        {#'dc/*persistence-schema* :featured_regression
         #'dc/*timeline-schema* :featured_regression}
        (let [[meta# features#] (json-features (str "regression/" ~file ".json"))
-             permutated# (permutate-features features#)]
+             permutated# (permutate-features features#)
+             n# (count permutated#)
+             i# (atom 0)]
          (doseq [p# permutated#]
+           (swap! i# inc)
            (clean-db)
            (let [~stats-var (process-feature-permutation meta# p#)]
-             ~@body))))))
+             ~@body
+             (when (= @i# n#)
+               (replay)
+               ~@body)))))))
 
 (defn- query [table selector]
   (let [clauses (timeline/map->where-clause selector)]

@@ -222,13 +222,17 @@
 (defn- reset-valid-to [acc]
   (assoc acc :_valid_to nil))
 
+(defn if-version-not-exists-for-action[table action]
+  (str " WHERE NOT EXISTS (SELECT 1 FROM " table " WHERE version = ? and action = '" action "')"))
+
 (defn- new-current-sql []
   (str "INSERT INTO " (qualified-current)
        " (dataset, collection, feature_id, version, valid_from, valid_to, feature, tiles)
 VALUES (?, ?, ? ,?, ?, ?, ?, ?)"))
 
 (defn- new-current-delta-sql []
-  (str "INSERT INTO " (qualified-current-delta) " (dataset, collection, version, action) VALUES (?, ?, ?, 'I')"))
+  (str "INSERT INTO " (qualified-current-delta) " (dataset, collection, version, action) SELECT ?, ?, ?, 'I'"
+       (if-version-not-exists-for-action (qualified-current-delta) "I")))
 
 (defn- new-current
   ([db features]
@@ -236,7 +240,7 @@ VALUES (?, ?, ? ,?, ?, ?, ?, ?)"))
      (let [transform-fn (juxt :_dataset :_collection :_id :_version
                               :_valid_from :_valid_to pg/to-json :_tiles)
            records (map transform-fn features)
-           versions (map (juxt :_dataset :_collection :_version) features)]
+           versions (map (juxt :_dataset :_collection :_version :_version) features)]
        (j/execute! db (cons (new-current-sql) records) :multi? true :transaction? false)
        (j/execute! db (cons (new-current-delta-sql) versions) :multi? true :transaction? false))
      (catch java.sql.SQLException e
@@ -273,10 +277,12 @@ VALUES (?, ?, ? ,?, ?, ?, ?, ?)"))
        " WHERE version = ?"))
 
 (defn- delete-current-delta-sql []
-  (str "INSERT INTO " (qualified-current-delta) " (dataset, collection, version, action) VALUES (?, ?, ?, 'D')"))
+  (str "INSERT INTO " (qualified-current-delta) " (dataset, collection, version, action) SELECT ?, ?, ?, 'D'"
+       (if-version-not-exists-for-action (qualified-current-delta) "D")))
 
 
 (defn- delete-current [db records]
+  "([dataset collection version version] ... )"
   (let [versions (map #(vector (get % 2)) records)]
     (try
       (j/execute! db (cons (delete-current-sql) versions) :multi? true :transaction? false)
@@ -289,13 +295,14 @@ VALUES (?, ?, ? ,?, ?, ?, ?, ?)"))
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
 
 (defn- new-history-delta-sql []
-  (str "INSERT INTO " (qualified-history-delta) " (dataset, collection, version, action) VALUES (?, ?, ?, 'I')"))
+  (str "INSERT INTO " (qualified-history-delta) " (dataset, collection, version, action) SELECT ?, ?, ?, 'I'"
+       (if-version-not-exists-for-action (qualified-history-delta) "I")))
 
 (defn- new-history [db features]
   (try
     (let [transform-fn (juxt :_dataset :_collection :_id :_version :_valid_from :_valid_to pg/to-json :_tiles)
           records (map transform-fn features)
-          versions (map (juxt :_dataset :_collection :_version) features)]
+          versions (map (juxt :_dataset :_collection :_version :_version) features)]
       (j/execute! db (cons (new-history-sql) records) :multi? true :transaction? false)
       (j/execute! db (cons (new-history-delta-sql) versions) :multi? true :transaction? false))
      (catch java.sql.SQLException e
@@ -305,15 +312,18 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
   (str "DELETE FROM " (qualified-history)
        " WHERE ARRAY[version] <@ ?"))
 
-(defn- delete-history-delta-sql [] (str "INSERT INTO " (qualified-history-delta) " (dataset, collection, version, action) VALUES (?, ?, ?, 'D')"))
+(defn- delete-history-delta-sql []
+  (str "INSERT INTO " (qualified-history-delta) " (dataset, collection, version, action) SELECT ?, ?, ?, 'D'"
+       (if-version-not-exists-for-action (qualified-history-delta) "D" )))
 
 (defn- delete-history [db features]
   (try
     (let [transform-fn (juxt #(set (:_all_versions %)))
           records (map transform-fn features)
-          versions (mapcat (fn [f] (map #(vector (:_dataset f) (:_collection f) %) (filter #(not= % (:_version f)) (:_all_versions f))))
-                           features)
-          ]
+          versions (mapcat
+                    (fn [f] (map #(vector (:_dataset f) (:_collection f) %1 %1)
+                                (filter #(not= % (:_version f)) (:_all_versions f))))
+                    features)]
       (j/execute! db (cons (delete-history-sql) records) :multi? true :transaction? false)
       (j/execute! db (cons (delete-history-delta-sql) versions) :multi? true :transaction? false))
      (catch java.sql.SQLException e
@@ -346,7 +356,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
         batched-delete (with-batch dcb dcb-size (partial delete-current db) flush-fn)]
     (fn [f]
       (cache-batched-new f)
-      (batched-delete [(:_dataset f) (:_collection f) (first (rest (:_all_versions f)))]))))
+      (let [version (first (rest (:_all_versions f)))]
+        (batched-delete [(:_dataset f) (:_collection f) version version])))))
 
 (defn- batched-deleter [db dcb dcb-size dhb dhb-size flush-fn feature-cache]
   "Cache batched deleter (thrasher) of current and history"
@@ -355,7 +366,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
         batched-delete-his (with-batch dhb dhb-size (partial delete-history db) flush-fn)]
     (fn [f]
       (cache-remove-cur f)
-      (batched-delete-cur [(:_dataset f) (:_collection f) (:_version f)])
+      (batched-delete-cur [(:_dataset f) (:_collection f) (:_version f) (:_version f)])
       (batched-delete-his f))))
 
 (defrecord Timeline [db root-fn path-fn
