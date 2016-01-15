@@ -25,11 +25,12 @@
                            (:_valid_from %) (:_valid_to %) (:lv-publicatiedatum %)) features)])))
 
 (defn- jdbc-insert-extract [db table entries]
-   (try (j/with-db-connection [c db]
-          (apply (partial j/insert! c (str extract-schema "." table) :transaction? false
-                    [:feature_type :version :valid_from :valid_to :publication :tiles :xml])
-                    entries))
-        (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
+  (let [qualified-table (str extract-schema "." table)
+        query (str "INSERT INTO " qualified-table 
+                   " (feature_type, version, valid_from, valid_to, publication, tiles, xml) SELECT ?, ?, ?, ?, ?, ?, ? "
+                    " WHERE NOT EXISTS (SELECT 1 FROM " qualified-table " WHERE version = ? AND valid_to is not null)")]
+    (try (j/execute! db (cons query entries) :multi? true :transaction? false)
+      (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
 
 (defn get-or-add-extractset [db extractset version]
   "return id"
@@ -58,7 +59,7 @@
      (add-extractset-area db extractset-id tiles)))
 
 (defn- tranform-feature-for-db [[feature-type version tiles xml-feature valid-from valid-to publication-date]]
-  [feature-type version valid-from valid-to publication-date (vec tiles) xml-feature])
+  [feature-type version valid-from valid-to publication-date (vec tiles) xml-feature version])
 
 (defn add-extract-records [db dataset extract-type rendered-features]
   "Inserts the xml-features and tile-set in an extract schema based on dataset, extract-type, version and feature-type,
@@ -81,20 +82,23 @@
         {:status "ok" :count 0}
         {:status "ok" :count (add-extract-records extracts-db dataset extract-type features-for-extract)})
       {:status "error" :msg error :count 0})))
+
+
+(def ^:dynamic *process-insert-extract* (partial transform-and-add-extract config/extracts-db))
  
 (defn- insert-extract [dataset collection extract-type]
   (let [batch-size 10000
-        rc (timeline/features-insert-in-delta (config/timeline) dataset collection)
+        rc (timeline/features-to-insert (config/timeline) dataset collection)
         parts (a/pipe rc (a/chan batch-size (partition-all batch-size)))]
     (loop [features (a/<!! parts)]
       (when features
-        (transform-and-add-extract config/extracts-db dataset collection extract-type features)
+        (*process-insert-extract* dataset collection extract-type features)
         (recur (a/<!! parts))))))
 
 (defn- jdbc-udpate-marked-for-deletion [db table versions]
   (let [versions (set (map #(str "'" % "'") versions))
         versions (clojure.string/join ", " versions)
-        query (str "UPDATE " extract-schema "." table " SET marked_for_deletion = true WHERE version IN ( " versions " )")]
+        query (str "UPDATE " extract-schema "." table " SET marked_for_deletion = true WHERE version IN ( " versions " ) AND valid_to is null")]
    (try (j/with-db-connection [c db]
           (j/execute! c [query]))
         (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
@@ -103,13 +107,16 @@
   (let [table (str dataset "_" extract-type "_v0_" feature-type)]
     (jdbc-udpate-marked-for-deletion db table versions)))
  
+
+(def ^:dynamic *process-delete-extract* (partial update-extract-marked-for-deletion config/extracts-db)) 
+ 
 (defn- update-marked-for-deletion [dataset collection extract-type]
   (let [batch-size 10000
-        rc (timeline/versions-deleted-in-delta (config/timeline) dataset collection)
+        rc (timeline/versions-to-delete (config/timeline) dataset collection)
         parts (a/pipe rc (a/chan batch-size (partition-all batch-size)))]
     (loop [versions (a/<!! parts)]
       (when versions
-        (update-extract-marked-for-deletion config/extracts-db dataset collection extract-type versions)
+        (*process-delete-extract* dataset collection extract-type versions)
         (recur (a/<!! parts))))))
 
 (defn flush-delta [dataset]
@@ -123,12 +130,12 @@
   (with-open [s (json-reader/file-stream path)]
    (doall (json-reader/features-from-stream s :dataset dataset))))
 
+
 (defn fill-extract [dataset collection extract-type]
   (do 
     (insert-extract dataset collection extract-type)
     (update-marked-for-deletion dataset collection extract-type))
   {:status "ok"})
-
 
 (defn -main [template-location dataset collection extract-type & args]
   (let [templates-with-metadata (template/templates-with-metadata dataset template-location)]

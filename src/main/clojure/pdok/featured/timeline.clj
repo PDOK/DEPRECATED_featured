@@ -102,8 +102,8 @@
 (defn- feature-from-json [feature]
   (pg/from-json (:feature feature)))
 
-(defn features-insert-in-delta
-  ([timeline dataset collection] (features-insert-in-delta timeline {:dataset dataset :collection collection}))
+(defn features-to-insert
+  ([timeline dataset collection] (features-to-insert timeline {:dataset dataset :collection collection}))
   ([timeline selector]
    (let [history (qualified-history)
          history-delta (qualified-history-delta)
@@ -124,8 +124,8 @@
                     "AND " clause-current)]
      (query-with-results-on-channel timeline query feature-from-json))))
 
-(defn versions-deleted-in-delta
-  ([timeline dataset collection] (versions-deleted-in-delta timeline {:dataset dataset :collection collection}))
+(defn versions-to-delete
+  ([timeline dataset collection] (versions-to-delete timeline {:dataset dataset :collection collection}))
   ([timeline selector]
    (let [history-delta (qualified-history-delta)
          clause-history (map->where-clause selector history-delta)
@@ -222,8 +222,9 @@
 (defn- reset-valid-to [acc]
   (assoc acc :_valid_to nil))
 
-(defn if-version-not-exists-for-action[table action]
-  (str " WHERE NOT EXISTS (SELECT 1 FROM " table " WHERE version = ? and action = '" action "')"))
+(defn if-version-not-exists-for-actions [table & actions]
+  (str " WHERE NOT EXISTS (SELECT 1 FROM " table " WHERE version = ? and action in (" 
+       (clojure.string/join "," (map #(str "'" % "'") actions)) "))"))
 
 (defn- new-current-sql []
   (str "INSERT INTO " (qualified-current)
@@ -232,7 +233,7 @@ VALUES (?, ?, ? ,?, ?, ?, ?, ?)"))
 
 (defn- new-current-delta-sql []
   (str "INSERT INTO " (qualified-current-delta) " (dataset, collection, version, action) SELECT ?, ?, ?, 'I'"
-       (if-version-not-exists-for-action (qualified-current-delta) "I")))
+         (if-version-not-exists-for-actions (qualified-current-delta) "I")))
 
 (defn- new-current
   ([db features]
@@ -278,7 +279,10 @@ VALUES (?, ?, ? ,?, ?, ?, ?, ?)"))
 
 (defn- delete-current-delta-sql []
   (str "INSERT INTO " (qualified-current-delta) " (dataset, collection, version, action) SELECT ?, ?, ?, 'D'"
-       (if-version-not-exists-for-action (qualified-current-delta) "D")))
+       (if-version-not-exists-for-actions (qualified-current-delta) "D")))
+
+(defn- delete-insert-from-current-delta-sql []
+  (str "DELETE FROM " (qualified-current-delta) " WHERE version = ? AND action = 'I'"))
 
 
 (defn- delete-current [db records]
@@ -287,6 +291,7 @@ VALUES (?, ?, ? ,?, ?, ?, ?, ?)"))
     (try
       (j/execute! db (cons (delete-current-sql) versions) :multi? true :transaction? false)
       (j/execute! db (cons (delete-current-delta-sql) records) :multi? true :transaction? false)
+      (j/execute! db (cons (delete-insert-from-current-delta-sql) versions) :multi? true :transaction? false)
      (catch java.sql.SQLException e
        (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))))))
 
@@ -296,7 +301,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
 
 (defn- new-history-delta-sql []
   (str "INSERT INTO " (qualified-history-delta) " (dataset, collection, version, action) SELECT ?, ?, ?, 'I'"
-       (if-version-not-exists-for-action (qualified-history-delta) "I")))
+       (if-version-not-exists-for-actions (qualified-history-delta) "I")))
 
 (defn- new-history [db features]
   (try
@@ -314,7 +319,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
 
 (defn- delete-history-delta-sql []
   (str "INSERT INTO " (qualified-history-delta) " (dataset, collection, version, action) SELECT ?, ?, ?, 'D'"
-       (if-version-not-exists-for-action (qualified-history-delta) "D" )))
+       (if-version-not-exists-for-actions (qualified-history-delta) "D" )))
 
 (defn- delete-history [db features]
   (try
