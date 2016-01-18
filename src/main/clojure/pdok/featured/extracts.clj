@@ -27,8 +27,7 @@
 (defn- jdbc-insert-extract [db table entries]
   (let [qualified-table (str extract-schema "." table)
         query (str "INSERT INTO " qualified-table
-                   " (feature_type, version, valid_from, valid_to, publication, tiles, xml) SELECT ?, ?, ?, ?, ?, ?, ? "
-                    " WHERE NOT EXISTS (SELECT 1 FROM " qualified-table " WHERE version = ? AND valid_to is not null)")]
+                   " (feature_type, version, valid_from, valid_to, publication, tiles, xml) VALUES (?, ?, ?, ?, ?, ?, ?)")]
     (try (j/execute! db (cons query entries) :multi? true :transaction? false)
       (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
 
@@ -59,7 +58,7 @@
      (add-extractset-area db extractset-id tiles)))
 
 (defn- tranform-feature-for-db [[feature-type version tiles xml-feature valid-from valid-to publication-date]]
-  [feature-type version valid-from valid-to publication-date (vec tiles) xml-feature version])
+  [feature-type version valid-from valid-to publication-date (vec tiles) xml-feature])
 
 (defn add-extract-records [db dataset extract-type rendered-features]
   "Inserts the xml-features and tile-set in an extract schema based on dataset, extract-type, version and feature-type,
@@ -87,12 +86,13 @@
 (def ^:dynamic *process-insert-extract* (partial transform-and-add-extract config/extracts-db))
 
 (defn- jdbc-udpate-marked-for-deletion [db table versions]
-  (let [versions (set (map #(str "'" % "'") versions))
-        versions (clojure.string/join ", " versions)
-        query (str "UPDATE " extract-schema "." table " SET marked_for_deletion = true WHERE version IN ( " versions " ) AND valid_to is null")]
-   (try (j/with-db-connection [c db]
-          (j/execute! c [query]))
-        (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
+  (when (seq versions)
+    (let [versions (set (map #(str "'" % "'") versions))
+          versions (clojure.string/join ", " versions)
+          query (str "UPDATE " extract-schema "." table " SET marked_for_deletion = true WHERE version IN ( " versions " )")]
+      (try (j/with-db-connection [c db]
+             (j/execute! c [query]))
+           (catch java.sql.SQLException e (j/print-sql-exception-chain e))))))
 
 (defn- update-extract-marked-for-deletion [db dataset feature-type extract-type versions]
   (let [table (str dataset "_" extract-type "_v0_" feature-type)]
@@ -112,7 +112,15 @@
   (with-open [s (json-reader/file-stream path)]
    (doall (json-reader/features-from-stream s :dataset dataset))))
 
-(defn changelog->inserts [record]
+(defn changelog->change-deletes [record]
+  (let [versions (juxt :version :old_version)]
+    (condp = (:action record)
+      :new (versions record)
+      :change (versions record)
+      :close (versions record)
+      [])))
+
+(defn changelog->change-inserts [record]
   (condp = (:action record)
     :new (:feature record)
     :change (:feature record)
@@ -121,9 +129,7 @@
 
 (defn changelog->deletes [record]
   (condp = (:action record)
-    :change (:old_version record)
-    :close (:old_version record)
-    :delete (:old_version record)
+    :delete (:version record)
     nil))
 
 (defn fill-extract [dataset collection extract-type]
@@ -132,7 +138,10 @@
         parts (a/pipe rc (a/chan batch-size (partition-all batch-size)))]
     (loop [records (a/<!! parts)]
       (when records
-        (*process-insert-extract* dataset collection extract-type (filter (complement nil?) (map changelog->inserts records)))
+        (*process-delete-extract* dataset collection extract-type
+                                  (filter (complement nil?) (mapcat changelog->change-deletes records)))
+        (*process-insert-extract* dataset collection extract-type
+                                  (filter (complement nil?) (map changelog->change-inserts records)))
         (*process-delete-extract* dataset collection extract-type (filter (complement nil?) (map changelog->deletes records)))
         (recur (a/<!! parts)))))
   {:status "ok"})

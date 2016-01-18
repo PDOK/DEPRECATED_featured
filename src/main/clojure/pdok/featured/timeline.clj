@@ -103,7 +103,7 @@
 
 (defn changed-features
   ([timeline dataset collection]
-   (let [query (str "SELECT cl.dataset, cl.collection, cl.feature_id, cl.old_version, cl.new_version, cl.action, tl.feature
+   (let [query (str "SELECT cl.dataset, cl.collection, cl.feature_id, cl.old_version, cl.version, cl.action, tl.feature
  FROM " (qualified-changelog) " AS cl
  LEFT JOIN
 (SELECT dataset, collection, feature_id, version, feature FROM "
@@ -111,7 +111,7 @@
 " UNION ALL
  SELECT dataset, collection, feature_id, version, feature FROM "
 (qualified-history)
-") as tl ON cl.dataset = tl.dataset AND cl.collection = tl.collection AND cl.new_version = tl.version
+") as tl ON cl.dataset = tl.dataset AND cl.collection = tl.collection AND cl.version = tl.version
  WHERE cl.dataset = '" dataset "' AND cl.collection = '" collection "'")]
      (query-with-results-on-channel timeline query upgrade-changelog))))
 
@@ -281,15 +281,15 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
 
 (defn- append-to-changelog-sql []
   (str "INSERT INTO " (qualified-changelog)
-       " (dataset, collection, feature_id, old_version, new_version, action)
+       " (dataset, collection, feature_id, old_version, version, action)
  SELECT ?, ?, ?, ?, ?, ?
  WHERE NOT EXISTS (SELECT 1 FROM " (qualified-changelog)
- " WHERE (old_version = ? AND action = ?) OR (new_version = ? AND action = ?))"))
+ " WHERE version = ? AND action = ?)"))
 
 (defn- append-to-changelog [db log-entries]
-  "([collection dataset id old-version new-version action] .... )"
+  "([collection dataset id old-version version action] .... )"
   (try
-    (let [transform-fn  (fn [rec] (let [[_ _ _ ov nv a] rec] (conj rec ov a nv a)))
+    (let [transform-fn  (fn [rec] (let [[_ _ _ ov v a] rec] (conj rec v a)))
           records (map transform-fn log-entries)]
       (j/execute! db (cons (append-to-changelog-sql) records) :multi? true :transaction? false))
     (catch java.sql.SQLException e
