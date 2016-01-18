@@ -143,12 +143,12 @@
                     {:status "ok"}
                     {:status "error"})))))
 
-(defn- flush-extract-delta [http-req]
+(defn- flush-extract-changelog [http-req]
   (let [request (:body http-req)
         invalid (s/check FlushRequest request)]
     (if invalid
       (r/status (r/response invalid) 400)
-      (r/response (extracts/flush-delta (:dataset request))))))
+      (r/response (extracts/flush-changelog (:dataset request))))))
 
 
 (defn api-routes [process-chan extract-chan callback-chan stats]
@@ -160,7 +160,8 @@
              (GET "/stats" [] (r/response @stats))
              (POST "/process" [] (partial process-request ProcessRequest process-chan))
              (POST "/extract" [] (partial process-request ExtractRequest extract-chan))
-             (POST "/extract/flush-delta" [] (fn [r] (r/response (flush-extract-delta r))))
+             (POST "/extract/flush-delta" [] (fn [r] (r/response (flush-extract-changelog r))))
+             (POST "/extract/flush-changelog" [] (fn [r] (r/response (flush-extract-changelog r))))
              (POST "/template" [] (fn [r] (r/response (template-request r)))))
     (route/not-found "NOT FOUND")))
 

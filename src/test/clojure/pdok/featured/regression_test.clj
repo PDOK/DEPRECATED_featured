@@ -97,14 +97,18 @@
     (is (= features (count (query "feature" {:collection collection :feature_id feature-id})))))
 
 
-(defn- test-timeline [collection feature-id {:keys [timeline-current timeline]}]
+(defn- test-timeline [collection feature-id {:keys [timeline-current timeline timeline-changelog]}]
     (is (= (:n timeline-current) (count (query "timeline_current" {:collection collection :feature_id feature-id}))))
-    (is (= (:insert-in-delta timeline-current) (count (query "timeline_current_delta" {:collection collection :action "I"}))))
-    (is (= (:delete-in-delta timeline-current) (count (query "timeline_current_delta" {:collection collection :action "D"}))))
-
     (is (= (:n timeline) (count (query "timeline" {:collection collection :feature_id feature-id}))))
-    (is (= (:insert-in-delta timeline) (count (query "timeline_delta" {:collection collection :action "I"}))))
-    (is (= (:delete-in-delta timeline) (count (query "timeline_delta" {:collection collection :action "D"}))))
+    (is (= (or (:n-new timeline-changelog) 0)
+           (count (query "timeline_changelog" {:collection collection :action "new"}))))
+    (is (= (or (:n-change timeline-changelog) 0)
+           (count (query "timeline_changelog" {:collection collection :action "change"}))))
+    (is (= (or (:n-close timeline-changelog) 0)
+           (count (query "timeline_changelog" {:collection collection :action "close"}))))
+    (is (= (or (:n-delete timeline-changelog) 0)
+           (count (query "timeline_changelog" {:collection collection :action "delete"}))))
+
     )
 
 (defn- inserted-features [extracts dataset collection extract-type features]
@@ -121,7 +125,7 @@
 
 (defn- test-timeline->extract [collection n-extracts]
   (let [extracts (atom {})]
-    (with-bindings 
+    (with-bindings
       {#'e/*process-insert-extract* (partial inserted-features extracts)
        #'e/*process-delete-extract* (partial deleted-versions extracts)}
       (e/fill-extract "regression-set" collection nil))
@@ -138,8 +142,9 @@
   (is (= 1 (:n-processed stats)))
   (is (= 0 (:n-errored stats)))
   (test-persistence "col-2" "id-b" {:events 1 :features 1})
-  (test-timeline "col-2" "id-b" {:timeline-current {:n 1 :delete-in-delta 0 :insert-in-delta 1}
-                                 :timeline {:n 0 :delete-in-delta 0 :insert-in-delta 0}})
+  (test-timeline "col-2" "id-b" {:timeline-current {:n 1}
+                                 :timeline {:n 0}
+                                 :timeline-changelog {:n-new 1}})
   (test-timeline->extract "col-2" 1)
   (test-geoserver "col-2" 1))
 
@@ -147,8 +152,9 @@
   (is (= 2 (:n-processed stats)))
   (is (= 0 (:n-errored stats)))
   (test-persistence "col-2" "id-b" {:events 2 :features 1})
-  (test-timeline "col-2" "id-b" {:timeline-current {:n 1 :delete-in-delta 1 :insert-in-delta 1}
-                                 :timeline {:n 1 :delete-in-delta 0 :insert-in-delta 1}})
+  (test-timeline "col-2" "id-b" {:timeline-current {:n 1}
+                                 :timeline {:n 1}
+                                 :timeline-changelog {:n-new 1 :n-change 1}})
   (test-timeline->extract "col-2" 2)
   (test-geoserver "col-2" 1))
 
@@ -156,8 +162,9 @@
   (is (= 3 (:n-processed stats)))
   (is (= 0 (:n-errored stats)))
   (test-persistence "col-2" "id-b" {:events 3 :features 1})
-  (test-timeline "col-2" "id-b" {:timeline-current {:n 1 :delete-in-delta 2 :insert-in-delta 1}
-                                 :timeline {:n 1 :delete-in-delta 0 :insert-in-delta 1}})
+  (test-timeline "col-2" "id-b" {:timeline-current {:n 1}
+                                 :timeline {:n 1}
+                                 :timeline-changelog {:n-new 1 :n-change 1 :n-close 1}})
   (test-timeline->extract "col-2" 2)
   (test-geoserver "col-2" 0))
 
@@ -165,8 +172,9 @@
   (is (= 4 (:n-processed stats)))
   (is (= 0 (:n-errored stats)))
   (test-persistence "col-2" "id-b" {:events 4 :features 1})
-  (test-timeline "col-2" "id-b" {:timeline-current {:n 1 :delete-in-delta 3 :insert-in-delta 1}
-                                 :timeline {:n 2 :delete-in-delta 0 :insert-in-delta 2}})
+  (test-timeline "col-2" "id-b" {:timeline-current {:n 1}
+                                 :timeline {:n 2}
+                                 :timeline-changelog {:n-new 1 :n-change 2 :n-close 1}})
   (test-timeline->extract "col-2" 3)
   (test-geoserver "col-2" 0))
 
@@ -174,8 +182,9 @@
   (is (= 4 (:n-processed stats)))
   (is (= 0 (:n-errored stats)))
   (test-persistence "col-1" "id-a" {:events 4 :features 1})
-  (test-timeline "col-1" "id-a" {:timeline-current {:n 0 :delete-in-delta 3 :insert-in-delta 0}
-                                 :timeline {:n 0 :delete-in-delta 2 :insert-in-delta 2}})
+  (test-timeline "col-1" "id-a" {:timeline-current {:n 0}
+                                 :timeline {:n 0}
+                                 :timeline-changelog {:n-new 1 :n-change 2 :n-delete 3}})
   (test-timeline->extract "col-1" 0)
   (test-geoserver "col-1" 0))
 
@@ -183,7 +192,8 @@
   (is (= 6 (:n-processed stats)))
   (is (= 0 (:n-errored stats)))
   (test-persistence "col-1" "id-a" {:events 6 :features 1})
-  (test-timeline "col-1" "id-a" {:timeline-current {:n 1 :delete-in-delta 4 :insert-in-delta 1}
-                                 :timeline {:n 1 :delete-in-delta 2 :insert-in-delta 3}})
+  (test-timeline "col-1" "id-a" {:timeline-current {:n 1}
+                                 :timeline {:n 1}
+                                 :timeline-changelog {:n-new 2 :n-change 3 :n-delete 3}})
   (test-timeline->extract "col-1" 2)
   (test-geoserver "col-1" 1))

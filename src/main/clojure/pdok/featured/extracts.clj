@@ -26,7 +26,7 @@
 
 (defn- jdbc-insert-extract [db table entries]
   (let [qualified-table (str extract-schema "." table)
-        query (str "INSERT INTO " qualified-table 
+        query (str "INSERT INTO " qualified-table
                    " (feature_type, version, valid_from, valid_to, publication, tiles, xml) SELECT ?, ?, ?, ?, ?, ?, ? "
                     " WHERE NOT EXISTS (SELECT 1 FROM " qualified-table " WHERE version = ? AND valid_to is not null)")]
     (try (j/execute! db (cons query entries) :multi? true :transaction? false)
@@ -71,7 +71,7 @@
       (add-metadata-extract-records db extractset-id rendered-features))
     (count rendered-features)))
 
- 
+
 (defn transform-and-add-extract [extracts-db dataset feature-type extract-type features]
     (let [[error features-for-extract] (features-for-extract dataset
                                                              feature-type
@@ -85,15 +85,6 @@
 
 
 (def ^:dynamic *process-insert-extract* (partial transform-and-add-extract config/extracts-db))
- 
-(defn- insert-extract [dataset collection extract-type]
-  (let [batch-size 10000
-        rc (timeline/features-to-insert (config/timeline) dataset collection)
-        parts (a/pipe rc (a/chan batch-size (partition-all batch-size)))]
-    (loop [features (a/<!! parts)]
-      (when features
-        (*process-insert-extract* dataset collection extract-type features)
-        (recur (a/<!! parts))))))
 
 (defn- jdbc-udpate-marked-for-deletion [db table versions]
   (let [versions (set (map #(str "'" % "'") versions))
@@ -106,23 +97,14 @@
 (defn- update-extract-marked-for-deletion [db dataset feature-type extract-type versions]
   (let [table (str dataset "_" extract-type "_v0_" feature-type)]
     (jdbc-udpate-marked-for-deletion db table versions)))
- 
 
-(def ^:dynamic *process-delete-extract* (partial update-extract-marked-for-deletion config/extracts-db)) 
- 
-(defn- update-marked-for-deletion [dataset collection extract-type]
-  (let [batch-size 10000
-        rc (timeline/versions-to-delete (config/timeline) dataset collection)
-        parts (a/pipe rc (a/chan batch-size (partition-all batch-size)))]
-    (loop [versions (a/<!! parts)]
-      (when versions
-        (*process-delete-extract* dataset collection extract-type versions)
-        (recur (a/<!! parts))))))
 
-(defn flush-delta [dataset]
-  (do 
-   (log/info "Flush-delta request voor dataset: " dataset)
-   (timeline/delete-delta (config/timeline) dataset)))
+(def ^:dynamic *process-delete-extract* (partial update-extract-marked-for-deletion config/extracts-db))
+
+(defn flush-changelog [dataset]
+  (do
+   (log/info "Delete changelog request voor dataset: " dataset)
+   (timeline/delete-changelog (config/timeline) dataset)))
 
 (defn file-to-features [path dataset]
   "Helper function to read features from a file.
@@ -130,11 +112,29 @@
   (with-open [s (json-reader/file-stream path)]
    (doall (json-reader/features-from-stream s :dataset dataset))))
 
+(defn changelog->inserts [record]
+  (condp = (:action record)
+    :new (:feature record)
+    :change (:feature record)
+    :close (:feature record)
+    nil))
+
+(defn changelog->deletes [record]
+  (condp = (:action record)
+    :change (:old_version record)
+    :close (:old_version record)
+    :delete (:old_version record)
+    nil))
 
 (defn fill-extract [dataset collection extract-type]
-  (do 
-    (insert-extract dataset collection extract-type)
-    (update-marked-for-deletion dataset collection extract-type))
+  (let [batch-size 10000
+        rc (timeline/changed-features (config/timeline) dataset collection)
+        parts (a/pipe rc (a/chan batch-size (partition-all batch-size)))]
+    (loop [records (a/<!! parts)]
+      (when records
+        (*process-insert-extract* dataset collection extract-type (filter (complement nil?) (map changelog->inserts records)))
+        (*process-delete-extract* dataset collection extract-type (filter (complement nil?) (map changelog->deletes records)))
+        (recur (a/<!! parts)))))
   {:status "ok"})
 
 (defn -main [template-location dataset collection extract-type & args]
