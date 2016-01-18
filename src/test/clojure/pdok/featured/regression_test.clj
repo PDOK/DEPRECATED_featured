@@ -109,7 +109,9 @@
 
 (defn- inserted-features [extracts dataset collection extract-type features]
   (doseq [f features]
-    (let [max-row-id (reduce max (map first @extracts))]
+    (let [max-row-id (if (empty? @extracts)
+                       0
+                       (reduce max (map first @extracts)))]
           (swap! extracts assoc (inc max-row-id) f))))
 
 (defn- deleted-versions [extracts dataset collection extract-type versions-to-delete]
@@ -118,7 +120,7 @@
       (swap! extracts dissoc row-id))))
 
 (defn- test-timeline->extract [collection n-extracts]
-  (let [extracts (atom [])]
+  (let [extracts (atom {})]
     (with-bindings 
       {#'e/*process-insert-extract* (partial inserted-features extracts)
        #'e/*process-delete-extract* (partial deleted-versions extracts)}
