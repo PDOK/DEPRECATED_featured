@@ -160,7 +160,6 @@
              (GET "/stats" [] (r/response @stats))
              (POST "/process" [] (partial process-request ProcessRequest process-chan))
              (POST "/extract" [] (partial process-request ExtractRequest extract-chan))
-             (POST "/extract/flush-delta" [] (fn [r] (r/response (flush-extract-changelog r))))
              (POST "/extract/flush-changelog" [] (fn [r] (r/response (flush-extract-changelog r))))
              (POST "/template" [] (fn [r] (r/response (template-request r)))))
     (route/not-found "NOT FOUND")))
