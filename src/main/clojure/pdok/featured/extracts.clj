@@ -87,11 +87,9 @@
 
 (defn- jdbc-udpate-marked-for-deletion [db table versions]
   (when (seq versions)
-    (let [versions (set (map #(str "'" % "'") versions))
-          versions (clojure.string/join ", " versions)
-          query (str "UPDATE " extract-schema "." table " SET marked_for_deletion = true WHERE version IN ( " versions " )")]
-      (try (j/with-db-connection [c db]
-             (j/execute! c [query]))
+    (let [query (str "UPDATE " extract-schema "." table
+                     " SET marked_for_deletion = true WHERE version = ?")]
+      (try (j/execute! db (cons query (map vector versions)) :multi? true :transaction? false)
            (catch java.sql.SQLException e (j/print-sql-exception-chain e))))))
 
 (defn- update-extract-marked-for-deletion [db dataset feature-type extract-type versions]
@@ -135,7 +133,7 @@
 (defn fill-extract [dataset collection extract-type]
   (let [batch-size 10000
         rc (timeline/changed-features (config/timeline) dataset collection)
-        parts (a/pipe rc (a/chan batch-size (partition-all batch-size)))]
+        parts (a/pipe rc (a/chan 1 (partition-all batch-size)))]
     (loop [records (a/<!! parts)]
       (when records
         (*process-delete-extract* dataset collection extract-type
