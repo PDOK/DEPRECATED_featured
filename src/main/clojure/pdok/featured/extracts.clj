@@ -85,19 +85,19 @@
 
 (def ^:dynamic *process-insert-extract* (partial transform-and-add-extract config/extracts-db))
 
-(defn- jdbc-udpate-marked-for-deletion [db table versions]
+(defn- jdbc-delete-versions [db table versions]
   (when (seq versions)
-    (let [query (str "UPDATE " extract-schema "." table
-                     " SET marked_for_deletion = true WHERE version = ?")]
+    (let [query (str "DELETE FROM " extract-schema "." table
+                     " WHERE version = ?")]
       (try (j/execute! db (cons query (map vector versions)) :multi? true :transaction? false)
            (catch java.sql.SQLException e (j/print-sql-exception-chain e))))))
 
-(defn- update-extract-marked-for-deletion [db dataset feature-type extract-type versions]
+(defn- delete-extracts-with-version [db dataset feature-type extract-type versions]
   (let [table (str dataset "_" extract-type "_v0_" feature-type)]
-    (jdbc-udpate-marked-for-deletion db table versions)))
+    (jdbc-delete-versions db table versions)))
 
 
-(def ^:dynamic *process-delete-extract* (partial update-extract-marked-for-deletion config/extracts-db))
+(def ^:dynamic *process-delete-extract* (partial delete-extracts-with-version config/extracts-db))
 
 (defn flush-changelog [dataset]
   (do
