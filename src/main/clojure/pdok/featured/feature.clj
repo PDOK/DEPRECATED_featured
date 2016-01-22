@@ -132,9 +132,10 @@
   #{"Curve" "CompositeCurve" "Arc" "ArcString" "Circle" "LineString"})
 
 (defmethod geometry-group "gml" [obj]
-  (let [re-result (re-find #"^(<\?[^\?]*\?>)?<([a-zA-Z0-9]+:)?([^\s]+)" (get obj "gml"))
-        type (when re-result (nth re-result 3))]
-    (geometry-group* gml-point-types gml-line-types type)))
+  (when-let [gml-str (get obj "gml")]
+    (let [re-result (re-find #"^(<\?[^\?]*\?>)?<([a-zA-Z0-9]+:)?([^\s]+)" gml-str)
+          type (when re-result (nth re-result 3))]
+      (geometry-group* gml-point-types gml-line-types type))))
 
 (def jts-point-types
   "Geometry types of Point-category"

@@ -78,16 +78,15 @@
         version (:version feature)
         sparse-attributes (all-fields-constructor (:attributes feature))]
     (when-let [geometry (proj-fn (-> feature (:geometry) (f/as-jts)))]
-      (let [geo-group (f/geometry-group (:geometry feature))
-            record (concat [id
-                            version
-                            (when (= :point geo-group)  geometry)
-                            (when (= :line geo-group)  geometry)
-                            (when (= :polygon geo-group)  geometry)
-                            geo-group]
-                           sparse-attributes
-                           [id])]
-        record))))
+      (when-let [geo-group (f/geometry-group (:geometry feature))]
+        (concat [id
+                 version
+                 (when (= :point geo-group)  geometry)
+                 (when (= :line geo-group)  geometry)
+                 (when (= :polygon geo-group)  geometry)
+                 geo-group]
+                sparse-attributes
+                [id])))))
 
 (defn- feature-keys [feature]
   (let [geometry (:geometry feature)
@@ -189,23 +188,23 @@
 (defn- flush-all [db proj-fn cache insert-batch update-batch delete-batch no-insert]
   "Used for flushing all batches, so entry order is alway new change close"
   (let [cached-collection-attributes (cached cache gs-collection-attributes db)]
-    
+
     (process-batch update-batch (partial gs-update-feature db proj-fn))
     (process-batch delete-batch (partial gs-delete-feature db))
-    
+
     (flush-batch insert-batch (partial gs-add-feature db proj-fn cached-collection-attributes no-insert))
     (flush-batch update-batch (partial gs-update-feature db proj-fn))
     (flush-batch delete-batch (partial gs-delete-feature db))
-    
+
     (dosync (ref-set no-insert #{}))
     ))
 
 (defn- versions-in-batch [{:keys [dataset collection id]} batch]
-   (map :version 
-        (filter (fn [f] (and 
+   (map :version
+        (filter (fn [f] (and
                      (= (:dataset f) dataset)
                      (= (:collection f) collection)
-                     (= (:id f) id))) 
+                     (= (:id f) id)))
                 batch)))
 
 (deftype GeoserverProjector [db cache insert-batch insert-batch-size
@@ -256,7 +255,7 @@
       (let [versions-in-insert (versions-in-batch feature @insert-batch)
             batched-delete-feature (with-batch delete-batch delete-batch-size
                                      (partial gs-delete-feature db) flush-fn)]
-        (dosync 
+        (dosync
           (alter no-insert #(clojure.set/union % (into #{} versions-in-insert))))
         (batched-delete-feature feature))))
   (proj/accept? [_ feature]
