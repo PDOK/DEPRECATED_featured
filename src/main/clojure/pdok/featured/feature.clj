@@ -66,12 +66,20 @@
 (defn jts-as-wkt [jts]
   (.write wkt-writer jts))
 
-(defmulti as-gml (fn [obj] lower-case (get obj "type")))
+(defmulti valid-geometry? (fn [obj] (lower-case (get obj "type"))))
+(defmethod valid-geometry? :default [_] nil)
+(defmethod valid-geometry? "gml" [obj]
+  (if (get obj "gml") true false))
+
+(defmethod valid-geometry? "jts" [obj]
+  true)
+
+(defmulti as-gml (fn [obj] (lower-case (get obj "type"))))
 (defmethod as-gml "gml" [obj] (when-let [gml (get obj "gml")]
                                 (str/trim (reduce str (str/split-lines (str/trim-newline (str/replace gml #"<\?[^\?]*\?>" "")))))))
 (defmethod as-gml :default [obj] nil)
 
-(defmulti as-jts (fn [obj] lower-case (get obj "type")))
+(defmulti as-jts (fn [obj] (lower-case (get obj "type"))))
 (defmethod as-jts :default [_] nil)
 (defmethod as-jts "gml" [obj]
  (when-let [gml (get obj "gml")]

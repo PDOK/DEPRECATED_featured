@@ -74,42 +74,46 @@
         (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e))))))
 
 (defn- feature-to-sparse-record [proj-fn feature all-fields-constructor]
+  ;; could use a valid-geometry? check?! For now not, as-jts return nil if invalid (for gml)
   (let [id (:id feature)
         version (:version feature)
         sparse-attributes (all-fields-constructor (:attributes feature))]
     (when-let [geometry (proj-fn (-> feature (:geometry) (f/as-jts)))]
-      (when-let [geo-group (f/geometry-group (:geometry feature))]
-        (concat [id
-                 version
-                 (when (= :point geo-group)  geometry)
-                 (when (= :line geo-group)  geometry)
-                 (when (= :polygon geo-group)  geometry)
-                 geo-group]
-                sparse-attributes
-                [id])))))
+      (let [geo-group (f/geometry-group (:geometry feature))
+            record (concat [id
+                            version
+                            (when (= :point geo-group)  geometry)
+                            (when (= :line geo-group)  geometry)
+                            (when (= :polygon geo-group)  geometry)
+                            geo-group]
+                           sparse-attributes
+                           [id])]
+        record))))
 
 (defn- feature-keys [feature]
   (let [geometry (:geometry feature)
         attributes (:attributes feature)]
      (cond-> (transient [])
-             geometry (conj!-coll :_geometry_point :_geometry_line :_geometry_polygon :_geo_group)
-             attributes (conj!-coll (keys attributes))
-             true (persistent!))))
+       (f/valid-geometry? geometry)
+       (conj!-coll :_geometry_point :_geometry_line :_geometry_polygon :_geo_group)
+       attributes (conj!-coll (keys attributes))
+       true (persistent!))))
 
  (defn- feature-to-update-record [proj-fn feature]
    (let [attributes (:attributes feature)
          geometry (:geometry feature)
          geo-group (when geometry (f/geometry-group geometry))]
      (cond-> (transient [(:version feature)])
-             geometry (conj!-coll
-                       (when (= :point geo-group) (proj-fn (f/as-jts geometry)))
-                       (when (= :line geo-group) (proj-fn (f/as-jts geometry)))
-                       (when (= :polygon geo-group)  (proj-fn (f/as-jts geometry)))
-                       geo-group)
-             attributes (conj!-coll (vals attributes))
-             true (conj! (:id feature))
-             true (conj! (:current-version feature))
-             true (persistent!))))
+       (f/valid-geometry? geometry)
+       (conj!-coll
+        (when (= :point geo-group) (proj-fn (f/as-jts geometry)))
+        (when (= :line geo-group) (proj-fn (f/as-jts geometry)))
+        (when (= :polygon geo-group)  (proj-fn (f/as-jts geometry)))
+        geo-group)
+       attributes (conj!-coll (vals attributes))
+       true (conj! (:id feature))
+       true (conj! (:current-version feature))
+       true (persistent!))))
 
 (defn- all-fields-constructor [attributes]
   (if (empty? attributes) (constantly nil) (apply juxt (map #(fn [col] (get col %)) attributes))))
