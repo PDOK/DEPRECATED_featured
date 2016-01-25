@@ -41,8 +41,8 @@
 (def nil-attribute-writer
   (transit/write-handler
    "x"
-   (fn [v] (.getName (:class v)))
-   (fn [v] (.getName (:class v)))))
+   (fn [v] (.getName ^java.lang.Class (:class v)))
+   (fn [v] (.getName ^java.lang.Class (:class v)))))
 
 (def nil-attribute-reader
   (transit/read-handler
@@ -59,12 +59,12 @@
 (def gml3-parser (GML3Parser.))
 
 (defn gml3-as-jts [gml]
-  (.toJTSGeometry gml3-parser gml))
+  (.toJTSGeometry ^GML3Parser gml3-parser gml))
 
 (def wkt-writer (WKTWriter.))
 
 (defn jts-as-wkt [jts]
-  (.write wkt-writer jts))
+  (.write ^WKTWriter wkt-writer jts))
 
 (defmulti valid-geometry? (fn [obj] (lower-case (get obj "type"))))
 (defmethod valid-geometry? :default [_] nil)
@@ -103,7 +103,7 @@
 (defmulti as-simple-gml (fn [obj] lower-case (get obj "type")))
 (defmethod as-simple-gml "gml" [obj]
   (when-let [gml (get obj "gml")]
-    (.transform simple-gml-transfomer gml)))
+    (.transform ^TransformXSLT simple-gml-transfomer gml)))
 (defmethod as-simple-gml :default [obj] nil)
 
 (defmulti as-wkt (fn [obj] lower-case (get obj "type")))
@@ -117,9 +117,6 @@
   (fn [obj] (lower-case (get obj "type"))))
 
 (defmethod geometry-group :default [_] nil)
-
-(defn- starts-with-get [against-set test-value]
-  (some (fn [t] (.startsWith test-value t)) against-set))
 
 (defn- geometry-group*
   ([point-types line-types test-value]
@@ -154,5 +151,5 @@
   #{"Line" "LineString" "MultiLine"})
 
 (defmethod geometry-group "jts" [obj]
-  (let [type (-> obj (get "jts") .getGeometryType)]
+  (let [type (.getGeometryType ^Geometry (get obj "jts"))]
     (geometry-group* jts-point-types jts-line-types type)))
