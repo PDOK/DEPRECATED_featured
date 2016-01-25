@@ -46,8 +46,8 @@
 (defn clojurify [s]
   (keyword (cond->
                (clojure.string/replace s #"_" "-")
-               (.startsWith s "_")
-               (.substring 1))))
+               (clojure.string/starts-with? s "_")
+               (subs 1))))
 
 (defn- parse-object [^JsonParser jp]
   (jparse/parse* jp identity nil nil))
@@ -96,7 +96,7 @@
   (and (vector? element)
        (= 2 (count element))
        (string? (first element))
-       (-> element first (.startsWith "~#"))))
+       (-> element first (clojure.string/starts-with? "~#"))))
 
 (defn- evaluate-f [element]
   (let [[function params] element]
