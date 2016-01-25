@@ -38,7 +38,7 @@
                  [com.fasterxml.jackson.core/jackson-core "2.6.0"]
                  [com.fasterxml.uuid/java-uuid-generator "3.1.3"
                   :exclusions [[log4j]]]
-                 [compojure "1.3.4"]
+                 [compojure "1.4.0" :exclusions [[org.clojure/tools.reader]]]
                  [stencil "0.4.0"]
                  [environ "1.0.1"]
                  [http-kit "2.1.18"]
