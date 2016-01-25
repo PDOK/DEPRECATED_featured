@@ -208,7 +208,7 @@
 
 (defn- current-state [persistence dataset collection id]
   (let [key-fn (fn [dataset collectioni id] [dataset collection id])
-        cached (use-cache (.stream-cache persistence) key-fn)]
+        cached (use-cache (:stream-cache persistence) key-fn)]
       (cached dataset collection id)))
 
 (defn prepare-childs-cache [persistence dataset collection ids recur?]
