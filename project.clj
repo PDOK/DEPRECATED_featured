@@ -32,7 +32,7 @@
   :mirrors {"*" {:name "kadaster"
                    :url "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/public/"}}
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [cheshire "5.4.0"]
+                 [cheshire "5.5.0"]
                  [clj-time "0.11.0"]
                  [com.cognitect/transit-clj "0.8.269"]
                  [com.fasterxml.jackson.core/jackson-core "2.6.0"]
