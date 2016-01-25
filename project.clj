@@ -47,6 +47,7 @@
                  [org.clojure/core.async "0.2.374"]
                  [org.clojure/core.cache "0.6.4"]
                  [org.clojure/java.jdbc "0.3.6"]
+                 [org.clojure/tools.reader "1.0.0-alpha2"]
                  [org.clojure/tools.cli "0.3.1"]
                  [org.clojure/tools.logging "0.3.1"]
                  [org.clojure/tools.trace "0.7.8"]
