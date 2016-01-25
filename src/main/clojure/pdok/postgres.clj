@@ -16,8 +16,8 @@
 (def joda-time-writer
   (transit/write-handler
    (constantly "lm")
-   (fn [v] (-> v tc/to-date .getTime))
-   (fn [v] (-> v tc/to-date .getTime .toString))))
+   (fn [v] (.getTime ^java.util.Date (tc/to-date v)))
+   (fn [v] (.toString ^java.lang.Long (.getTime ^java.util.Date (tc/to-date v))))))
 
 (def joda-time-reader
   (transit/read-handler #(-> % (tc/from-long) (tc/to-local-date-time))))
@@ -25,8 +25,8 @@
 (def joda-local-date-writer
   (transit/write-handler
    (constantly "ld")
-   (fn [v] (-> v tc/to-date .getTime))
-   (fn [v] (-> v tc/to-date .getTime .toString))))
+   (fn [v] (.getTime ^java.util.Date (tc/to-date v)))
+   (fn [v] (.toString ^java.lang.Long (.getTime ^java.util.Date (tc/to-date v))))))
 
 (def joda-local-date-reader
   (transit/read-handler #(tc/to-local-date (tc/from-long %))))
@@ -38,7 +38,7 @@
    str))
 
 (def int-reader
-  (transit/read-handler #(Integer. %)))
+  (transit/read-handler #(Integer. ^java.lang.String %)))
 
 (def transit-write-handlers (atom {}))
 (def transit-read-handlers (atom {}))
@@ -70,7 +70,7 @@
 (defn from-json [str]
   (if (clojure.string/blank? str)
     nil
-    (let [in (ByteArrayInputStream. (.getBytes str))
+    (let [in (ByteArrayInputStream. (.getBytes ^java.lang.String  str))
           reader (transit/reader in :json
                                  {:handlers @transit-read-handlers})]
       (transit/read reader))))
@@ -86,7 +86,7 @@
   org.joda.time.LocalDate
   (sql-value [v] (tc/to-sql-date v))
   com.vividsolutions.jts.geom.Geometry
-  (sql-value [v] (str "SRID=" (.getSRID v) ";" (.write wkt-writer v)))
+  (sql-value [v] (str "SRID=" (.getSRID v) ";" (.write ^WKTWriter wkt-writer v)))
   clojure.lang.Keyword
   (sql-value [v] (name v))
   clojure.lang.IPersistentMap
@@ -145,9 +145,9 @@
 
 (extend-protocol j/IResultSetReadColumn
   java.sql.Date
-  (result-set-read-column [v _ _] (LocalDate. v nlZone))
+  (result-set-read-column [v _ _] (LocalDate. ^java.sql.Date v ^DateTimeZone nlZone))
   java.sql.Timestamp
-  (result-set-read-column [v _ _] (LocalDateTime. v nlZone))
+  (result-set-read-column [v _ _] (LocalDateTime. ^java.sql.Timestamp v  ^DateTimeZone nlZone))
   java.sql.Array
   (result-set-read-column [v _ _]
     (into [] (.getArray v))))
