@@ -4,7 +4,7 @@
 
 (defn- write-file [dataset feature-type feature idx]
   (with-open [w (clojure.java.io/writer (str dataset "-" feature-type "-" idx ".xml"))]
-       (.write w feature)))
+       (.write w ^java.lang.String feature)))
 
 (defn -main [feature-type feature-file extract-type & args]
   (let [dataset "bgt"
