@@ -29,9 +29,10 @@
   :repositories [["releases" "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/releases/"]
                  ["osgeo" {:url "http://download.osgeo.org/webdav/geotools/" :snapshots false}]
                  ["local" "file:repo"]]
-    :mirrors {"*" {:name "kadaster"
+  :mirrors {"*" {:name "kadaster"
                    :url "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/public/"}}
-  :dependencies [[cheshire "5.4.0"]
+  :dependencies [[org.clojure/clojure "1.8.0"]
+                 [cheshire "5.4.0"]
                  [clj-time "0.9.0"]
                  [com.cognitect/transit-clj "0.8.269"]
                  [com.fasterxml.jackson.core/jackson-core "2.6.0"]
@@ -43,7 +44,6 @@
                  [http-kit "2.1.18"]
                  [joplin.core "0.3.5"]
                  [joplin.jdbc "0.3.5"]
-                 [org.clojure/clojure "1.7.0"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [org.clojure/core.cache "0.6.4"]
                  [org.clojure/java.jdbc "0.3.6"]
