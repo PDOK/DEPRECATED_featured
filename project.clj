@@ -44,7 +44,7 @@
                  [http-kit "2.1.18"]
                  [joplin.core "0.3.5"]
                  [joplin.jdbc "0.3.5"]
-                 [org.clojure/core.async "0.1.346.0-17112a-alpha"]
+                 [org.clojure/core.async "0.2.374"]
                  [org.clojure/core.cache "0.6.4"]
                  [org.clojure/java.jdbc "0.3.6"]
                  [org.clojure/tools.cli "0.3.1"]
