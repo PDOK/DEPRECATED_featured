@@ -123,12 +123,12 @@
     (doseq [row-id rows-to-delete]
       (swap! extracts dissoc row-id))))
 
-(defn- test-timeline->extract [collection n-extracts]
+(defn- test-timeline->extract [n-extracts]
   (let [extracts (atom {})]
     (with-bindings
       {#'e/*process-insert-extract* (partial inserted-features extracts)
        #'e/*process-delete-extract* (partial deleted-versions extracts)}
-      (e/fill-extract "regression-set" collection nil))
+      (e/fill-extract "regression-set" nil))
     (is (= n-extracts (count @extracts)))))
 
 (defn- query-geoserver [table]
@@ -145,7 +145,7 @@
   (test-timeline "col-2" "id-b" {:timeline-current {:n 1}
                                  :timeline {:n 0}
                                  :timeline-changelog {:n-new 1}})
-  (test-timeline->extract "col-2" 1)
+  (test-timeline->extract 1)
   (test-geoserver "col-2" 1))
 
 (defregressiontest new-change-feature "col-2_id-b_new-change" stats
@@ -155,7 +155,7 @@
   (test-timeline "col-2" "id-b" {:timeline-current {:n 1}
                                  :timeline {:n 1}
                                  :timeline-changelog {:n-new 1 :n-change 1}})
-  (test-timeline->extract "col-2" 2)
+  (test-timeline->extract 2)
   (test-geoserver "col-2" 1))
 
 (defregressiontest new-change-close-feature "col-2_id-b_new-change-close" stats
@@ -165,7 +165,7 @@
   (test-timeline "col-2" "id-b" {:timeline-current {:n 1}
                                  :timeline {:n 1}
                                  :timeline-changelog {:n-new 1 :n-change 1 :n-close 1}})
-  (test-timeline->extract "col-2" 2)
+  (test-timeline->extract 2)
   (test-geoserver "col-2" 0))
 
 (defregressiontest new-change-close_with_attributes-feature "col-2_id-b_new-change-close_with_attributes" stats
@@ -175,7 +175,7 @@
   (test-timeline "col-2" "id-b" {:timeline-current {:n 1}
                                  :timeline {:n 2}
                                  :timeline-changelog {:n-new 1 :n-change 2 :n-close 1}})
-  (test-timeline->extract "col-2" 3)
+  (test-timeline->extract 3)
   (test-geoserver "col-2" 0))
 
 (defregressiontest new-change-change-delete-feature "col-1_id-a_new-change-change-delete" stats
@@ -185,7 +185,7 @@
   (test-timeline "col-1" "id-a" {:timeline-current {:n 0}
                                  :timeline {:n 0}
                                  :timeline-changelog {:n-new 1 :n-change 2 :n-delete 3}})
-  (test-timeline->extract "col-1" 0)
+  (test-timeline->extract 0)
   (test-geoserver "col-1" 0))
 
 (defregressiontest new-change-change-delete-new-change-feature "col-1_id-a_new-change-change-delete-new-change" stats
@@ -195,5 +195,5 @@
   (test-timeline "col-1" "id-a" {:timeline-current {:n 1}
                                  :timeline {:n 1}
                                  :timeline-changelog {:n-new 2 :n-change 3 :n-delete 3}})
-  (test-timeline->extract "col-1" 2)
+  (test-timeline->extract 2)
   (test-geoserver "col-1" 1))
