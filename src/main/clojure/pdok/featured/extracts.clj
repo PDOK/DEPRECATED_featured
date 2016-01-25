@@ -130,10 +130,11 @@
     :delete (:version record)
     nil))
 
-(defn fill-extract [dataset collection extract-type]
+(defn- fill-extract* [dataset extract-type collection]
   (let [batch-size 10000
         rc (timeline/changed-features (config/timeline) dataset collection)
         parts (a/pipe rc (a/chan 1 (partition-all batch-size)))]
+    (log/info "Create extracts for:" extract-type collection)
     (loop [records (a/<!! parts)]
       (when records
         (*process-delete-extract* dataset collection extract-type
@@ -141,12 +142,17 @@
         (*process-insert-extract* dataset collection extract-type
                                   (filter (complement nil?) (map changelog->change-inserts records)))
         (*process-delete-extract* dataset collection extract-type (filter (complement nil?) (map changelog->deletes records)))
-        (recur (a/<!! parts)))))
-  {:status "ok"})
+        (recur (a/<!! parts))))))
 
-(defn -main [template-location dataset collection extract-type & args]
+(defn fill-extract [dataset extract-type]
+  (let [collections-in-changelog (timeline/collections-in-changelog (config/timeline) dataset)]
+    (doseq [collection collections-in-changelog]
+      (fill-extract* dataset extract-type collection))
+    {:status "ok" :collections collections-in-changelog}))
+
+(defn -main [template-location dataset extract-type & args]
   (let [templates-with-metadata (template/templates-with-metadata dataset template-location)]
         (when-not (some false? (map template/add-or-update-template templates-with-metadata))
-          (fill-extract dataset collection extract-type))))
+          (fill-extract dataset extract-type))))
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))

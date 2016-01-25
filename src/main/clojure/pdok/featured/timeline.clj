@@ -121,6 +121,13 @@
        (catch java.sql.SQLException e
          (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
+(defn collections-in-changelog [timeline dataset]
+  (let [sql (str "SELECT DISTINCT collection FROM " (qualified-changelog) " WHERE dataset = ?") ]
+    (try
+      (flatten (drop 1 (j/query (:db timeline) [sql dataset] :as-arrays? true)))
+       (catch java.sql.SQLException e
+         (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))))))
+
 (defn- init-root
   ([feature]
    (if-let [dataset (:dataset feature)]

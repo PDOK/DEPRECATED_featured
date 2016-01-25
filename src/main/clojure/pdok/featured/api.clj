@@ -49,7 +49,6 @@
 (def ExtractRequest
   "A schema for a JSON extract request"
   {:dataset s/Str
-   :collection s/Str
    :extractType s/Str
    (s/optional-key :callback) URI})
 
@@ -120,13 +119,12 @@
 
   (try
     (let [response (extracts/fill-extract (:dataset request)
-                                          (:collection request)
                                           (:extractType request))
           _ (log/info "response: " response)
-          extract-stats (assoc request :response response)]
+          extract-stats (merge request response)]
        (stats-on-callback callback-chan request extract-stats))
     (catch Exception e
-      (let [error-stats (assoc request :response {:status "error" :msg (str e)})]
+      (let [error-stats (merge request {:status "error" :msg (str e)})]
         (log/warn error-stats)
         (stats-on-callback callback-chan request error-stats)))))
 
