@@ -4,16 +4,16 @@
 (def ^:private uuid-comparator (UUIDComparator.))
 
 (defn uuid> [uuid-a uuid-b]
-  (> (.compare uuid-comparator uuid-a uuid-b) 0))
+  (> (.compare ^UUIDComparator uuid-comparator uuid-a uuid-b) 0))
 
 (defn uuid>= [uuid-a uuid-b]
-  (>= (.compare uuid-comparator uuid-a uuid-b) 0))
+  (>= (.compare ^UUIDComparator uuid-comparator uuid-a uuid-b) 0))
 
 (defn uuid< [uuid-a uuid-b]
-  (< (.compare uuid-comparator uuid-a uuid-b) 0))
+  (< (.compare ^UUIDComparator uuid-comparator uuid-a uuid-b) 0))
 
 (defn uuid<= [uuid-a uuid-b]
-  (<= 0 (.compare uuid-comparator uuid-a uuid-b) 0))
+  (<= 0 (.compare ^UUIDComparator uuid-comparator uuid-a uuid-b) 0))
 
 
 (defmacro with-bench
