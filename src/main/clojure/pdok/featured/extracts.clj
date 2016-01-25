@@ -107,7 +107,7 @@
 (defn file-to-features [path dataset]
   "Helper function to read features from a file.
    Returns features read from file."
-  (with-open [s (json-reader/file-stream path)]
+  (with-open [s (clojure.java.io/reader path)]
    (doall (json-reader/features-from-stream s :dataset dataset))))
 
 (defn changelog->change-deletes [record]
