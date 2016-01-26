@@ -135,7 +135,7 @@
     (apply random-json-features writer dataset collection total args)))
 
 (defn random-json-feature-stream
-  ([dataset collection total & args]
+  (^java.io.InputStream [dataset collection total & args]
    (let [pipe-in (PipedInputStream.)
          pipe-out (PipedOutputStream. pipe-in)]
      (future (apply random-json-feature-stream* pipe-out dataset collection total args))

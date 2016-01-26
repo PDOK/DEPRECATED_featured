@@ -53,7 +53,7 @@
   (System/exit status))
 
 (defn implementation-version []
-  (-> (eval 'pdok.featured.core) .getPackage .getImplementationVersion))
+  (-> ^java.lang.Class (eval 'pdok.featured.core) .getPackage .getImplementationVersion))
 
 (defn -main [& args]
 ;  (println "ENV-test" (config/env :pdok-test))
@@ -87,7 +87,7 @@
    ["-v" "--version"]])
 
 (defn performance-test [n & args]
-  (with-open [json (apply random-json-feature-stream "perftest" "col1" n args)]
+  (with-open [^java.io.InputStream json (apply random-json-feature-stream "perftest" "col1" n args)]
     (let [persistence (config/persistence)
           processor (processor/create persistence (config/projectors persistence))
           features (features-from-stream json)
