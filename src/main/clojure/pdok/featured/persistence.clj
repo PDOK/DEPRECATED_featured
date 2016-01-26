@@ -146,7 +146,7 @@ If n nil => no limit, if collections nil => all collections")
 			     fs.collection = f.collection AND
 			     fs.feature_id = f.feature_id
   WHERE fs.dataset = ?"
-  (when (seq collections) (str "AND f.collection in ("
+  (when (seq collections) (str " AND f.collection in ("
                                (clojure.string/join "," (repeat (count collections) "?"))
                                ")"))
 "  ORDER BY fs.id DESC"
