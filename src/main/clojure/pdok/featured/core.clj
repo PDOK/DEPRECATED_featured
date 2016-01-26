@@ -5,6 +5,7 @@
              [json-reader :refer [features-from-stream file-stream]]
              [processor :as processor :refer [consume shutdown]]
              [persistence :as pers]
+             [timeline :as tl]
              [generator :refer [random-json-feature-stream]]
              [extracts :as extracts]
              [template :as template]]
@@ -74,6 +75,10 @@
         (if (not (:dataset options))
           (exit 0 "replaying requires dataset")
           (replay options))
+      (:clear-timeline-changelog options)
+        (if (not (:dataset options))
+          (exit 0 "clearing changelog requires dataset")
+          (tl/delete-changelog (config/timeline) (:dataset options)))
       (not (or (seq arguments) (:std-in options)))
         (exit 0 "json-file or std-in required")
       :else
@@ -90,6 +95,7 @@
    [nil "--no-state" "Use only with no nesting and action :new"]
    [nil "--projection PROJ" "RD / ETRS89 / SOURCE"]
    ["-r" "--replay [N/root-collection]" "Replay last N events or all events from root-collection tree from persistence to projectors"]
+   [nil "--clear-timeline-changelog" "Clear timeline changelog for dataset"]
    ["-h" "--help"]
    ["-v" "--version"]])
 
