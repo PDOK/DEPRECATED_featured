@@ -1,29 +1,33 @@
 (ns pdok.featured.shape-reader
   (:require [clojure.java.io :as io])
-  (:import [org.geotools.data DataStoreFinder]))
+  (:import [org.geotools.data DataStoreFinder DataStore]
+           [org.opengis.feature.simple SimpleFeature]
+           [org.opengis.feature.type AttributeDescriptor]))
 
-(defn shape-file-store [path]
+(defn shape-file-store ^DataStore [path]
   (let [url (-> path io/file .toURI str)
         config {"url" url}]
     (DataStoreFinder/getDataStore config)))
 
-(defn attributes [gt-feature]
-  (let [attribute-names (filter #(not (.contains % "geom"))
-                                (map #(.getLocalName %) (-> gt-feature .getFeatureType .getAttributeDescriptors)))
-        attributes (map #(vector %1 (.getAttribute gt-feature %1)) attribute-names)]
+(defn attributes [^SimpleFeature gt-feature]
+  (let [attribute-names (filter #(not (clojure.string/includes? % "geom"))
+                                (map (fn [^AttributeDescriptor d] (.getLocalName d))
+                                     (-> gt-feature .getFeatureType .getAttributeDescriptors)))
+        attributes (map (fn [^java.lang.String an] [an (.getAttribute gt-feature an)]) attribute-names)]
     attributes))
 
-(defn make-feature [dataset layer gt-feature]
+(defn make-feature [dataset layer ^SimpleFeature gt-feature]
   {:dataset dataset
    :collection layer
    :id (.getID gt-feature)
    :attributes (attributes gt-feature)
    :geometry {"type" "jts"  "jts" (.getDefaultGeometry gt-feature)}})
 
-(defn feature-sources [shape-store]
+(defn feature-sources [^DataStore shape-store]
   "Returns seq of [layer-name featurecollection] "
   (let [layers (seq (.getTypeNames shape-store))
-        sources (map #(vector %1 (-> shape-store (.getFeatureSource %1) .getFeatures)) layers)]
+        sources (map (fn [^java.lang.String l] [l (-> shape-store
+                                                     (.getFeatureSource l) .getFeatures)]) layers)]
     sources))
 
 (defmacro with-shape-features
