@@ -372,7 +372,7 @@
   "Sends the last n events from persistence to the projectors"
   (let [collections (when root-collection (pers/collection-tree persistence dataset root-collection))
         features (pers/get-last-n persistence dataset last-n collections)
-        parts (a/pipe features (a/chan batch-size (partition-all batch-size)))]
+        parts (a/pipe features (a/chan 1 (partition-all batch-size)))]
     (loop [part (a/<!! parts)]
       (when (seq part)
         (pers/flush persistence)
