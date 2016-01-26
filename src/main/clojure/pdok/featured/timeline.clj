@@ -268,16 +268,11 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
 
 (defn- delete-history-sql []
   (str "DELETE FROM " (qualified-history)
-       " WHERE ARRAY[version] <@ ?"))
+       " WHERE version = ?"))
 
 (defn- delete-history [db features]
   (try
-    (let [transform-fn (juxt #(set (:_all_versions %)))
-          records (map transform-fn features)
-          versions (mapcat
-                    (fn [f] (map #(vector (:_dataset f) (:_collection f) %1 %1)
-                                (filter #(not= % (:_version f)) (:_all_versions f))))
-                    features)]
+    (let [records (map vector (mapcat :_all_versions features))]
       (j/execute! db (cons (delete-history-sql) records) :multi? true :transaction? false))
      (catch java.sql.SQLException e
        (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
