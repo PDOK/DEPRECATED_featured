@@ -21,6 +21,7 @@
   (init [this])
   (prepare [this features] "Called before processing this feature batch")
   (flush [persistence])
+  (child-collections [this dataset parent-collection])
   (stream-exists? [persistence dataset collection id])
   (create-stream
     [persistence dataset collection id]
@@ -34,8 +35,17 @@
     [persistence dataset parent-collection parent-id]
     "Returns seq of [collection id]")
   (parent [persistence dataset collection id] "Returns [collection id field] tuple or nil")
-  (get-last-n [persistence dataset n] "Returns channel with n last stream entries")
+  (get-last-n [persistence dataset n collections]
+    "Returns channel with n last stream entries for all collections in collections
+If n nil => no limit, if collections nil => all collections")
   (close [persistence]))
+
+(defn collection-tree [persistence dataset root]
+  "Returns root and all (child) collections in tree"
+  (if-let [children (seq (child-collections persistence dataset root))]
+    (let [all-childs (mapcat #(collection-tree persistence dataset %) children)]
+      (cons root all-childs))
+    [root]))
 
 (defn path [persistence dataset collection id]
   "Returns sequence of [collection id field child-id] tuples. Parents first. Root only means empty sequence"
@@ -93,6 +103,13 @@
                  " (dataset, collection, parent_collection) VALUES (?, ?, ?)")]
     (j/execute! db (list sql dataset collection parent-collection))))
 
+(defn jdbc-child-collections [db dataset parent-collection]
+  (j/with-db-connection [c db]
+    (let [query (str "SELECT collection FROM " (qualified-persistence-collections)
+                     " WHERE dataset = ? AND parent_collection = ?")
+          results (j/query c [query dataset parent-collection])]
+      (map :collection results))))
+
 (defn record->feature [c record]
   (let [f (transient {})
         f (assoc! f
@@ -110,7 +127,7 @@
             (:parent_id record) (assoc! :parent-id (:parent_id record)))]
     (>!! c (persistent! f))))
 
-(defn jdbc-get-last-n [persistence dataset n]
+(defn jdbc-get-last-n [persistence dataset n collections]
   (let [query (str "SELECT lastn.*,
   lag(version) OVER (PARTITION BY dataset, collection, feature_id ORDER BY id ASC) prev_version
   FROM (SELECT fs.id,
@@ -128,9 +145,12 @@
   JOIN " (qualified-features) " f ON fs.dataset = f.dataset AND
 			     fs.collection = f.collection AND
 			     fs.feature_id = f.feature_id
-  WHERE fs.dataset = ?
-  ORDER BY fs.id DESC
-  LIMIT " n
+  WHERE fs.dataset = ?"
+  (when (seq collections) (str "AND f.collection in ("
+                               (clojure.string/join "," (repeat (count collections) "?"))
+                               ")"))
+"  ORDER BY fs.id DESC"
+  (when n (str " LIMIT " n))
   ") AS lastn ORDER BY id ASC")
         result-chan (chan)]
     (a/thread
@@ -138,7 +158,8 @@
         (let [statement (j/prepare-statement
                          (doto (j/get-connection c) (.setAutoCommit false))
                          query :fetch-size 10000)]
-          (j/query c [statement dataset] :row-fn (partial record->feature result-chan))
+          (j/query c (if-not collections [statement dataset] (concat [statement dataset] collections))
+                   :row-fn (partial record->feature result-chan))
           (close! result-chan))))
     result-chan))
 
@@ -281,6 +302,8 @@
      (ref-set childs-cache (cache/basic-cache-factory {}))
      (ref-set parent-cache (cache/basic-cache-factory {})))
     this)
+  (child-collections [this dataset parent-collection]
+    (jdbc-child-collections db dataset parent-collection))
   (stream-exists? [this dataset collection id]
     (not (nil? (last-action this dataset collection id))))
   (create-stream [this dataset collection id]
@@ -330,8 +353,8 @@
       (if (some #(= nil %) q-result)
         nil
         q-result)))
-  (get-last-n [this dataset n]
-    (jdbc-get-last-n this dataset n))
+  (get-last-n [this dataset n collections]
+    (jdbc-get-last-n this dataset n collections))
   (close [this]
     (flush this)))
 
@@ -356,6 +379,8 @@
     this)
   (flush [this]
     this)
+  (child-collections [this dataset parent-collection]
+    nil)
   (stream-exists? [persistence dataset collection id]
     false)
   (create-stream [persistence dataset collection id]

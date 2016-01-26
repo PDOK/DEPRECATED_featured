@@ -39,11 +39,18 @@
   (log/info "Done processing")
   )
 
+(defn int? [^java.lang.String s]
+  (try
+    (Integer/parseInt s)
+    true
+    (catch Exception e false)))
+
 (defn replay [{:keys [replay dataset] :as options}]
   (log/info "Replay mode")
-  (let [n (Integer/parseInt replay)
+  (let [n (when (int? replay) (Integer/parseInt replay))
+        root-col (when-not (int? replay) replay)
         processor (setup-processor options)]
-    (processor/replay processor dataset n)
+    (processor/replay processor dataset n root-col)
     (log/info "Shutting down")
     (shutdown processor)
     (log/info "Done replaying")))
@@ -82,7 +89,7 @@
    [nil "--no-timeline"]
    [nil "--no-state" "Use only with no nesting and action :new"]
    [nil "--projection PROJ" "RD / ETRS89 / SOURCE"]
-   ["-r" "--replay N" "Replay last N events from persistence to projectors"]
+   ["-r" "--replay [N/root-collection]" "Replay last N events or all events from root-collection tree from persistence to projectors"]
    ["-h" "--help"]
    ["-v" "--version"]])
 

@@ -58,7 +58,7 @@
   (let [persistence (config/persistence)
         projectors (conj (config/projectors persistence) (config/timeline persistence))
         processor (processor/create {} persistence projectors)]
-    (processor/replay processor "regression-set" 1000)
+    (processor/replay processor "regression-set" 1000 nil)
     (:statistics (processor/shutdown processor))))
 
 (defn clean-db []
