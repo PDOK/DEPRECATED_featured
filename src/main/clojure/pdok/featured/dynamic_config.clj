@@ -3,6 +3,7 @@
 (def ^:dynamic *persistence-schema* :featured)
 (def ^:dynamic *persistence-features* :feature)
 (def ^:dynamic *persistence-feature-stream* :feature_stream)
+(def ^:dynamic *persistence-collections* :collections)
 (def ^:dynamic *persistence-migrations* :persistence_migrations)
 
 (def ^:dynamic *timeline-schema* "featured")

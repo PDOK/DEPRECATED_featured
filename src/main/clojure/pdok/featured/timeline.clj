@@ -48,10 +48,6 @@
     (log/with-logs ['pdok.featured.timeline :trace :error]
       (joplin/migrate-db jdb))))
 
-(defn map->where-clause
-  ([clauses] (str/join " AND " (map #(str (name (first %1)) " = '" (second %1) "'") clauses)))
-  ([clauses table] (str/join " AND " (map #(str table "." (name (first %1)) " = '" (second %1) "'") clauses))))
-
 (defn- execute-query [timeline query]
   (try (j/with-db-connection [c (:db timeline)]
          (let [results (j/query c [query] :as-arrays? true)
@@ -64,21 +60,21 @@
   ([timeline dataset collection] (current timeline {:dataset dataset :collection collection}))
   ([timeline selector]
    (let [query (str "SELECT feature FROM " (qualified-current) " "
-                    "WHERE valid_to is null AND " (map->where-clause selector))]
+                    "WHERE valid_to is null AND " (pg/map->where-clause selector))]
      (execute-query timeline query))))
 
 (defn closed
   ([timeline dataset collection] (closed timeline {:dataset dataset :collection collection}))
   ([timeline selector]
    (let [query (str "SELECT feature FROM " (qualified-current) " "
-                    "WHERE valid_to is not null AND " (map->where-clause selector))]
+                    "WHERE valid_to is not null AND " (pg/map->where-clause selector))]
      (execute-query timeline query))))
 
 (defn history
   ([timeline dataset collection] (history timeline {:dataset dataset :collection collection}))
   ([timeline selector]
    (let [query (str "SELECT feature FROM " (qualified-history) " "
-                    "WHERE " (map->where-clause selector))]
+                    "WHERE " (pg/map->where-clause selector))]
      (execute-query timeline query))))
 
 (defn- record->result [fn-transform c record]

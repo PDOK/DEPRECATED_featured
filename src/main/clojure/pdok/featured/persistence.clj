@@ -65,6 +65,9 @@
 (defn- qualified-persistence-migrations []
   (str (name dc/*persistence-schema*) "." (name dc/*persistence-migrations*)))
 
+(defn- qualified-persistence-collections []
+  (str (name dc/*persistence-schema*) "." (name dc/*persistence-collections*)))
+
 (defn- jdbc-init [db]
   (when-not (pg/schema-exists? db dc/*persistence-schema*)
     (pg/create-schema db dc/*persistence-schema*))
@@ -75,6 +78,20 @@
              :migrations-table (qualified-persistence-migrations)}]
     (log/with-logs ['pdok.featured.persistence :trace :error]
       (joplin/migrate-db jdb))))
+
+(defn collection-exists? [db dataset collection parent-collection]
+  (j/with-db-connection [c db]
+    (let [results (j/query c [(str "SELECT id FROM " (qualified-persistence-collections)
+                                   " WHERE "
+                                   (pg/map->where-clause {:dataset dataset
+                                                          :collection collection
+                                                          :parent_collection parent-collection}))])]
+      (not (nil? (first results))))))
+
+(defn create-collection [db dataset collection parent-collection]
+  (let [sql (str "INSERT INTO " (qualified-persistence-collections)
+                 " (dataset, collection, parent_collection) VALUES (?, ?, ?)")]
+    (j/execute! db (list sql dataset collection parent-collection))))
 
 (defn record->feature [c record]
   (let [f (transient {})
@@ -248,7 +265,7 @@
         (prepare-childs-cache persistence dataset collection ids true)
         (prepare-parent-cache persistence dataset collection ids true)))))
 
-(defrecord CachedJdbcProcessorPersistence [db stream-batch stream-batch-size stream-cache
+(defrecord CachedJdbcProcessorPersistence [db collection-cache stream-batch stream-batch-size stream-cache
                                          link-batch link-batch-size childs-cache parent-cache]
   ProcessorPersistence
   (init [this] (jdbc-init db) this)
@@ -269,13 +286,17 @@
   (create-stream [this dataset collection id]
     (create-stream this dataset collection id nil nil nil))
   (create-stream [_ dataset collection id parent-collection parent-id parent-field]
-    (let [childs-key-fn (fn [dataset _ _ p-col p-id _] [dataset p-col p-id])
+    (let [cached-collection-exists? (cached collection-cache collection-exists? db)
+          childs-key-fn (fn [dataset _ _ p-col p-id _] [dataset p-col p-id])
           childs-value-fn append-cached-child
           parent-key-fn (fn [dataset collection id _ _ _] [dataset collection id])
           parent-value-fn (fn [_ _ _ _ pc pid pf] [pc pid pf])
           batched (with-batch link-batch link-batch-size (partial jdbc-create-stream db))
           cache-batched (with-cache childs-cache batched childs-key-fn childs-value-fn)
           double-cache-batched (with-cache parent-cache cache-batched parent-key-fn parent-value-fn)]
+      (when-not (cached-collection-exists? dataset collection parent-collection)
+        (create-collection db dataset collection parent-collection)
+        (cached-collection-exists? :reload dataset collection parent-collection))
       (double-cache-batched dataset collection id parent-collection parent-id parent-field)))
   (append-to-stream [_ version action dataset collection id validity geometry attributes]
     ;(println "APPEND: " id)
@@ -316,6 +337,7 @@
 
 (defn cached-jdbc-processor-persistence [config]
   (let [db (:db-config config)
+        collection-cache (atom {})
         stream-batch-size (or (:stream-batch-size config) (:batch-size config) 10000)
         stream-batch (ref (clojure.lang.PersistentQueue/EMPTY))
         stream-cache (ref (cache/basic-cache-factory {}))
@@ -323,7 +345,7 @@
         link-batch (ref (clojure.lang.PersistentQueue/EMPTY))
         childs-cache (ref (cache/basic-cache-factory {}))
         parent-cache (ref (cache/basic-cache-factory {}))]
-    (CachedJdbcProcessorPersistence. db stream-batch stream-batch-size stream-cache
+    (CachedJdbcProcessorPersistence. db collection-cache stream-batch stream-batch-size stream-cache
                                      link-batch link-batch-size childs-cache parent-cache)))
 
 (defrecord NoStatePersistence []

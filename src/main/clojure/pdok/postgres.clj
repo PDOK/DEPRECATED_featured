@@ -244,3 +244,12 @@ FROM information_schema.columns
         clj-type (clj-to-pg-type column-type)
         cmd (format template (-> schema name quoted) (-> collection name quoted) (-> column-name name quoted) clj-type)]
     (j/db-do-commands db cmd)))
+
+(defn kv->clause [[k v]]
+  (if v
+    (str (name k) " = '" (clojure.string/replace v #"'" "''") "'")
+    (str (name k) " is null")))
+
+(defn map->where-clause
+  ([clauses] (clojure.string/join " AND " (map kv->clause clauses)))
+  ([clauses table] (clojure.string/join " AND " (map #(str table "." (kv->clause %)) clauses))))

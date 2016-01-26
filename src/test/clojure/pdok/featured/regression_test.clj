@@ -8,6 +8,7 @@
              [processor :as processor]
              [extracts :as e]
              [json-reader :as json-reader]]
+            [pdok.postgres :as pg]
             [clojure.math.combinatorics :as combo]
             [clojure.core.async :as a
              :refer [>! <! >!! <!! go chan]]
@@ -87,7 +88,7 @@
                ~@body)))))))
 
 (defn- query [table selector]
-  (let [clauses (timeline/map->where-clause selector)]
+  (let [clauses (pg/map->where-clause selector)]
   (j/query test-db [ (str "SELECT * FROM featured_regression." table " "
                           "WHERE dataset = 'regression-set' "
                           "AND " clauses )])))

@@ -1,4 +1,5 @@
 (ns pdok.featured.projectors-test
+  (:refer-clojure :exclude [flush])
   (:require [clojure.test :refer :all]
             [pdok.featured.tiles :as tiles]
             [pdok.featured.projectors :refer :all]))
