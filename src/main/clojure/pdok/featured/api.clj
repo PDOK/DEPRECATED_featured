@@ -21,13 +21,13 @@
             [ring.middleware.json :refer :all]
             [ring.util.response :as r]
             [schema.core :as s])
-   )
+  (:import [com.fasterxml.jackson.core JsonGenerator]))
 
 (extend-protocol cheshire.generate/JSONable
   org.joda.time.DateTime
-  (to-json [t jg] (.writeString jg (str t)))
+  (to-json [t ^JsonGenerator jg] (.writeString jg (str t)))
   schema.utils.ValidationError
-  (to-json [t jg] (.writeString jg (pr-str t))))
+  (to-json [t ^JsonGenerator jg] (.writeString jg (pr-str t))))
 
 (defn uri [str]
   (try
