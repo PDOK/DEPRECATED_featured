@@ -16,7 +16,9 @@
 (def lower-case
   (fnil str/lower-case ""))
 
-(deftype NilAttribute [class]
+(def memoized-resolve (memoize resolve))
+
+(deftype NilAttribute [symbol]
   Object
   (toString [_] nil)
   clojure.lang.IEditableCollection
@@ -25,12 +27,12 @@
   (conj [this _] this)
   (persistent [v] v)
   (assoc [this _ _] this)
-  (valAt [_ _] class)
-  (valAt [_ _ _] class)
+  (valAt [_ _] symbol)
+  (valAt [_ _ _] symbol)
   j/ISQLValue
   (sql-value [v] nil)
   clojure.lang.IMeta
-  (meta [_] {:type class})
+  (meta [_] {:type (memoized-resolve symbol)})
   clojure.lang.Seqable
    (seq [_] nil)
   )
@@ -41,8 +43,8 @@
 (def nil-attribute-writer
   (transit/write-handler
    "x"
-   (fn [v] (.getName ^java.lang.Class (:class v)))
-   (fn [v] (.getName ^java.lang.Class (:class v)))))
+   (fn [^NilAttribute v] (str (.symbol v)))
+   (fn [^NilAttribute v] (str (.symbol v)))))
 
 (def nil-attribute-reader
   (transit/read-handler
