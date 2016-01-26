@@ -136,8 +136,8 @@
       (append-feature persistence enriched-feature)
       (doseq [p projectors] (proj/close-feature p enriched-feature))
       (list enriched-feature))
-    (let [change-feature (with-current-version persistence 
-                                               (-> feature 
+    (let [change-feature (with-current-version persistence
+                                               (-> feature
                                                (transient)
                                                (assoc! :action :change)
                                                (dissoc! :src)
@@ -358,7 +358,8 @@
           _ (pers/flush (:persistence processor)) ;; flush before run, to save cache in shutdown
           _ (pers/prepare (:persistence processor) prepped)
           consumed (with-bench t (log/debug "Consumed batch in" t "ms")
-                     (doall (consume* processor prepped)))]
+                     (doall (consume* processor prepped)))
+          _ (doseq [p (:projectors processor)] (proj/flush p))]
       consumed)))
 
 (defn consume [processor features]
@@ -382,6 +383,7 @@
             :close (doseq [p projectors] (proj/close-feature p f))
             :delete (doseq [p projectors] (proj/delete-feature p f)))
           (swap! statistics update :replayed inc))
+        (doseq [p projectors] (proj/flush p))
         (recur (a/<!! parts))))))
 
 (defn shutdown [{:keys [persistence projectors statistics]}]

@@ -217,6 +217,9 @@
                              flush-fn proj-fn no-visualization ndims srid]
   proj/Projector
   (proj/init [this] this)
+  (proj/flush [this]
+    (flush-fn)
+    this)
   (proj/new-feature [p feature]
     (if (proj/accept? p feature)
       (let [{:keys [dataset collection attributes]} feature
@@ -265,7 +268,7 @@
   (proj/accept? [_ feature]
          (not (some #{(:collection feature)} no-visualization)))
   (proj/close [this]
-    (flush-fn)
+    (proj/flush this)
     this))
 
 

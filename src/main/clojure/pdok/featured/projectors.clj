@@ -1,7 +1,9 @@
-(ns pdok.featured.projectors)
+(ns pdok.featured.projectors
+  (:refer-clojure :exclude [flush]))
 
 (defprotocol Projector
   (init [proj])
+  (flush [proj])
   (new-feature [proj feature])
   (change-feature [proj feature])
   (close-feature [proj feature])

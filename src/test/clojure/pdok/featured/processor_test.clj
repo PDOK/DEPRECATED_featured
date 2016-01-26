@@ -34,6 +34,7 @@
 (defrecord MockedProjector [features-n changes-n]
   proj/Projector
   (init [this] (assoc this :initialized true))
+  (flush [this] this)
   (new-feature [_ feature]
     (swap! features-n inc))
   (change-feature [_ feature]

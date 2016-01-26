@@ -92,9 +92,13 @@
                           "WHERE dataset = 'regression-set' "
                           "AND " clauses )])))
 
-(defn- test-persistence [collection feature-id {:keys [events features]}]
-    (is (= events (count (query "feature_stream" {:collection collection :feature_id feature-id}))))
-    (is (= features (count (query "feature" {:collection collection :feature_id feature-id})))))
+(defn- test-persistence
+  ([collection selectors] (test-persistence collection nil selectors))
+  ([collection feature-id {:keys [events features]}]
+   (is (= events (count (query "feature_stream" (cond-> {:collection collection}
+                                                  feature-id (assoc :feature_id feature-id))))))
+   (is (= features (count (query "feature" (cond-> {:collection collection}
+                                             feature-id (assoc :feature_id feature-id))))))))
 
 
 (defn- test-timeline [collection feature-id {:keys [timeline-current timeline timeline-changelog]}]
@@ -197,3 +201,25 @@
                                  :timeline-changelog {:n-new 2 :n-change 3 :n-delete 3}})
   (test-timeline->extract 2)
   (test-geoserver "col-1" 1))
+
+(defregressiontest new-feature-with-nested-null-geom "col-2_id-b_new_with_nested_null_geom" stats
+  (is (= 2 (:n-processed stats)))
+  (is (= 0 (:n-errored stats)))
+  (test-persistence "col-2" "id-b" {:events 1 :features 1})
+  (test-persistence "col-2$nested" {:events 1 :features 1})
+  (test-timeline "col-2" "id-b" {:timeline-current {:n 1}
+                                 :timeline {:n 0}
+                                 :timeline-changelog {:n-new 1 :n-change 1}})
+  (test-timeline->extract 1)
+  (test-geoserver "col-2" 1))
+
+(defregressiontest new-feature-with-nested-crappy-geom "col-2_id-b_new_with_nested_crappy_geom" stats
+  (is (= 2 (:n-processed stats)))
+  (is (= 0 (:n-errored stats)))
+  (test-persistence "col-2" "id-b" {:events 1 :features 1})
+  (test-persistence "col-2$nested" {:events 1 :features 1})
+  (test-timeline "col-2" "id-b" {:timeline-current {:n 1}
+                                 :timeline {:n 0}
+                                 :timeline-changelog {:n-new 1 :n-change 1}})
+  (test-timeline->extract 1)
+  (test-geoserver "col-2" 1))

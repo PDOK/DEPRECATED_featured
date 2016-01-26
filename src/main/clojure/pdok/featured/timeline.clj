@@ -358,6 +358,9 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
   proj/Projector
   (proj/init [this]
     (init db) this)
+  (proj/flush [this]
+    (flush-fn)
+    this)
   (proj/new-feature [_ feature]
     (let [[dataset collection id] (feature-key feature)
           [root-col root-id] (root-fn dataset collection id)
@@ -420,7 +423,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
                                        v :delete]))))))
   (proj/accept? [_ feature] true)
   (proj/close [this]
-    (flush-fn)
+    (proj/flush this)
     this)
   )
 
@@ -457,11 +460,16 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
   proj/Projector
   (proj/init [this]
     (init db) this)
+  (proj/flush [this]
+    (process-chunk config chunk)
+    this)
   (proj/new-feature [_ feature] (process-fn feature))
   (proj/change-feature [_ feature] (process-fn feature))
   (proj/close-feature [_ feature] (process-fn feature))
   (proj/delete-feature [_ feature] (process-fn feature))
-  (proj/close [this] (process-chunk config chunk)))
+  (proj/close [this]
+    (proj/flush this)
+    this))
 
 (defn create
   ([config] (create config (ref (cache/basic-cache-factory {}))))
