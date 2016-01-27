@@ -18,6 +18,9 @@
 
 (declare consume consume* process pre-process append-feature)
 
+(defn make-seq [obj]
+  (if (seq? obj) obj (list obj)))
+
 (defn- make-invalid [feature reason]
   (let [current-reasons (or (:invalid-reasons feature) [])
         new-reasons (conj current-reasons reason)]
@@ -251,13 +254,13 @@
         validity (pers/current-validity persistence dataset collection id)
         state (pers/last-action persistence dataset collection id)]
         (if-not (= state :close)
-          (consume* processor (conj metas {:action :close
+          (mapcat (partial process processor) (conj metas {:action :close
                                             :dataset dataset
                                             :collection collection
                                             :id id
                                             :current-validity validity
                                             :validity close-time}))
-          (consume* processor metas))))
+          (mapcat (partial process processor) metas))))
 
 (defn- close-childs [processor meta-record]
   (let [{:keys [dataset collection parent-collection parent-id validity]} meta-record
@@ -269,16 +272,16 @@
 (defn- delete-child* [processor dataset collection id]
   (let [persistence (:persistence processor)
         validity (pers/current-validity persistence dataset collection id)]
-    (consume* processor (list
-                        {:action :delete-childs
-                         :dataset dataset
-                         :parent-collection collection
-                         :parent-id id}
-                        {:action :delete
-                         :dataset dataset
-                         :collection collection
-                         :id id
-                         :current-validity validity}))))
+    (mapcat (partial process processor) (list
+                                  {:action :delete-childs
+                                   :dataset dataset
+                                   :parent-collection collection
+                                   :parent-id id}
+                                  {:action :delete
+                                   :dataset dataset
+                                   :collection collection
+                                   :id id
+                                   :current-validity validity}))))
 
 (defn- delete-childs [processor {:keys [dataset parent-collection parent-id]}]
   (let [persistence (:persistence processor)
@@ -286,14 +289,11 @@
         deleted (doall (mapcat (fn [[col id]] (delete-child* processor dataset col id)) ids))]
     deleted))
 
-(defn make-seq [obj]
-  (if (seq? obj) obj (list obj)))
-
-(defn process [processor feature ]
-  "Processes feature events. Should return the feature, possibly with added data"
+(defn process [processor feature]
+  "Processes feature events. Should return the feature, possibly with added data, returns sequence"
   (let [validated (validate processor feature)]
     (if (:invalid? validated)
-      validated
+      (make-seq validated)
       (let [vf (assoc validated :version (random/ordered-UUID))
             processed
             (condp = (:action vf)
@@ -307,7 +307,7 @@
               :close-childs (close-childs processor vf);; should save this too... So we can backtrack actions. Right?
               :delete-childs (delete-childs processor vf)
               (make-invalid vf (str "Unknown action:" (:action vf))))]
-        processed))))
+        (make-seq processed)))))
 
 
 (defn rename-keys [src-map change-key]
@@ -344,7 +344,7 @@
 
 (defn consume* [processor features]
   (letfn [(consumer [feature]
-            (let [consumed (make-seq (process processor feature))]
+            (let [consumed (filter (complement nil?) (process processor feature))]
               (doseq [f consumed]
                 (if (:invalid? f) (log/warn (:id f) (:invalid-reasons f)))
                 (update-statistics processor f))

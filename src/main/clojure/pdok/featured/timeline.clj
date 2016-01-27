@@ -164,7 +164,7 @@
                  (recur rest (get field-value i) #(f (update-in t [field i] (fn [v] (clojure.core/merge v %))))))
                ;; not found -> append
                (if (= :close action)
-                 (recur rest nil f)
+                 (recur nil nil (fn [_] (f target) ))
                  (recur rest {} #(f (assoc-in t [field (count field-value)] %)))))
              ;; if it is not a vector we are probable replacing existing values.
              ;; Treat this as a non existing value, ie. override value;

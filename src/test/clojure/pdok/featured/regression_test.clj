@@ -69,13 +69,13 @@
   (with-test-out
     (println ">>"(-> m :var meta :name))))
 
-(defmacro defregressiontest [name file stats-var & body]
+(defmacro defregressiontest* [name permutated? file stats-var & body]
   `(deftest ~name
      (with-bindings
        {#'dc/*persistence-schema* :featured_regression
         #'dc/*timeline-schema* :featured_regression}
        (let [[meta# features#] (json-features (str "regression/" ~file ".json"))
-             permutated# (permutate-features features#)
+             permutated# (if ~permutated? (permutate-features features#) [[features#]])
              n# (count permutated#)
              i# (atom 0)]
          (doseq [p# permutated#]
@@ -87,6 +87,12 @@
                (replay)
                ~@body)))))))
 
+(defmacro defpermutatedtest [name file stats-var & body]
+  `(defregressiontest* ~name true ~file ~stats-var ~@body))
+
+(defmacro defregressiontest [name file stats-var & body]
+  `(defregressiontest* ~name false ~file ~stats-var ~@body))
+
 (defn- query [table selector]
   (let [clauses (pg/map->where-clause selector)]
   (j/query test-db [ (str "SELECT * FROM featured_regression." table " "
@@ -96,13 +102,15 @@
 (defn- test-persistence
   ([collection selectors] (test-persistence collection nil selectors))
   ([collection feature-id {:keys [events features]}]
-   (is (= events (count (query "feature_stream" (cond-> {:collection collection}
-                                                  feature-id (assoc :feature_id feature-id))))))
-   (is (= features (count (query "feature" (cond-> {:collection collection}
-                                             feature-id (assoc :feature_id feature-id))))))))
+   (testing "!>>> Persistence"
+     (is (= events (count (query "feature_stream" (cond-> {:collection collection}
+                                                    feature-id (assoc :feature_id feature-id))))))
+     (is (= features (count (query "feature" (cond-> {:collection collection}
+                                               feature-id (assoc :feature_id feature-id)))))))))
 
 
 (defn- test-timeline [collection feature-id {:keys [timeline-current timeline timeline-changelog]}]
+  (testing "!>>> Timeline"
     (is (= (:n timeline-current) (count (query "timeline_current" {:collection collection :feature_id feature-id}))))
     (is (= (:n timeline) (count (query "timeline" {:collection collection :feature_id feature-id}))))
     (is (= (or (:n-new timeline-changelog) 0)
@@ -112,9 +120,7 @@
     (is (= (or (:n-close timeline-changelog) 0)
            (count (query "timeline_changelog" {:collection collection :action "close"}))))
     (is (= (or (:n-delete timeline-changelog) 0)
-           (count (query "timeline_changelog" {:collection collection :action "delete"}))))
-
-    )
+           (count (query "timeline_changelog" {:collection collection :action "delete"}))))))
 
 (defn- inserted-features [extracts dataset collection extract-type features]
   (doseq [f features]
@@ -143,7 +149,7 @@
   (is (= n (count (query-geoserver collection)))))
 
 
-(defregressiontest new-feature "col-2_id-b_new" stats
+(defpermutatedtest new-feature "col-2_id-b_new" stats
   (is (= 1 (:n-processed stats)))
   (is (= 0 (:n-errored stats)))
   (test-persistence "col-2" "id-b" {:events 1 :features 1})
@@ -153,7 +159,7 @@
   (test-timeline->extract 1)
   (test-geoserver "col-2" 1))
 
-(defregressiontest new-change-feature "col-2_id-b_new-change" stats
+(defpermutatedtest new-change-feature "col-2_id-b_new-change" stats
   (is (= 2 (:n-processed stats)))
   (is (= 0 (:n-errored stats)))
   (test-persistence "col-2" "id-b" {:events 2 :features 1})
@@ -163,7 +169,7 @@
   (test-timeline->extract 2)
   (test-geoserver "col-2" 1))
 
-(defregressiontest new-change-close-feature "col-2_id-b_new-change-close" stats
+(defpermutatedtest new-change-close-feature "col-2_id-b_new-change-close" stats
   (is (= 3 (:n-processed stats)))
   (is (= 0 (:n-errored stats)))
   (test-persistence "col-2" "id-b" {:events 3 :features 1})
@@ -173,7 +179,7 @@
   (test-timeline->extract 2)
   (test-geoserver "col-2" 0))
 
-(defregressiontest new-change-close_with_attributes-feature "col-2_id-b_new-change-close_with_attributes" stats
+(defpermutatedtest new-change-close_with_attributes-feature "col-2_id-b_new-change-close_with_attributes" stats
   (is (= 4 (:n-processed stats)))
   (is (= 0 (:n-errored stats)))
   (test-persistence "col-2" "id-b" {:events 4 :features 1})
@@ -183,7 +189,7 @@
   (test-timeline->extract 3)
   (test-geoserver "col-2" 0))
 
-(defregressiontest new-change-change-delete-feature "col-1_id-a_new-change-change-delete" stats
+(defpermutatedtest new-change-change-delete-feature "col-1_id-a_new-change-change-delete" stats
   (is (= 4 (:n-processed stats)))
   (is (= 0 (:n-errored stats)))
   (test-persistence "col-1" "id-a" {:events 4 :features 1})
@@ -193,7 +199,7 @@
   (test-timeline->extract 0)
   (test-geoserver "col-1" 0))
 
-(defregressiontest new-change-change-delete-new-change-feature "col-1_id-a_new-change-change-delete-new-change" stats
+(defpermutatedtest new-change-change-delete-new-change-feature "col-1_id-a_new-change-change-delete-new-change" stats
   (is (= 6 (:n-processed stats)))
   (is (= 0 (:n-errored stats)))
   (test-persistence "col-1" "id-a" {:events 6 :features 1})
@@ -203,7 +209,7 @@
   (test-timeline->extract 2)
   (test-geoserver "col-1" 1))
 
-(defregressiontest new-feature-with-nested-null-geom "col-2_id-b_new_with_nested_null_geom" stats
+(defpermutatedtest new-feature-with-nested-null-geom "col-2_id-b_new_with_nested_null_geom" stats
   (is (= 2 (:n-processed stats)))
   (is (= 0 (:n-errored stats)))
   (test-persistence "col-2" "id-b" {:events 1 :features 1})
@@ -214,7 +220,7 @@
   (test-timeline->extract 1)
   (test-geoserver "col-2" 1))
 
-(defregressiontest new-feature-with-nested-crappy-geom "col-2_id-b_new_with_nested_crappy_geom" stats
+(defpermutatedtest new-feature-with-nested-crappy-geom "col-2_id-b_new_with_nested_crappy_geom" stats
   (is (= 2 (:n-processed stats)))
   (is (= 0 (:n-errored stats)))
   (test-persistence "col-2" "id-b" {:events 1 :features 1})
@@ -224,3 +230,16 @@
                                  :timeline-changelog {:n-new 1 :n-change 1}})
   (test-timeline->extract 1)
   (test-geoserver "col-2" 1))
+
+(defregressiontest double-nested-new-delete-new-change-feature "col-2_id-b_double_nested_new_delete_new_change" stats
+  (is (= (+ 3 3 3 5) (:n-processed stats)))
+  (is (= 0 (:n-errored stats)))
+  (test-persistence "col-2" "id-b" {:events 4 :features 1})
+  (test-persistence "col-2$nestedserie" {:events 5 :features 3})
+  (test-persistence "col-2$nestedserie$label" {:events 5 :features 3})
+  (test-timeline "col-2" "id-b" {:timeline-current {:n 1}
+                                 :timeline {:n 1}
+                                 :timeline-changelog {:n-new 2 :n-change 7 :n-delete 3 :n-close 2}})
+  (test-timeline->extract 2)
+  (test-geoserver "col-2" 1)
+  (test-geoserver "col-2$nestedserie$label" 1))
