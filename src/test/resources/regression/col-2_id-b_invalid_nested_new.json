@@ -1,0 +1,12 @@
+{"_check_validity_on_delete" : false,
+ "Features": [
+     {"_action":"new",
+      "_id":"id-b",
+      "_collection":"col-2",
+      "attra":"2",
+      "nested": {
+          "info": "a",
+          "_geometry": {"type":"gml","gml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><gml:Point xmlns:gml=\"http://www.opengis.net/gml\"><gml:pos>154742.108 464096.362</gml:pos></gml:Point>"}
+      },
+      "_geometry":{"type":"gml","gml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><gml:Point xmlns:gml=\"http://www.opengis.net/gml\"><gml:pos>154742.108 464096.362</gml:pos></gml:Point>"}}
+ ]}

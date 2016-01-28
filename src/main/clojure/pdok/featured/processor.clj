@@ -26,11 +26,15 @@
         new-reasons (conj current-reasons reason)]
     (-> feature (assoc :invalid? true) (assoc :invalid-reasons new-reasons))))
 
-(defn- apply-all-features-validation [_ feature]
+(defn- apply-all-features-validation [{:keys [invalids]} feature]
   (let [{:keys [dataset collection id action validity geometry attributes]} feature]
-    (if (or (some str/blank? [dataset collection id]) (and (not= action :delete) (nil? validity)))
-      (make-invalid feature "All feature require: dataset collection id validity")
-      feature)))
+    (cond-> feature
+      (or (some str/blank? [dataset collection id]) (and (not= action :delete) (nil? validity)))
+      (make-invalid "All feature require: dataset collection id validity")
+      (@invalids [(:dataset feature) (:collection feature) (:id feature)])
+      (make-invalid "Feature marked invalid")
+      (@invalids [(:dataset feature) (:parent-collection feature) (:parent-id feature)])
+      (make-invalid "Parent marked invalid"))))
 
 (defn- stream-exists? [persistence {:keys [dataset collection id]}]
   (and (pers/stream-exists? persistence dataset collection id)
@@ -75,34 +79,37 @@
       feature))
   )
 
-(defn- validate [{:keys [persistence] :as processor} feature]
+(defn- validate [{:keys [persistence invalids] :as processor} feature]
   "Validates features. Nested actions are validated against new checks, because we always close the old nested features."
-  (condp contains? (:action feature)
-    #{:new :nested-new :nested-change :nested-close}
-    (let [validated  (->> feature
-                          (apply-all-features-validation persistence)
-                          (apply-new-feature-requires-non-existing-stream-validation persistence))]
-      validated)
-    #{:change}
-    (->> feature
-         (apply-all-features-validation persistence)
-         (apply-non-new-feature-requires-existing-stream-validation persistence)
-         (apply-closed-feature-cannot-be-changed-validation persistence)
-         (apply-non-new-feature-current-validity-validation persistence))
-    #{:close}
-    (->> feature
-         (apply-all-features-validation persistence)
-         (apply-closed-feature-cannot-be-changed-validation persistence)
-         (apply-non-new-feature-requires-existing-stream-validation persistence)
-         (apply-non-new-feature-current-validity-validation persistence))
-    #{:delete}
-    (cond->> feature
-         true (apply-all-features-validation persistence)
-         true (apply-non-new-feature-requires-existing-stream-validation persistence)
-         (:check-validity-on-delete processor)
-         (apply-non-new-feature-current-validity-validation persistence))
-    feature
-    ))
+  (let [validated
+        (condp contains? (:action feature)
+          #{:new :nested-new :nested-change :nested-close}
+          (->> feature
+               (apply-all-features-validation processor)
+               (apply-new-feature-requires-non-existing-stream-validation persistence))
+          #{:change}
+          (->> feature
+               (apply-all-features-validation processor)
+               (apply-non-new-feature-requires-existing-stream-validation persistence)
+               (apply-closed-feature-cannot-be-changed-validation persistence)
+               (apply-non-new-feature-current-validity-validation persistence))
+          #{:close}
+          (->> feature
+               (apply-all-features-validation processor)
+               (apply-closed-feature-cannot-be-changed-validation persistence)
+               (apply-non-new-feature-requires-existing-stream-validation persistence)
+               (apply-non-new-feature-current-validity-validation persistence))
+          #{:delete}
+          (cond->> feature
+            true (apply-all-features-validation processor)
+            true (apply-non-new-feature-requires-existing-stream-validation persistence)
+            (:check-validity-on-delete processor)
+            (apply-non-new-feature-current-validity-validation persistence))
+          feature
+          )]
+    (when (:invalid? validated)
+      (vswap! invalids conj [(:dataset validated) (:collection validated) (:id validated)]))
+    validated))
 
 (defn- with-current-version [persistence feature]
   (if-not (:invalid? feature)
@@ -155,11 +162,12 @@
 (defn- process-nested-close-feature [processor feature]
   (let [nw (process-new-feature processor (assoc feature :action :new))
         {:keys [action dataset collection id validity geometry attributes]} nw
-        no-update-nw (-> nw
-                         (assoc :action :close)
-                         (dissoc :geometry)
-                         (assoc :attributes {})
-                         (assoc :current-validity validity))]
+        no-update-nw (-> nw (transient)
+                         (assoc! :action :close)
+                         (dissoc! :geometry)
+                         (assoc! :attributes {})
+                         (assoc! :current-validity validity)
+                         (persistent!))]
     (list nw (process-close-feature processor no-update-nw))))
 
 (defn- process-delete-feature [{:keys [persistence projectors]} feature]
@@ -204,17 +212,14 @@
 
 (defn- meta-close-childs [features]
   "{:action :close-childs :dataset _ :collection _ :parent-collection _ :parent-id _ :validity _"
-  (let [grouped (group-by #(select-keys % [:dataset :collection :parent-collection :parent-id :validity]) features)]
-    (letfn [(meta [dataset collection parent-collection parent-id validity]
-              {:action :close-childs
-               :dataset dataset
-               :collection collection
-               :parent-collection parent-collection
-               :parent-id parent-id
-               :validity validity})]
-      (map (fn [[{:keys [dataset collection parent-collection parent-id validity]} _]]
-             (meta dataset collection parent-collection parent-id validity)) grouped)
-      )))
+  (letfn [(meta [f]
+            {:action :close-childs
+             :dataset (:dataset f)
+             :collection (:collection f)
+             :parent-collection (:parent-collection f)
+             :parent-id (:parent-id f)
+             :validity (:validity f)})]
+    (distinct (map meta features))))
 
 (defn- flatten [processor feature]
   (if (= :delete (:action feature))
@@ -242,7 +247,7 @@
         collected (assoc no-attributes :attributes collected)]
     collected))
 
-(defn- close-child [processor dataset collection id close-time]
+(defn- close-child [processor dataset parent-collection parent-id collection id close-time]
   (let [persistence (:persistence processor)
         childs-of-child (pers/childs persistence dataset collection id)
         metas (map (fn [[child-col child-id]] {:action :close-childs
@@ -254,19 +259,24 @@
         validity (pers/current-validity persistence dataset collection id)
         state (pers/last-action persistence dataset collection id)]
         (if-not (= state :close)
-          (mapcat (partial process processor) (conj metas {:action :close
-                                            :dataset dataset
-                                            :collection collection
-                                            :id id
-                                            :current-validity validity
-                                            :validity close-time}))
+          (mapcat (partial process processor)
+                  (conj metas {:action :close
+                               :dataset dataset
+                               :parent-collection parent-collection
+                               :parent-id parent-id
+                               :collection collection
+                               :id id
+                               :current-validity validity
+                               :validity close-time}))
           (mapcat (partial process processor) metas))))
 
 (defn- close-childs [processor meta-record]
   (let [{:keys [dataset collection parent-collection parent-id validity]} meta-record
         persistence (:persistence processor)
         ids (pers/childs persistence dataset parent-collection parent-id collection)
-        closed (doall (mapcat (fn [[_ id]] (close-child processor dataset collection id validity)) ids))]
+        closed (doall (mapcat
+                       (fn [[_ id]] (close-child processor dataset parent-collection parent-id
+                                                collection id validity)) ids))]
      closed))
 
 (defn- delete-child* [processor dataset collection id]
@@ -412,5 +422,6 @@
              :persistence initialized-persistence
              :projectors initialized-projectors
              :batch-size batch-size
+             :invalids (volatile! #{})
              :statistics (atom {:n-src 0 :n-processed 0 :n-errored 0 :errored '() :replayed 0})}
             options))))

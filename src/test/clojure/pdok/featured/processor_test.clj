@@ -49,9 +49,10 @@
 (defn create-processor
   ([] (create-processor 1))
   ([n-projectors]
-   {:batch-size 1
-    :persistence (create-persistence)
-    :projectors (create-projectors n-projectors)}))
+   (processor/create
+    {:batch-size 1}
+    (create-persistence)
+    (create-projectors n-projectors))))
 
 (defn consume-single [processor feature]
   (->> [feature] (consume* processor) (first)))

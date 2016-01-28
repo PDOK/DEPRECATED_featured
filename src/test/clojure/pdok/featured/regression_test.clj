@@ -143,7 +143,9 @@
     (is (= n-extracts (count @extracts)))))
 
 (defn- query-geoserver [table]
-  (j/query test-db [ (str "SELECT * FROM \"regression-set\".\"" table "\"" )]))
+  (if-not (pg/table-exists? test-db "regression-set" table)
+    []
+    (j/query test-db [ (str "SELECT * FROM \"regression-set\".\"" table "\"" )])))
 
 (defn- test-geoserver [collection n]
   (is (= n (count (query-geoserver collection)))))
@@ -242,4 +244,30 @@
                                  :timeline-changelog {:n-new 2 :n-change 7 :n-delete 3 :n-close 2}})
   (test-timeline->extract 2)
   (test-geoserver "col-2" 1)
+  (test-geoserver "col-2$nestedserie$label" 1))
+
+(defpermutatedtest invalid-nested-new-feature "col-2_id-b_invalid_nested_new" stats
+  (is (= 2 (:n-processed stats)))
+  (is (= 2 (:n-errored stats)))
+  (test-persistence "col-2" "id-b" {:events 0 :features 0})
+  (test-persistence "col-2$nested" {:events 0 :features 0})
+  (test-timeline "col-2" "id-b" {:timeline-current {:n 0}
+                                 :timeline {:n 0}
+                                 :timeline-changelog {}})
+  (test-timeline->extract 0)
+  (test-geoserver "col-2" 0)
+  (test-geoserver "col-2$nested" 0))
+
+(defpermutatedtest double-nested-new-invalid-change-feature "col-2_id-b_double_nested_new_invalid_change" stats
+  (is (= (+ 3 1 2 2) (:n-processed stats)))
+  (is (= 5 (:n-errored stats)))
+  (test-persistence "col-2" "id-b" {:events 1 :features 1})
+  (test-persistence "col-2$nestedserie" {:events 1 :features 1})
+  (test-persistence "col-2$nestedserie$label" {:events 1 :features 1})
+  (test-timeline "col-2" "id-b" {:timeline-current {:n 1}
+                                 :timeline {:n 0}
+                                 :timeline-changelog {:n-new 1 :n-change 2}})
+  (test-timeline->extract 1)
+  (test-geoserver "col-2" 1)
+  (test-geoserver "col-2$nestedserie" 0)
   (test-geoserver "col-2$nestedserie$label" 1))
