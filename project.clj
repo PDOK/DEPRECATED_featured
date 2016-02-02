@@ -76,8 +76,9 @@
   :java-source-paths ["src/main/java"]
   :resource-paths ["config" "src/main/resources"]
   :test-paths ["src/test/clojure"]
-  :test-selectors {:default (complement :regression)
-                   :regression :regression}
+  :test-selectors {:default (fn [m] (not (or (:performance m) (:regression m))))
+                   :regression :regression
+                   :performance :performance}
   :filegen [{:data {:RELEASE_VERSION ~release-version :CHANGE_NUMBER ~change-number}
              :template-fn (partial pdok.lein/generate-from-template "deployit-manifest.xml.template")
              :target "target/deployit-manifest.xml"}

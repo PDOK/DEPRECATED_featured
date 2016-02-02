@@ -39,13 +39,15 @@
   (-> feature
       (assoc :_action "change")
       (assoc :_current_validity (:_validity feature))
-      (assoc :_validity (tf/unparse date-time-formatter (t/plus (local-now) (t/minutes 1))))))
+      (assoc :_validity (tf/unparse date-time-formatter
+                          (t/plus (tf/parse date-time-formatter (:_validity feature)) (t/minutes 1))))))
 
 (defn transform-to-close [feature]
   (-> feature
       (assoc :_action "close")
       (assoc :_current_validity (:_validity feature))
-      (assoc :_validity (tf/unparse date-time-formatter (t/plus (local-now) (t/minutes 1))))))
+      (assoc :_validity (tf/unparse date-time-formatter
+                          (t/plus (tf/parse date-time-formatter (:_validity feature)) (t/minutes 1))))))
 
 (defn transform-to-delete [{:keys [_dataset _collection _id _validity]}]
   {:_action "delete"
@@ -74,9 +76,9 @@
                        [:_action :_collection :_id :_validity :_current_validity :_geometry]))
 
 (defn random-new-feature
-  ([collection attributes]
-   (let [id (random-word 10)
-         feature (new-feature collection id)
+  ([collection attribute] (random-new-feature collection attribute (random-word 10)))
+  ([collection attributes id]
+   (let [feature (new-feature collection id)
          feature (reduce (fn [acc [attr generator]] (add-attribute acc attr generator)) feature attributes)]
       feature)))
 
@@ -95,20 +97,16 @@
       1 (assoc base attr (first nested-features))
       (assoc base attr (into [] nested-features)))))
 
-(defn followed-by [feature change? close? delete?]
+(defn followed-by [feature change? close? delete? start-with-delete?]
   (let [change (fn [f] (selective-feature (transform-to-change f)))
         close  (fn [f] (selective-feature (transform-to-close f)))
         delete (fn [f] (selective-feature (transform-to-delete f)))
-        result [feature]
-        result (if change?
-                 (conj result (change feature))
-                 result)
-        result (if close?
-                 (conj result (close (last result)))
-                 result)
-        result (if delete?
-                 (conj result (delete (last result)))
-                 result)]
+        result (cond-> []
+                 start-with-delete? (conj (delete feature))
+                 true (conj feature)
+                 change? (conj (change feature))
+                 close? (#(conj %1 (close (last %1))))
+                 delete? (#(conj %1 (delete (last %1)))))]
     result))
 
 (defn create-attributes [simple-attributes & {:keys [names]}]
@@ -118,13 +116,15 @@
     attributes))
 
 (defn random-json-features [out-stream dataset collection total & args]
-  (let [{:keys [change? close? delete? nested geometry?]
-         :or {change? false close? false delete? false nested 0 geometry? true}} args
+  (let [{:keys [change? close? delete? start-with-delete? nested geometry? ids]
+         :or {change? false close? false delete? false
+              start-with-delete? false nested 0 geometry? true
+              ids (repeatedly #(random-word 10))}} args
         validity (tf/unparse date-time-formatter (local-now))
         attributes (create-attributes 3)
-        new-features (repeatedly #(random-new-feature collection attributes))
+        new-features (map #(random-new-feature collection attributes %) ids)
         with-nested (map #(combine-to-nested-feature % "nested" geometry?) (partition (+ 1 nested) new-features))
-        with-extra (mapcat #(followed-by % change? close? delete?) with-nested)
+        with-extra (mapcat #(followed-by % change? close? delete? start-with-delete?) with-nested)
         package {:_meta {}
                  :dataset dataset
                  :features (take total with-extra)}]
