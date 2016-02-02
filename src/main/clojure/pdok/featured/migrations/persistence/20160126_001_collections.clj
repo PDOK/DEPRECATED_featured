@@ -9,6 +9,6 @@
                    [:collection "varchar(255)"]
                    [:parent_collection "varchar(100)"])
   (pg/create-index db dc/*persistence-schema* dc/*persistence-collections*
-                   :dataset :collection :child_collection))
+                   :dataset :collection :parent_collection))
 
 (defn down [db])
