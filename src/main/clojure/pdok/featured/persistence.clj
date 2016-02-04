@@ -356,7 +356,7 @@ If n nil => no limit, if collections nil => all collections")
 
 (defn cached-jdbc-processor-persistence [config]
   (let [db (:db-config config)
-        collection-cache (atom {})
+        collection-cache (volatile! {})
         stream-batch-size (or (:stream-batch-size config) (:batch-size config) 10000)
         stream-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
         stream-cache (volatile! (cache/basic-cache-factory {}))

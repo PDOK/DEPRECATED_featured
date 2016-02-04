@@ -50,7 +50,7 @@
                (cache-lookup cache-key))))))))
 
 (defmacro cached [cache f & args]
-  "Cached version of f. Needs atom as cache. If first param is :reload reloads"
+  "Cached version of f. Needs volatile as cache. If first param is :reload reloads"
   `(let [fn-name# (name '~f)]
      (fn ([& args#]
          (let [f# (partial ~f ~@args)
@@ -60,7 +60,7 @@
             (if-let [e# (and (not reload?#) (find @~cache cache-key#))]
               (val e#)
               (let [ret# (apply f# fn-args#)]
-                (swap! ~cache assoc cache-key# ret#)
+                (vswap! ~cache assoc cache-key# ret#)
                 ret#)))))))
 
 (defn once-true-fn

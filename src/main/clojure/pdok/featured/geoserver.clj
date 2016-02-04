@@ -271,7 +271,7 @@
 
 (defn geoserver-projector [config]
   (let [db (:db-config config)
-        cache (atom {})
+        cache (volatile! {})
         insert-batch-size (or (:insert-batch-size config) (:batch-size config) 10000)
         insert-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
         update-batch-size (or (:update-batch-size config) (:batch-size config) 10000)
