@@ -1,27 +1,27 @@
 (ns pdok.cache
   (:require [clojure.core.cache :as cache]))
 
-(defn process-batch [batch batched-fn]
+(defn process-batch [batch consumer]
   (let [records (map identity @batch)]
     (when (not-empty records)
-      (batched-fn records))))
+      (consumer records))))
 
-(defn flush-batch [batch batched-fn]
+(defn flush-batch [batch consumer]
   (let [records (map identity @batch)]
-    (dosync
-     (ref-set batch clojure.lang.PersistentQueue/EMPTY))
+    (vreset! batch clojure.lang.PersistentQueue/EMPTY)
     (when (not-empty records)
-      (batched-fn records))))
+      (consumer records))))
 
-(defn with-batch
-  ([batch batch-size batched-fn]
-   (with-batch batch batch-size batched-fn #(flush-batch batch batched-fn)))
-  ([batch batch-size batched-fn flush-fn]
+(defn batched
+  ([batch batch-size type f]
+   (if (= :batch-fn type)
+     (batched batch batch-size #(flush-batch batch f))
+     (batched batch batch-size f)))
+  ([batch batch-size flush-fn]
    (fn [& args]
-     (dosync
-      (if (= 1 (count args))
-        (alter batch #(conj % (first args)))
-        (alter batch #(conj % args))))
+     (if (= 1 (count args))
+       (vswap! batch #(conj % (first args)))
+       (vswap! batch #(conj % args)))
      (if (<= batch-size (count @batch))
        (flush-fn)))))
 

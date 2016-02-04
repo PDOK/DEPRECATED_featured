@@ -227,7 +227,7 @@
             cached-collection-exists? (cached cache gs-collection-exists? db)
             cached-collection-attributes (cached cache gs-collection-attributes db)
             batched-add-feature
-            (with-batch insert-batch insert-batch-size (partial gs-add-feature db proj-fn cached-collection-attributes no-insert) flush-fn)]
+            (batched insert-batch insert-batch-size flush-fn)]
         (do (when (not (cached-dataset-exists? dataset))
               (gs-create-dataset db dataset)
               (cached-dataset-exists? :reload dataset))
@@ -244,8 +244,7 @@
     (if (proj/accept? p feature)
       (let [{:keys [dataset collection attributes]} feature
             cached-collection-attributes (cached cache gs-collection-attributes db)
-            batched-update-feature (with-batch update-batch update-batch-size
-                                     (partial gs-update-feature db proj-fn) flush-fn)]
+            batched-update-feature (batched update-batch update-batch-size flush-fn)]
         (let [current-attributes (cached-collection-attributes dataset collection)
               new-attributes (filter #(not (some #{(first %)} current-attributes)) attributes)]
           (doseq [a new-attributes]
@@ -254,14 +253,12 @@
         (batched-update-feature feature))))
   (proj/close-feature [p feature]
     (if (proj/accept? p feature)
-      (let [batched-delete-feature (with-batch delete-batch delete-batch-size
-                                     (partial gs-delete-feature db) flush-fn)]
+      (let [batched-delete-feature (batched delete-batch delete-batch-size flush-fn)]
         (batched-delete-feature feature))))
   (proj/delete-feature [p feature]
     (if (proj/accept? p feature)
       (let [versions-in-insert (versions-in-batch feature @insert-batch)
-            batched-delete-feature (with-batch delete-batch delete-batch-size
-                                     (partial gs-delete-feature db) flush-fn)]
+            batched-delete-feature (batched delete-batch delete-batch-size flush-fn)]
         (dosync
           (alter no-insert #(clojure.set/union % (into #{} versions-in-insert))))
         (batched-delete-feature feature))))
@@ -276,11 +273,11 @@
   (let [db (:db-config config)
         cache (atom {})
         insert-batch-size (or (:insert-batch-size config) (:batch-size config) 10000)
-        insert-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+        insert-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
         update-batch-size (or (:update-batch-size config) (:batch-size config) 10000)
-        update-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+        update-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
         delete-batch-size (or (:delete-batch-size config) (:batch-size config) 10000)
-        delete-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+        delete-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
         no-insert (ref #{})
         ndims (or (:ndims config) 2)
         srid (or (:srid config) 28992)

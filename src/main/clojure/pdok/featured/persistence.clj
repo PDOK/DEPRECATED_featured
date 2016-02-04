@@ -164,8 +164,6 @@ If n nil => no limit, if collections nil => all collections")
     result-chan))
 
 (defn- jdbc-create-stream
-  ([db dataset collection id parent-collection parent-id parent-field]
-   (jdbc-create-stream db (list [dataset collection id parent-collection parent-id parent-field])))
   ([db entries]
    (with-bench t (log/debug "Created streams in" t "ms")
      (try (j/with-db-connection [c db]
@@ -204,8 +202,6 @@ If n nil => no limit, if collections nil => all collections")
       for-cache)))
 
 (defn- jdbc-insert
-  ([db version action dataset collection id validity geometry attributes]
-   (jdbc-insert db (list [version action dataset collection id validity geometry attributes])))
   ([db entries]
    (with-bench t (log/debug "Inserted events in" t "ms")
      (try (j/with-db-connection [c db]
@@ -314,9 +310,9 @@ If n nil => no limit, if collections nil => all collections")
           childs-value-fn append-cached-child
           parent-key-fn (fn [dataset collection id _ _ _] [dataset collection id])
           parent-value-fn (fn [_ _ _ _ pc pid pf] [pc pid pf])
-          batched (with-batch link-batch link-batch-size (partial jdbc-create-stream db))
-          cache-batched (with-cache childs-cache batched childs-key-fn childs-value-fn)
-          double-cache-batched (with-cache parent-cache cache-batched parent-key-fn parent-value-fn)]
+          batched-create (batched link-batch link-batch-size :batch-fn (partial jdbc-create-stream db))
+          cache-batched-create (with-cache childs-cache batched-create childs-key-fn childs-value-fn)
+          double-cache-batched (with-cache parent-cache cache-batched-create parent-key-fn parent-value-fn)]
       (when-not (cached-collection-exists? dataset collection parent-collection)
         (create-collection db dataset collection parent-collection)
         (cached-collection-exists? :reload dataset collection parent-collection))
@@ -325,9 +321,9 @@ If n nil => no limit, if collections nil => all collections")
     ;(println "APPEND: " id)
     (let [key-fn   (fn [_ _ dataset collection id _ _ _] [dataset collection id])
           value-fn (fn [_ version action _ _ _ validity _ _] [validity action version])
-          batched (with-batch stream-batch stream-batch-size (partial jdbc-insert db))
-          cache-batched (with-cache stream-cache batched key-fn value-fn)]
-      (cache-batched version action dataset collection id validity geometry attributes)))
+          batched-insert (batched stream-batch stream-batch-size :batch-fn (partial jdbc-insert db))
+          cache-batched-insert (with-cache stream-cache batched-insert key-fn value-fn)]
+      (cache-batched-insert version action dataset collection id validity geometry attributes)))
   (current-validity [this dataset collection id]
     (get (current-state this dataset collection id) 0))
   (last-action [this dataset collection id]
@@ -362,10 +358,10 @@ If n nil => no limit, if collections nil => all collections")
   (let [db (:db-config config)
         collection-cache (atom {})
         stream-batch-size (or (:stream-batch-size config) (:batch-size config) 10000)
-        stream-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+        stream-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
         stream-cache (ref (cache/basic-cache-factory {}))
         link-batch-size (or (:link-batch-size config) (:batch-size config) 10000)
-        link-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+        link-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
         childs-cache (ref (cache/basic-cache-factory {}))
         parent-cache (ref (cache/basic-cache-factory {}))]
     (CachedJdbcProcessorPersistence. db collection-cache stream-batch stream-batch-size stream-cache

@@ -317,9 +317,9 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
 
 (defn- batched-updater [db ncb ncb-size dcb dcb-size flush-fn feature-cache]
   "Cache batched updater consisting of insert and delete"
-  (let [batched-new (with-batch ncb ncb-size (partial new-current db) flush-fn)
+  (let [batched-new (batched ncb ncb-size flush-fn)
         cache-batched-new (with-cache feature-cache batched-new cache-store-key cache-value)
-        batched-delete (with-batch dcb dcb-size (partial delete-current db) flush-fn)]
+        batched-delete (batched dcb dcb-size flush-fn)]
     (fn [f]
       (cache-batched-new f)
       (let [version (first (rest (:_all_versions f)))]
@@ -327,9 +327,9 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
 
 (defn- batched-deleter [db dcb dcb-size dhb dhb-size flush-fn feature-cache]
   "Cache batched deleter (thrasher) of current and history"
-  (let [batched-delete-cur (with-batch dcb dcb-size (partial delete-current db) flush-fn)
+  (let [batched-delete-cur (batched dcb dcb-size flush-fn)
         cache-remove-cur (with-cache feature-cache identity cache-store-key cache-invalidate)
-        batched-delete-his (with-batch dhb dhb-size (partial delete-history db) flush-fn)]
+        batched-delete-his (batched dhb dhb-size flush-fn)]
     (fn [f]
       (cache-remove-cur f)
       (batched-delete-cur [(:_dataset f) (:_collection f) (:_version f) (:_version f)])
@@ -356,14 +356,14 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
     (let [[dataset collection id] (feature-key feature)
           [root-col root-id] (root-fn dataset collection id)
           path (path-fn dataset collection id)
-          batched-new (with-batch new-current-batch new-current-batch-size (partial new-current db) flush-fn)
+          batched-new (batched new-current-batch new-current-batch-size flush-fn)
           cache-batched-new (with-cache feature-cache batched-new cache-store-key cache-value)
           cache-batched-update (batched-updater db new-current-batch new-current-batch-size
                                           delete-current-batch delete-current-batch-size
                                           flush-fn feature-cache)
-          batched-history (with-batch new-history-batch new-history-batch-size (partial new-history db) flush-fn)
+          batched-history (batched new-history-batch new-history-batch-size flush-fn)
           cached-get-current (use-cache feature-cache cache-use-key)
-          batched-append-changelog (with-batch changelog-batch changelog-batch-size #() flush-fn)]
+          batched-append-changelog (batched changelog-batch changelog-batch-size flush-fn)]
       (if-let [current (cached-get-current dataset root-col root-id)]
         (when (util/uuid> (:version feature) (:_version current))
           (let [new-current (merge current path feature)]
@@ -404,7 +404,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
                                                 delete-history-batch delete-history-batch-size
                                                 flush-fn feature-cache)
           cached-get-current (use-cache feature-cache cache-use-key)
-          batched-append-changelog (with-batch changelog-batch changelog-batch-size #() flush-fn)]
+          batched-append-changelog (batched changelog-batch changelog-batch-size flush-fn)]
       (when-let [current (cached-get-current dataset root-col root-id)]
         (when (util/uuid> (:version feature) (:_version current))
           (cache-batched-delete current)
@@ -468,15 +468,15 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
    (let [db (:db-config config)
          persistence (or (:persistence config) (pers/cached-jdbc-processor-persistence config))
          new-current-batch-size (or (:new-current-batch-size config) (:batch-size config) 10000)
-         new-current-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+         new-current-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
          delete-current-batch-size (or (:delete-current-batch-size config) (:batch-size config) 10000)
-         delete-current-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+         delete-current-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
          new-history-batch-size (or (:new-history-batch-size config) (:batch-size config) 10000)
-         new-history-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+         new-history-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
          delete-history-batch-size (or (:delete-history-batch-size config) (:batch-size config) 10000)
-         delete-history-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+         delete-history-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
          changelog-batch-size (or (:changelog-batch-size config) (:batch-size config) 10000)
-         changelog-batch (ref (clojure.lang.PersistentQueue/EMPTY))
+         changelog-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
          flush-fn #(flush-all db new-current-batch delete-current-batch new-history-batch
                               delete-history-batch changelog-batch)]
      (->Timeline db (partial pers/root persistence) (partial pers/path persistence)
@@ -491,7 +491,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
 
 (defn create-chunked [config]
   (let [chunk-size (or (:chunk-size config) 10000)
-        chunk (ref (clojure.lang.PersistentQueue/EMPTY))
-        process-fn (with-batch chunk chunk-size #() #(process-chunk config chunk))
+        chunk (volatile! (clojure.lang.PersistentQueue/EMPTY))
+        process-fn (batched chunk chunk-size #(process-chunk config chunk))
         db (:db-config config)]
     (->ChunkedTimeline config db chunk process-fn)))
