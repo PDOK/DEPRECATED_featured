@@ -200,7 +200,7 @@
     (flush-batch update-batch (partial gs-update-feature db proj-fn))
     (flush-batch delete-batch (partial gs-delete-feature db))
 
-    (dosync (ref-set no-insert #{}))
+    (dosync (vreset! no-insert #{}))
     ))
 
 (defn- versions-in-batch [{:keys [dataset collection id]} batch]
@@ -260,7 +260,7 @@
       (let [versions-in-insert (versions-in-batch feature @insert-batch)
             batched-delete-feature (batched delete-batch delete-batch-size flush-fn)]
         (dosync
-          (alter no-insert #(clojure.set/union % (into #{} versions-in-insert))))
+          (vswap! no-insert #(clojure.set/union % (into #{} versions-in-insert))))
         (batched-delete-feature feature))))
   (proj/accept? [_ feature]
          (not (some #{(:collection feature)} no-visualization)))
@@ -278,7 +278,7 @@
         update-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
         delete-batch-size (or (:delete-batch-size config) (:batch-size config) 10000)
         delete-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
-        no-insert (ref #{})
+        no-insert (volatile! #{})
         ndims (or (:ndims config) 2)
         srid (or (:srid config) 28992)
         proj-fn (or (:proj-fn config) identity)
