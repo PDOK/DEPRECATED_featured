@@ -426,7 +426,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
 (defn create-cache [db chunk]
   (let [selector (juxt :dataset :collection)
         per-d-c (group-by selector chunk)
-        cache (ref (cache/basic-cache-factory {}))]
+        cache (volatile! (cache/basic-cache-factory {}))]
     (doseq [[[dataset collection] features] per-d-c]
       (apply-to-cache cache
                       (load-current-feature-cache db dataset collection (map :id features))))
@@ -463,7 +463,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
     this))
 
 (defn create
-  ([config] (create config (ref (cache/basic-cache-factory {}))))
+  ([config] (create config (volatile! (cache/basic-cache-factory {}))))
   ([config cache]
    (let [db (:db-config config)
          persistence (or (:persistence config) (pers/cached-jdbc-processor-persistence config))

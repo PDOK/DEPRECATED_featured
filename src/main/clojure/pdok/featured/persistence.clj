@@ -294,9 +294,9 @@ If n nil => no limit, if collections nil => all collections")
     (flush-batch stream-batch (partial jdbc-insert db))
     (flush-batch link-batch (partial jdbc-create-stream db))
     (dosync
-     (ref-set stream-cache (cache/basic-cache-factory {}))
-     (ref-set childs-cache (cache/basic-cache-factory {}))
-     (ref-set parent-cache (cache/basic-cache-factory {})))
+     (vreset! stream-cache (cache/basic-cache-factory {}))
+     (vreset! childs-cache (cache/basic-cache-factory {}))
+     (vreset! parent-cache (cache/basic-cache-factory {})))
     this)
   (child-collections [this dataset parent-collection]
     (jdbc-child-collections db dataset parent-collection))
@@ -359,11 +359,11 @@ If n nil => no limit, if collections nil => all collections")
         collection-cache (atom {})
         stream-batch-size (or (:stream-batch-size config) (:batch-size config) 10000)
         stream-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
-        stream-cache (ref (cache/basic-cache-factory {}))
+        stream-cache (volatile! (cache/basic-cache-factory {}))
         link-batch-size (or (:link-batch-size config) (:batch-size config) 10000)
         link-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
-        childs-cache (ref (cache/basic-cache-factory {}))
-        parent-cache (ref (cache/basic-cache-factory {}))]
+        childs-cache (volatile! (cache/basic-cache-factory {}))
+        parent-cache (volatile! (cache/basic-cache-factory {}))]
     (CachedJdbcProcessorPersistence. db collection-cache stream-batch stream-batch-size stream-cache
                                      link-batch link-batch-size childs-cache parent-cache)))
 

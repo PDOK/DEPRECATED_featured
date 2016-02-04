@@ -27,17 +27,15 @@
 
 (defn with-cache [cache cached-fn key-fn value-fn]
   (fn [& args]
-    (dosync
-     (when-let [key (apply key-fn args)]
-       (when (some (complement nil?) key)
-         (let [current-value (cache/lookup @cache key)]
-           (alter cache #(cache/miss % key (apply value-fn current-value args)))))))
+    (when-let [key (apply key-fn args)]
+      (when (some (complement nil?) key)
+        (let [current-value (cache/lookup @cache key)]
+          (vswap! cache #(cache/miss % key (apply value-fn current-value args))))))
     (apply cached-fn args)))
 
 (defn apply-to-cache [cache key-value-pairs]
-  (dosync
-   (doseq [kvp key-value-pairs]
-     (alter cache #(cache/miss % (first kvp) (second kvp))))))
+  (doseq [kvp key-value-pairs]
+    (vswap! cache #(cache/miss % (first kvp) (second kvp)))))
 
 (defn use-cache
   ([cache key-fn] (use-cache cache key-fn nil))
