@@ -40,11 +40,12 @@
       (:statistics (processor/shutdown processor)))))
 
 (deftest double-file-test
-  (let [ids (map str (range 0 5000))
-        stream-1 (.getBytes (slurp (generate-new-change-features ids)))
-        stream-2 (.getBytes (slurp (generate-delete-new-change-close-features ids)))]
-    (doseq [i (range 1 6)]
+  (clean-db)
+  (doseq [i (range 1 6)]
+    (let [n 5000
+          ids (map str (range (* i n) (* (inc i) n)))
+          stream-1 (.getBytes (slurp (generate-new-change-features ids)))
+          stream-2 (.getBytes (slurp (generate-delete-new-change-close-features ids)))]
       (println "Run" i)
-      (clean-db)
       (time (do (run (ByteArrayInputStream. stream-1))
                 (run (ByteArrayInputStream. stream-2)))))))
