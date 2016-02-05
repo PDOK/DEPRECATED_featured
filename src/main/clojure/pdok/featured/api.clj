@@ -21,7 +21,8 @@
             [ring.middleware.json :refer :all]
             [ring.util.response :as r]
             [schema.core :as s])
-  (:import [com.fasterxml.jackson.core JsonGenerator]))
+  (:import [com.fasterxml.jackson.core JsonGenerator]
+           [java.util.zip ZipFile ZipEntry]))
 
 (extend-protocol cheshire.generate/JSONable
   org.joda.time.DateTime
@@ -74,6 +75,21 @@
 (defn collections-with-option [filter-option processing-options]
   (map :collection (filter (fn [p] (some #(= filter-option %) (:options p))) processing-options)))
 
+(defn download-file [uri zipped?]
+  "return file location"
+  (let [tmp (java.io.File/createTempFile "featured" (if zipped? ".zip" ".json"))
+        in (io/input-stream uri)]
+    (log/info "Downloading" uri)
+    (io/copy in tmp)
+    (.close in)
+    (if zipped?
+      (do
+        (log/info "Extracting" uri)
+        (let [entry (zipfiles/first-file-from-zip tmp)]
+          (io/delete-file tmp)
+          entry)))))
+
+
 (defn- process* [stats callback-chan request]
   (log/info "Processsing: " request)
   (swap! stats assoc-in [:processing] request)
@@ -82,30 +98,28 @@
                                        :no-visualization (collections-with-option "no-visualization" (:processingOptions request)))
                     (config/timeline persistence)]
         processor (processor/create persistence projectors)
-        zip-file? (= (:format request) "zip")]
+        zipped? (= (:format request) "zip")
+        file (download-file (:file request) zipped?)]
     (try
-          (with-open [input (io/input-stream (:file request))]
-            (let [_ (log/info "processing file: " (:file request))
-                  in (if zip-file? (zipfiles/zip-as-input input) input)
-                  [meta features] (reader/features-from-stream in :dataset (:dataset request))
-                  processor (merge processor meta) ;; ugly, should move init here, but that doesnt work for the catch
-                  _ (dorun (consume processor features))
-                  _ (if zip-file? (zipfiles/close-zip in))
-                 processor (shutdown processor)
-                 run-stats (assoc (:statistics processor) :request request)]
-             (swap! stats update-in [:processed] #(conj % run-stats))
-             (swap! stats assoc-in [:processing] nil)
-             (stats-on-callback callback-chan request run-stats)))
-         (catch Exception e
-           (let [ _ (log/error e)
-                 processor (shutdown processor)
-                 error-stats (assoc request :error (str e))]
-             (log/warn error-stats)
-             (swap! stats update-in [:errored] #(conj % error-stats))
-             (swap! stats assoc-in [:processing] nil)
-             (stats-on-callback callback-chan request error-stats)))))
-  )
-
+      (with-open [in (io/input-stream file)]
+        (let [_ (log/info "processing file: " (:file request))
+              [meta features] (reader/features-from-stream in :dataset (:dataset request))
+              processor (merge processor meta) ;; ugly, should move init here, but that doesnt work for the catch
+              _ (dorun (consume processor features))
+              processor (shutdown processor)
+              run-stats (assoc (:statistics processor) :request request)]
+          (swap! stats update-in [:processed] #(conj % run-stats))
+          (swap! stats assoc-in [:processing] nil)
+          (stats-on-callback callback-chan request run-stats)))
+      (catch Exception e
+        (let [ _ (log/error e)
+              processor (shutdown processor)
+              error-stats (assoc request :error (str e))]
+          (log/warn error-stats)
+          (swap! stats update-in [:errored] #(conj % error-stats))
+          (swap! stats assoc-in [:processing] nil)
+          (stats-on-callback callback-chan request error-stats)))
+      (finally (io/delete-file file)))))
 
 (defn- process-request [schema request-chan http-req]
   (let [request (:body http-req)

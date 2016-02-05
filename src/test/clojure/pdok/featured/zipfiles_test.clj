@@ -3,13 +3,19 @@
             [clojure.java.io :as io]
             [clojure.test :refer :all]))
 
-(deftest empty-zip
-  (with-open [zip (io/input-stream (io/resource "zipfiles/empty.zip"))]
-   (is (thrown-with-msg? Exception 
-                         #"No entries in zip" 
-                         (z/zip-as-input zip)))))
+(defmacro with-resource-as-file [resource file-var & body]
+  `(let [~file-var (java.io.File/createTempFile "featured-test" ".zip")]
+    (with-open [zip# (io/input-stream (io/resource ~resource))]
+      (io/copy zip# ~file-var))
+    ~@body
+    (io/delete-file ~file-var)
+    ))
 
-(deftest one-entry-zip 
-  (with-open [zip (io/input-stream (io/resource "zipfiles/one-file.zip"))
-              in (z/zip-as-input zip)]
-    (is (boolean (re-find #"gml" (slurp in))))))
+(deftest empty-zip
+  (with-resource-as-file "zipfiles/empty.zip" file
+    (is (= nil (z/first-file-from-zip file)))))
+
+(deftest one-entry-zip
+  (with-resource-as-file "zipfiles/one-file.zip" file
+    (let [entry (z/first-file-from-zip file)]
+      (is (boolean (re-find #"gml" (slurp entry)))))))
