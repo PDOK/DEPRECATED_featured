@@ -15,9 +15,9 @@
   (let [file-name (.getName file)]
     {:dataset dataset
      :extract-type (cond-> file
-                           (-> file .getParentFile .getName (= "partials")) .getParentFile
-                           true .getParentFile
-                           true .getName)
+                     (-> file .getParentFile .getName (= "partials")) .getParentFile
+                     true .getParentFile
+                     true .getName)
      :name (subs file-name 0 (.lastIndexOf file-name "."))
      :template (slurp (.getPath file))}))
 

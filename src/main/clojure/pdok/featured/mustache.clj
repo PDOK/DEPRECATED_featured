@@ -62,9 +62,12 @@
 (def ^{:private true} registered-templates (atom #{}))
 
 (defn register [name template]
-  (do
-    (loader/unregister-template name)
-    (loader/register-template name template)))
+  (swap! registered-templates conj name)
+  (loader/unregister-template name)
+  (loader/register-template name template))
+
+(defn registered? [name]
+  (if (@registered-templates name) true false))
 
 (defn render [name feature]
   (stencil/render-file name (lookup-proxy feature)))

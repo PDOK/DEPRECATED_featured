@@ -138,7 +138,8 @@
   (let [extracts (atom {})]
     (with-bindings
       {#'e/*process-insert-extract* (partial inserted-features extracts)
-       #'e/*process-delete-extract* (partial deleted-versions extracts)}
+       #'e/*process-delete-extract* (partial deleted-versions extracts)
+       #'e/*initialized-collection?* (constantly true)}
       (e/fill-extract "regression-set" nil))
     (is (= n-extracts (count @extracts)))))
 

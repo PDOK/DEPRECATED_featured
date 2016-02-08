@@ -83,8 +83,6 @@
       {:status "error" :msg error :count 0})))
 
 
-(def ^:dynamic *process-insert-extract* (partial transform-and-add-extract config/extracts-db))
-
 (defn- jdbc-delete-versions [db table versions]
   (when (seq versions)
     (let [query (str "DELETE FROM " extract-schema "." table
@@ -95,9 +93,6 @@
 (defn- delete-extracts-with-version [db dataset feature-type extract-type versions]
   (let [table (str dataset "_" extract-type "_v0_" feature-type)]
     (jdbc-delete-versions db table versions)))
-
-
-(def ^:dynamic *process-delete-extract* (partial delete-extracts-with-version config/extracts-db))
 
 (defn flush-changelog [dataset]
   (do
@@ -130,6 +125,10 @@
     :delete (:version record)
     nil))
 
+(def ^:dynamic *process-insert-extract* (partial transform-and-add-extract config/extracts-db))
+(def ^:dynamic *process-delete-extract* (partial delete-extracts-with-version config/extracts-db))
+(def ^:dynamic *initialized-collection?* m/registered?)
+
 (defn- fill-extract* [dataset extract-type collection]
   (let [batch-size 10000
         rc (timeline/changed-features (config/timeline) dataset collection)
@@ -146,13 +145,18 @@
 
 (defn fill-extract [dataset extract-type]
   (let [collections-in-changelog (timeline/collections-in-changelog (config/timeline) dataset)]
-    (doseq [collection collections-in-changelog]
-      (fill-extract* dataset extract-type collection))
-    {:status "ok" :collections collections-in-changelog}))
+    (if-not (every? *initialized-collection?* (map (partial template/template-key dataset extract-type)
+                                       collections-in-changelog))
+      {:status "error" :msg "missing template(s)" :collections collections-in-changelog}
+      (do
+        (doseq [collection collections-in-changelog]
+          (fill-extract* dataset extract-type collection))
+        {:status "ok" :collections collections-in-changelog}))))
 
 (defn -main [template-location dataset extract-type & args]
   (let [templates-with-metadata (template/templates-with-metadata dataset template-location)]
-        (when-not (some false? (map template/add-or-update-template templates-with-metadata))
-          (fill-extract dataset extract-type))))
+    (if-not (some false? (map template/add-or-update-template templates-with-metadata))
+      (println (fill-extract dataset extract-type))
+      (println "could not load template(s)"))))
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))
