@@ -103,8 +103,7 @@
                     (config/timeline persistence)]
         processor (processor/create persistence projectors)
         zipped? (= (:format request) "zip")
-        [file err] (download-file (:file request) zipped?)
-        _ (println "ERRR?" file err)]
+        [file err] (download-file (:file request) zipped?)]
     (if-not file
       (do
         (swap! stats assoc-in [:processing] nil)
