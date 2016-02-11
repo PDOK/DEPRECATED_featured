@@ -19,6 +19,10 @@
   (j/execute! test-db ["DROP SCHEMA IF EXISTS featured_performance CASCADE"])
   (j/execute! test-db ["DROP SCHEMA IF EXISTS \"performance-set\" CASCADE"]))
 
+(defn generate-new-features [ids]
+  (generator/random-json-feature-stream "performance-set" "col1" (count ids)
+                                        :ids ids))
+
 (defn generate-new-change-features [ids]
   (generator/random-json-feature-stream "performance-set" "col1" (* 2 (count ids))
                                         :ids ids :change? true))
@@ -28,24 +32,34 @@
                                         :ids ids :start-with-delete? true
                                         :change? true :close? true))
 
-(defn run [feature-stream]
+(defn run [cfg feature-stream]
   (with-bindings
     {#'dc/*persistence-schema* :featured_performance
      #'dc/*timeline-schema* :featured_performance}
     (let [[meta features] (jr/features-from-stream (clojure.java.io/reader feature-stream))
           persistence (config/persistence)
           projectors (conj (config/projectors persistence) (config/timeline persistence))
-          processor (processor/create {:check-validity-on-delete false} persistence projectors)]
+          processor (processor/create
+                     (merge {:check-validity-on-delete false} cfg) persistence projectors)]
       (dorun (processor/consume processor features))
       (:statistics (processor/shutdown processor)))))
 
 (deftest double-file-test
   (clean-db)
-  (doseq [i (range 1 6)]
+  (doseq [i (range 1 20)]
     (let [n 5000
           ids (map str (range (* i n) (* (inc i) n)))
           stream-1 (.getBytes (slurp (generate-new-change-features ids)))
           stream-2 (.getBytes (slurp (generate-delete-new-change-close-features ids)))]
       (println "Run" i)
-      (time (do (run (ByteArrayInputStream. stream-1))
-                (run (ByteArrayInputStream. stream-2)))))))
+      (time (do (run {} (ByteArrayInputStream. stream-1))
+                (run {}  (ByteArrayInputStream. stream-2)))))))
+
+(deftest only-new-test
+  (clean-db)
+  (doseq [i (range 1 20)]
+    (let [n 15000
+          ids (map str (range (* i n) (* (inc i) n)))
+          stream-1 (.getBytes (slurp (generate-new-features ids)))]
+      (println "Run" i)
+      (time (run {:disable-validation true} (ByteArrayInputStream. stream-1))))))

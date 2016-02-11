@@ -301,7 +301,7 @@
 
 (defn process [processor feature]
   "Processes feature events. Should return the feature, possibly with added data, returns sequence"
-  (let [validated (validate processor feature)]
+  (let [validated (if (:disable-validation processor) feature (validate processor feature))]
     (if (:invalid? validated)
       (make-seq validated)
       (let [vf (assoc validated :version (random/ordered-UUID))
@@ -419,6 +419,7 @@
          initialized-projectors (doall (map proj/init (clojure.core/flatten projectors)))
          batch-size (or (config/env :processor-batch-size) 10000)]
      (merge {:check-validity-on-delete true
+             :disable-validation false
              :persistence initialized-persistence
              :projectors initialized-projectors
              :batch-size batch-size
