@@ -19,18 +19,21 @@
   (j/execute! test-db ["DROP SCHEMA IF EXISTS featured_performance CASCADE"])
   (j/execute! test-db ["DROP SCHEMA IF EXISTS \"performance-set\" CASCADE"]))
 
-(defn generate-new-features [ids]
-  (generator/random-json-feature-stream "performance-set" "col1" (count ids)
-                                        :ids ids))
+(defn generate-new-features [ids difficult?]
+  (with-bindings {#'generator/*difficult-geometry?* difficult?}
+    (generator/random-json-feature-stream "performance-set" "col1" (count ids)
+                                          :ids ids)))
 
-(defn generate-new-change-features [ids]
-  (generator/random-json-feature-stream "performance-set" "col1" (* 2 (count ids))
-                                        :ids ids :change? true))
+(defn generate-new-change-features [ids difficult?]
+  (with-bindings {#'generator/*difficult-geometry?* difficult?}
+    (generator/random-json-feature-stream "performance-set" "col1" (* 2 (count ids))
+                                          :ids ids :change? true)))
 
-(defn generate-delete-new-change-close-features [ids]
-  (generator/random-json-feature-stream "performance-set" "col1" (* 4 (count ids))
-                                        :ids ids :start-with-delete? true
-                                        :change? true :close? true))
+(defn generate-delete-new-change-close-features [ids difficult?]
+  (with-bindings {#'generator/*difficult-geometry?* difficult?}
+    (generator/random-json-feature-stream "performance-set" "col1" (* 4 (count ids))
+                                          :ids ids :start-with-delete? true
+                                          :change? true :close? true)))
 
 (defn run [cfg feature-stream]
   (with-bindings
@@ -49,8 +52,8 @@
   (doseq [i (range 1 20)]
     (let [n 5000
           ids (map str (range (* i n) (* (inc i) n)))
-          stream-1 (.getBytes (slurp (generate-new-change-features ids)))
-          stream-2 (.getBytes (slurp (generate-delete-new-change-close-features ids)))]
+          stream-1 (.getBytes (slurp (generate-new-change-features ids true)))
+          stream-2 (.getBytes (slurp (generate-delete-new-change-close-features ids true)))]
       (println "Run" i)
       (time (do (run {} (ByteArrayInputStream. stream-1))
                 (run {}  (ByteArrayInputStream. stream-2)))))))
@@ -60,6 +63,6 @@
   (doseq [i (range 1 20)]
     (let [n 15000
           ids (map str (range (* i n) (* (inc i) n)))
-          stream-1 (.getBytes (slurp (generate-new-features ids)))]
+          stream-1 (.getBytes (slurp (generate-new-features ids false)))]
       (println "Run" i)
       (time (run {:disable-validation true} (ByteArrayInputStream. stream-1))))))
