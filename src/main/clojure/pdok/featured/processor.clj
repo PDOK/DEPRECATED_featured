@@ -117,23 +117,31 @@
       (assoc feature :current-version (pers/current-version persistence dataset collection id)))
     feature))
 
-(defn- process-new-feature [{:keys [persistence projectors]} feature]
+(defn project! [processor proj-fn feature]
+  (doseq [p (:projectors processor)]
+    (proj-fn p feature)))
+
+(defn doto-projectors! [processor action-fn]
+  (doseq [p (:projectors processor)]
+    (action-fn p)))
+
+(defn- process-new-feature [{:keys [persistence projectors] :as processor} feature]
   (let [{:keys [dataset collection id validity geometry attributes]} feature]
     (when-not (pers/stream-exists? persistence dataset collection id)
       (pers/create-stream persistence dataset collection id
                           (:parent-collection feature) (:parent-id feature) (:parent-field feature)))
     (append-feature persistence feature)
-    (doseq [p projectors] (proj/new-feature p feature)))
+    (project! processor proj/new-feature feature))
   feature)
 
 (defn- process-nested-new-feature [processor feature]
   (process-new-feature processor (assoc feature :action :new)))
 
-(defn- process-change-feature [{:keys [persistence projectors]} feature]
+(defn- process-change-feature [{:keys [persistence projectors] :as processor} feature]
   (let [enriched-feature (->> feature
                                   (with-current-version persistence))]
     (append-feature persistence enriched-feature)
-    (doseq [p projectors] (proj/change-feature p enriched-feature))
+    (project! processor proj/change-feature enriched-feature)
     enriched-feature))
 
 (defn- process-nested-change-feature [processor feature]
@@ -144,7 +152,7 @@
   (if (empty? (:attributes feature))
     (let [enriched-feature (->> feature (with-current-version persistence))]
       (append-feature persistence enriched-feature)
-      (doseq [p projectors] (proj/close-feature p enriched-feature))
+      (project! processor proj/close-feature enriched-feature)
       (list enriched-feature))
     (let [change-feature (with-current-version persistence
                                                (-> feature
@@ -156,7 +164,7 @@
           _ (process-change-feature processor change-feature)
           close-feature (with-current-version persistence (assoc feature :version (random/ordered-UUID)))]
       (append-feature persistence close-feature)
-      (doseq [p projectors] (proj/close-feature p close-feature))
+      (project! processor proj/close-feature close-feature)
       (list change-feature close-feature))))
 
 (defn- process-nested-close-feature [processor feature]
@@ -170,11 +178,11 @@
                          (persistent!))]
     (list nw (process-close-feature processor no-update-nw))))
 
-(defn- process-delete-feature [{:keys [persistence projectors]} feature]
+(defn- process-delete-feature [{:keys [persistence projectors] :as processor} feature]
   (let [enriched-feature (->> feature
                        (with-current-version persistence))]
     (append-feature persistence enriched-feature)
-    (doseq [p projectors] (proj/delete-feature p enriched-feature))
+    (project! processor proj/delete-feature enriched-feature)
     enriched-feature))
 
 (defn- nested-features [attributes]
@@ -369,7 +377,7 @@
           _ (pers/prepare (:persistence processor) prepped)
           consumed (with-bench t (log/debug "Consumed batch in" t "ms")
                      (doall (consume* processor prepped)))
-          _ (doseq [p (:projectors processor)] (proj/flush p))]
+          _ (doto-projectors! processor proj/flush)]
       consumed)))
 
 (defn consume [processor features]
@@ -378,7 +386,8 @@
       (concat (consume-partition processor (take n features))
               (lazy-seq (consume processor (drop n features)))))))
 
-(defn replay [{:keys [persistence projectors batch-size statistics]} dataset last-n root-collection]
+(defn replay [{:keys [persistence projectors batch-size statistics] :as processor}
+              dataset last-n root-collection]
   "Sends the last n events from persistence to the projectors"
   (let [collections (when root-collection (pers/collection-tree persistence dataset root-collection))
         features (pers/get-last-n persistence dataset last-n collections)
@@ -389,22 +398,22 @@
         (pers/prepare persistence part)
         (doseq [f part]
           (condp = (:action f)
-            :new (doseq [p projectors] (proj/new-feature p f))
-            :change (doseq [p projectors] (proj/change-feature p f))
-            :close (doseq [p projectors] (proj/close-feature p f))
-            :delete (doseq [p projectors] (proj/delete-feature p f)))
+            :new (project! processor proj/new-feature f)
+            :change (project! processor proj/change-feature f)
+            :close (project! processor proj/close-feature f)
+            :delete (project! processor proj/delete-feature f))
           (swap! statistics update :replayed inc))
-        (doseq [p projectors] (proj/flush p))
+        (doto-projectors! processor proj/flush)
         (recur (a/<!! parts))))))
 
-(defn shutdown [{:keys [persistence projectors statistics]}]
+(defn shutdown [{:keys [persistence projectors statistics] :as processor}]
   "Shutdown feature store. Make sure all data is processed and persisted"
-  (let [closed-projectors (doall (map proj/close projectors))
+  (let [_ (doto-projectors! processor proj/close)
         ;; timeline uses persistence, close persistence after projectors
         closed-persistence (pers/close persistence)
         _ (when statistics (log/info @statistics))]
     {:persistence closed-persistence
-     :projectors closed-projectors
+     :projectors projectors
      :statistics (if statistics @statistics {})}))
 
 (defn add-projector [processor projector]
