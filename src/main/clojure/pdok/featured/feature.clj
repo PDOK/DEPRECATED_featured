@@ -1,7 +1,6 @@
 (ns pdok.featured.feature
   (:refer-clojure :exclude [type])
   (:require [clojure.string :as str]
-            [clojure.core.cache :as cache]
             [clojure.java.io :as io]
             [clojure.java.jdbc :as j]
             [pdok.postgres :as pg]
@@ -62,7 +61,7 @@
 (def gml3-parser (GML3Parser.))
 
 (defn gml3-as-jts [gml]
-  (locking gml3-parser (.toJTSGeometry ^GML3Parser gml3-parser gml)))
+  (.toJTSGeometry ^GML3Parser gml3-parser gml))
 
 (def wkt-writer (WKTWriter.))
 
@@ -84,16 +83,9 @@
 
 (defmulti as-jts (fn [obj] (lower-case (get obj "type"))))
 (defmethod as-jts :default [_] nil)
-
-(def gml->jts-cache (atom (cache/fifo-cache-factory {} :threshold 15000)))
 (defmethod as-jts "gml" [obj]
  (when-let [gml (get obj "gml")]
-   (if (cache/has? @gml->jts-cache gml)
-     (cache/lookup @gml->jts-cache gml)
-     (let [jts (gml3-as-jts gml)
-           _ (swap! gml->jts-cache #(cache/miss % gml jts))]
-       jts))))
-
+  (gml3-as-jts gml)))
 (defmethod as-jts "jts" [obj]
   (get obj "jts"))
 
