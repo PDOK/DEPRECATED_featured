@@ -108,7 +108,8 @@
  SELECT dataset, collection, feature_id, version, feature FROM "
 (qualified-history)
 ") as tl ON cl.dataset = tl.dataset AND cl.collection = tl.collection AND cl.version = tl.version
- WHERE cl.dataset = '" dataset "' AND cl.collection = '" collection "'")]
+ WHERE cl.dataset = '" dataset "' AND cl.collection = '" collection "'
+ ORDER BY cl.id ASC")]
      (query-with-results-on-channel timeline query upgrade-changelog))))
 
 (defn delete-changelog [timeline dataset]
