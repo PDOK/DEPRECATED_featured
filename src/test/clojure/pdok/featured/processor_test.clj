@@ -55,9 +55,7 @@
     (create-projectors n-projectors))))
 
 (defn consume-single [processor feature]
-  (let [f (->> [feature] (consume* processor) (first))]
-    (shutdown processor)
-    f))
+  (->> [feature] (consume* processor) (first)))
 
 (def default-validity (tl/local-now))
 

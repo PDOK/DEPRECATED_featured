@@ -7,7 +7,7 @@
             [pdok.featured.json-reader :refer :all]
             [pdok.featured.projectors :as proj]
             [pdok.featured.config :as config]
-            [clojure.core.async :as async]
+            [clojure.core.async :as a]
             [clj-time [core :as t] [local :as tl] [coerce :as tc]]
             [clojure.string :as str]
             [clojure.tools.logging :as log])
@@ -117,19 +117,13 @@
       (assoc feature :current-version (pers/current-version persistence dataset collection id)))
     feature))
 
-(defn project!* [processor proj-fn feature]
-  (mapv #(future (proj-fn % feature)) (:projectors processor)))
-
-(defn doto-projectors!* [processor action-fn]
-  (mapv #(future (action-fn %)) (:projectors processor)))
-
 (defn project! [processor proj-fn feature]
-  (async/>!! (:projectors-chan processor) [:project proj-fn feature]))
+  (doseq [p (:projectors processor)]
+    (proj-fn p feature)))
 
 (defn doto-projectors! [processor action-fn]
-  (let [cb (async/chan)]
-    (async/>!! (:projectors-chan processor) [:doto action-fn cb])
-    (async/<!! cb)))
+  (doseq [p (:projectors processor)]
+    (action-fn p)))
 
 (defn- process-new-feature [{:keys [persistence projectors] :as processor} feature]
   (let [{:keys [dataset collection id validity geometry attributes]} feature]
@@ -397,8 +391,8 @@
   "Sends the last n events from persistence to the projectors"
   (let [collections (when root-collection (pers/collection-tree persistence dataset root-collection))
         features (pers/get-last-n persistence dataset last-n collections)
-        parts (async/pipe features (async/chan 1 (partition-all batch-size)))]
-    (loop [part (async/<!! parts)]
+        parts (a/pipe features (a/chan 1 (partition-all batch-size)))]
+    (loop [part (a/<!! parts)]
       (when (seq part)
         (pers/flush persistence)
         (pers/prepare persistence part)
@@ -410,7 +404,7 @@
             :delete (project! processor proj/delete-feature f))
           (swap! statistics update :replayed inc))
         (doto-projectors! processor proj/flush)
-        (recur (async/<!! parts))))))
+        (recur (a/<!! parts))))))
 
 (defn shutdown [{:keys [persistence projectors statistics] :as processor}]
   "Shutdown feature store. Make sure all data is processed and persisted"
@@ -426,37 +420,18 @@
   (let [initialized-projector (proj/init projector)]
     (update-in processor [:projectors] conj initialized-projector)))
 
-(defn start-subscriptions [processor]
-  (async/thread
-    (loop [m (async/<!! (:projectors-chan processor))]
-      (when-let [[type action arg] m]
-        (cond
-          (= type :doto)
-          (let [futures (doto-projectors!* processor action)]
-            (doseq [f futures]
-              @f)
-              (async/>!! arg :done))
-          (= type :project)
-          (doseq [f (project!* processor action arg)]
-            @f))
-        (recur (async/<!! (:projectors-chan processor))))))
-  processor)
-
 (defn create
   ([persistence] (create persistence []))
   ([persistence projectors] (apply create {} persistence projectors))
   ([options persistence & projectors]
    (let [initialized-persistence (pers/init persistence)
          initialized-projectors (doall (map proj/init (clojure.core/flatten projectors)))
-         batch-size (or (config/env :processor-batch-size) 10000)
-         processor
-         (merge {:check-validity-on-delete true
-                 :disable-validation false
-                 :persistence initialized-persistence
-                 :projectors initialized-projectors
-                 :batch-size batch-size
-                 :invalids (volatile! #{})
-                 :projectors-chan (async/chan)
-                 :statistics (atom {:n-src 0 :n-processed 0 :n-errored 0 :errored '() :replayed 0})}
-                options)]
-     (start-subscriptions processor))))
+         batch-size (or (config/env :processor-batch-size) 10000)]
+     (merge {:check-validity-on-delete true
+             :disable-validation false
+             :persistence initialized-persistence
+             :projectors initialized-projectors
+             :batch-size batch-size
+             :invalids (volatile! #{})
+             :statistics (atom {:n-src 0 :n-processed 0 :n-errored 0 :errored '() :replayed 0})}
+            options))))
