@@ -119,11 +119,21 @@
  ORDER BY cl.id ASC")]
      (query-with-results-on-channel timeline query upgrade-changelog))))
 
+(defn all-features [timeline dataset collection]
+  (let [query (str "SELECT dataset, collection, feature_id, NULL as old_version, version, 'new' as action, feature
+                    FROM " (qualified-current) "
+                    WHERE dataset = '" dataset "' and collection = '" collection "'
+                    UNION ALL 
+                    SELECT dataset, collection, feature_id, NULL as old_version, version, 'new' as action, feature
+                    FROM " (qualified-history) "
+                    WHERE dataset = '" dataset "' and collection = '" collection "'")]
+     (query-with-results-on-channel timeline query upgrade-changelog)))
+
 (defn delete-changelog [{:keys [db dataset]}]
-     (try
-       (j/delete! db (qualified-changelog dataset) [])
-       (catch java.sql.SQLException e
-         (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
+  (try
+    (j/delete! db (qualified-changelog dataset) [])
+  (catch java.sql.SQLException e
+    (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
 (defn collections-in-changelog [{:keys [db dataset]}]
   (let [sql (str "SELECT DISTINCT collection FROM " (qualified-changelog dataset)) ]
@@ -131,6 +141,7 @@
       (flatten (drop 1 (j/query db [sql] :as-arrays? true)))
        (catch java.sql.SQLException e
          (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))))))
+
 
 (defn- init-root
   ([feature]
