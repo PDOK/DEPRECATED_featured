@@ -51,6 +51,7 @@
   ([n-projectors]
    (processor/create
     {:batch-size 1}
+    "testset"
     (create-persistence)
     (create-projectors n-projectors))))
 
