@@ -97,7 +97,7 @@
 (defn flush-changelog [dataset]
   (do
    (log/info "Delete changelog request voor dataset: " dataset)
-   (timeline/delete-changelog (config/timeline) dataset)))
+   (timeline/delete-changelog (config/timeline-for-dataset dataset))))
 
 (defn file-to-features [path dataset]
   "Helper function to read features from a file.
@@ -131,7 +131,8 @@
 
 (defn- fill-extract* [dataset extract-type collection]
   (let [batch-size 10000
-        rc (timeline/changed-features (config/timeline) dataset collection)
+        tl (config/timeline-for-dataset dataset)
+        rc (timeline/changed-features tl collection)
         parts (a/pipe rc (a/chan 1 (partition-all batch-size)))]
     (log/info "Create extracts for:" extract-type collection)
     (loop [records (a/<!! parts)]
@@ -144,7 +145,8 @@
         (recur (a/<!! parts))))))
 
 (defn fill-extract [dataset extract-type]
-  (let [collections-in-changelog (timeline/collections-in-changelog (config/timeline) dataset)]
+  (let [tl (config/timeline-for-dataset dataset)
+        collections-in-changelog (timeline/collections-in-changelog tl)]
     (if-not (every? *initialized-collection?* (map (partial template/template-key dataset extract-type)
                                        collections-in-changelog))
       {:status "error" :msg "missing template(s)" :collections collections-in-changelog}

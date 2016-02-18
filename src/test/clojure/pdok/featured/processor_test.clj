@@ -9,31 +9,31 @@
 
 (defrecord MockedPersistence [streams streams-n state events-n]
   pers/ProcessorPersistence
-  (init [this] (assoc this :initialized true))
+  (init [this for-dataset] (assoc this :initialized true))
   (prepare [this features] this)
   (flush [this] this)
-  (stream-exists? [this dataset collection id] (get @streams [dataset collection id]))
-  (create-stream [this dataset collection id]
-    (pers/create-stream this dataset collection id nil nil nil))
-  (create-stream [this dataset collection id parent-collection parent-id parent-field]
-    (swap! streams assoc [dataset collection id] 1)
+  (stream-exists? [this collection id] (get @streams [collection id]))
+  (create-stream [this collection id]
+    (pers/create-stream this collection id nil nil nil))
+  (create-stream [this collection id parent-collection parent-id parent-field]
+    (swap! streams assoc [collection id] 1)
     (swap! streams-n inc))
-  (append-to-stream [this version action dataset collection id validity geometry attributes]
-    (swap! state assoc [dataset collection id] [action validity])
+  (append-to-stream [this version action collection id validity geometry attributes]
+    (swap! state assoc [collection id] [action validity])
     (swap! events-n inc))
-  (current-validity [_ dataset collection id]
-    (second (get @state [dataset collection id] nil)))
-  (last-action [this dataset collection id]
-    (first (get @state [dataset collection id] nil)))
-  (current-version [this dataset collection id]
+  (current-validity [_ collection id]
+    (second (get @state [collection id] nil)))
+  (last-action [this collection id]
+    (first (get @state [collection id] nil)))
+  (current-version [this collection id]
     nil)
-  (childs [this dataset parent-collection parent-id collection]
+  (childs [this parent-collection parent-id collection]
     [])
   (close [this] (assoc this :closed true)))
 
 (defrecord MockedProjector [features-n changes-n]
   proj/Projector
-  (init [this] (assoc this :initialized true))
+  (init [this for-dataset] (assoc this :initialized true))
   (flush [this] this)
   (new-feature [_ feature]
     (swap! features-n inc))
@@ -61,7 +61,6 @@
 
 (def valid-new-feature
   {:action :new
-   :dataset "known-dataset"
    :collection "collection-1"
    :id "valid-feature"
    :validity default-validity
@@ -70,7 +69,6 @@
 
 (def valid-change-feature
   {:action :change
-   :dataset "known-dataset"
    :collection "collection-1"
    :id "valid-feature"
    :validity default-validity
@@ -78,12 +76,12 @@
    :geometry {:type "dummy"}
    :attributes {:field2 "test"}})
 
-(defn- init-with-feature [persistence {:keys [dataset collection id action validity]}]
-  (pers/create-stream persistence dataset collection id)
-  (pers/append-to-stream persistence nil action dataset collection id validity nil nil))
+(defn- init-with-feature [persistence {:keys [collection id action validity]}]
+  (pers/create-stream persistence collection id)
+  (pers/append-to-stream persistence nil action collection id validity nil nil))
 
 (deftest inititialized-processor
-  (let [processor (processor/create (create-persistence) (create-projectors 2))]
+  (let [processor (processor/create "know-dataset" (create-persistence) (create-projectors 2))]
     (testing "Initialized persistence?"
       (is (-> processor :persistence :initialized)))
     (testing "Initialized projectors?"
@@ -123,9 +121,7 @@
         (new-should-be-ok processor processed)))))
 
 (def make-broken-new-transformations
-  [["no dataset" #(dissoc % :dataset)]
-   ["empty dataset" #(assoc % :dataset "")]
-   ["no collection" #(dissoc % :collection)]
+  [["no collection" #(dissoc % :collection)]
    ["empty collection" #(assoc % :collection "")]
    ["no id" #(dissoc % :id)]
    ["empty id" #(assoc % :id "")]
@@ -191,7 +187,7 @@
 
 (deftest extreme-nested-should-work
   (with-open [in (io/input-stream extreme-nested)]
-    (let [[meta features] (reader/features-from-stream in :dataset "extreme-test")
+    (let [[meta features] (reader/features-from-stream in)
           processor (create-processor)
           processed (into '() (consume processor features))]
       (is (= 4 (count processed)))

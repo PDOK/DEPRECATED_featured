@@ -5,8 +5,7 @@
 ;; merge target path feature
 
 (defn- make-feature [attributes geometry id version]
-  (cond-> {:dataset "merge-test"
-           :collection "only-path-should-matter"
+  (cond-> {:collection "only-path-should-matter"
            :id id
            :attributes attributes}
           geometry (assoc :geometry geometry)
@@ -20,8 +19,7 @@
   ([attributes geom] (mustafied attributes geom "not-important"))
   ( [attributes geom id]
    (reduce (fn [m [k v]] (assoc m k v))
-           {:_dataset "merge-test"
-            :_collection "only-path-should-matter"
+           {:_collection "only-path-should-matter"
             :_id id}
            (cond-> attributes geom (assoc :_geometry geom)))))
 

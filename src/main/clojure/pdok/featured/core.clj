@@ -27,7 +27,7 @@
   (let [persistence (if no-state (pers/make-no-state) (config/persistence))
         projectors (cond-> [] (not no-projectors) (conj (config/projectors persistence :projection projection))
                            (not no-timeline) (conj (config/timeline persistence)))
-        processor (processor/create meta persistence projectors)]
+        processor (processor/create meta dataset persistence projectors)]
     processor))
 
 (defn process [{:keys [json-files dataset] :as options}]
@@ -78,7 +78,7 @@
       (:clear-timeline-changelog options)
         (if (not (:dataset options))
           (exit 0 "clearing changelog requires dataset")
-          (tl/delete-changelog (config/timeline) (:dataset options)))
+          (tl/delete-changelog (config/timeline-for-dataset (:dataset options))))
       (not (or (seq arguments) (:std-in options)))
         (exit 0 "json-file or std-in required")
       :else

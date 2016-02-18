@@ -27,32 +27,32 @@
     (-> feature (assoc :invalid? true) (assoc :invalid-reasons new-reasons))))
 
 (defn- apply-all-features-validation [{:keys [invalids]} feature]
-  (let [{:keys [dataset collection id action validity geometry attributes]} feature]
+  (let [{:keys [collection id action validity geometry attributes]} feature]
     (cond-> feature
-      (or (some str/blank? [dataset collection id]) (and (not= action :delete) (nil? validity)))
-      (make-invalid "All feature require: dataset collection id validity")
-      (@invalids [(:dataset feature) (:collection feature) (:id feature)])
+      (or (some str/blank? [collection id]) (and (not= action :delete) (nil? validity)))
+      (make-invalid "All feature require: collection id validity")
+      (@invalids [(:collection feature) (:id feature)])
       (make-invalid "Feature marked invalid")
-      (@invalids [(:dataset feature) (:parent-collection feature) (:parent-id feature)])
+      (@invalids [(:parent-collection feature) (:parent-id feature)])
       (make-invalid "Parent marked invalid"))))
 
-(defn- stream-exists? [persistence {:keys [dataset collection id]}]
-  (and (pers/stream-exists? persistence dataset collection id)
-       (not= :delete (pers/last-action persistence dataset collection id))))
+(defn- stream-exists? [persistence {:keys [collection id]}]
+  (and (pers/stream-exists? persistence collection id)
+       (not= :delete (pers/last-action persistence collection id))))
 
 (defn- apply-new-feature-requires-non-existing-stream-validation [persistence feature]
-  (let [{:keys [dataset collection id]} feature]
+  (let [{:keys [collection id]} feature]
     (if (and (not (:invalid? feature))
              (stream-exists? persistence feature))
-      (make-invalid feature (str "Stream already exists: " dataset ", " collection ", " id))
+      (make-invalid feature (str "Stream already exists: " collection ", " id))
       feature))
   )
 
 (defn- apply-non-new-feature-requires-existing-stream-validation [persistence feature]
-  (let [{:keys [dataset collection id]} feature]
+  (let [{:keys [collection id]} feature]
     (if (and  (not (:invalid? feature))
               (not (stream-exists? persistence feature)))
-      (make-invalid feature (str "Stream does not exist yet: " dataset ", " collection ", " id))
+      (make-invalid feature (str "Stream does not exist yet: " collection ", " id))
       feature)))
 
 (defn- apply-non-new-feature-current-validity<=validity-validation [feature]
@@ -62,18 +62,18 @@
       feature)))
 
 (defn- apply-non-new-feature-current-validity-validation [persistence feature]
-  (let [{:keys [dataset collection id validity current-validity]} feature]
+  (let [{:keys [collection id validity current-validity]} feature]
     (if-not current-validity
       (make-invalid feature "Non new feature requires: current-validity")
-      (let [stream-validity (pers/current-validity persistence dataset collection id)]
+      (let [stream-validity (pers/current-validity persistence collection id)]
         (if  (not= current-validity stream-validity)
           (make-invalid feature
                         (str  "When updating current-validity should match" current-validity " != " stream-validity))
           (apply-non-new-feature-current-validity<=validity-validation feature))))))
 
 (defn- apply-closed-feature-cannot-be-changed-validation [persistence feature]
-  (let [{:keys [dataset collection id]} feature
-        last-action (pers/last-action persistence dataset collection id)]
+  (let [{:keys [collection id]} feature
+        last-action (pers/last-action persistence collection id)]
     (if (= :close last-action)
       (make-invalid feature "Closed features cannot be altered")
       feature))
@@ -108,13 +108,13 @@
           feature
           )]
     (when (:invalid? validated)
-      (vswap! invalids conj [(:dataset validated) (:collection validated) (:id validated)]))
+      (vswap! invalids conj [(:collection validated) (:id validated)]))
     validated))
 
 (defn- with-current-version [persistence feature]
   (if-not (:invalid? feature)
-    (let [{:keys [dataset collection id]} feature]
-      (assoc feature :current-version (pers/current-version persistence dataset collection id)))
+    (let [{:keys [collection id]} feature]
+      (assoc feature :current-version (pers/current-version persistence collection id)))
     feature))
 
 (defn project! [processor proj-fn feature]
@@ -126,9 +126,9 @@
     (action-fn p)))
 
 (defn- process-new-feature [{:keys [persistence projectors] :as processor} feature]
-  (let [{:keys [dataset collection id validity geometry attributes]} feature]
-    (when-not (pers/stream-exists? persistence dataset collection id)
-      (pers/create-stream persistence dataset collection id
+  (let [{:keys [collection id validity geometry attributes]} feature]
+    (when-not (pers/stream-exists? persistence collection id)
+      (pers/create-stream persistence collection id
                           (:parent-collection feature) (:parent-id feature) (:parent-field feature)))
     (append-feature persistence feature)
     (project! processor proj/new-feature feature))
@@ -169,7 +169,7 @@
 
 (defn- process-nested-close-feature [processor feature]
   (let [nw (process-new-feature processor (assoc feature :action :new))
-        {:keys [action dataset collection id validity geometry attributes]} nw
+        {:keys [action collection id validity geometry attributes]} nw
         no-update-nw (-> nw (transient)
                          (assoc! :action :close)
                          (dissoc! :geometry)
@@ -199,10 +199,9 @@
       (keyword (str "nested-" (name action))))))
 
 (defn- link-parent [[child-collection-key child] parent]
-  (let [{:keys [dataset collection action id validity]} parent
+  (let [{:keys [collection action id validity]} parent
         child-id (str (java.util.UUID/randomUUID))
         with-parent (-> (transient child)
-                  (assoc! :dataset dataset)
                   (assoc! :parent-collection collection)
                   (assoc! :parent-id id)
                   (assoc! :parent-field (name child-collection-key))
@@ -212,17 +211,15 @@
                   (assoc! :collection (str collection "$" (name child-collection-key))))]
     (persistent! with-parent)))
 
-(defn- meta-delete-childs [{:keys [dataset collection id]}]
+(defn- meta-delete-childs [{:keys [collection id]}]
   {:action :delete-childs
-   :dataset dataset
    :parent-collection collection
    :parent-id id})
 
 (defn- meta-close-childs [features]
-  "{:action :close-childs :dataset _ :collection _ :parent-collection _ :parent-id _ :validity _"
+  "{:action :close-childs _ :collection _ :parent-collection _ :parent-id _ :validity _"
   (letfn [(meta [f]
             {:action :close-childs
-             :dataset (:dataset f)
              :collection (:collection f)
              :parent-collection (:parent-collection f)
              :parent-id (:parent-id f)
@@ -255,21 +252,19 @@
         collected (assoc no-attributes :attributes collected)]
     collected))
 
-(defn- close-child [processor dataset parent-collection parent-id collection id close-time]
+(defn- close-child [processor parent-collection parent-id collection id close-time]
   (let [persistence (:persistence processor)
-        childs-of-child (pers/childs persistence dataset collection id)
+        childs-of-child (pers/childs persistence collection id)
         metas (map (fn [[child-col child-id]] {:action :close-childs
-                                  :dataset dataset
                                   :collection child-col
                                   :parent-collection collection
                                   :parent-id id
                                   :validity close-time}) childs-of-child)
-        validity (pers/current-validity persistence dataset collection id)
-        state (pers/last-action persistence dataset collection id)]
+        validity (pers/current-validity persistence collection id)
+        state (pers/last-action persistence collection id)]
         (if-not (= state :close)
           (mapcat (partial process processor)
                   (conj metas {:action :close
-                               :dataset dataset
                                :parent-collection parent-collection
                                :parent-id parent-id
                                :collection collection
@@ -279,32 +274,30 @@
           (mapcat (partial process processor) metas))))
 
 (defn- close-childs [processor meta-record]
-  (let [{:keys [dataset collection parent-collection parent-id validity]} meta-record
+  (let [{:keys [collection parent-collection parent-id validity]} meta-record
         persistence (:persistence processor)
-        ids (pers/childs persistence dataset parent-collection parent-id collection)
+        ids (pers/childs persistence parent-collection parent-id collection)
         closed (doall (mapcat
-                       (fn [[_ id]] (close-child processor dataset parent-collection parent-id
+                       (fn [[_ id]] (close-child processor parent-collection parent-id
                                                 collection id validity)) ids))]
      closed))
 
-(defn- delete-child* [processor dataset collection id]
+(defn- delete-child* [processor collection id]
   (let [persistence (:persistence processor)
-        validity (pers/current-validity persistence dataset collection id)]
+        validity (pers/current-validity persistence collection id)]
     (mapcat (partial process processor) (list
                                   {:action :delete-childs
-                                   :dataset dataset
                                    :parent-collection collection
                                    :parent-id id}
                                   {:action :delete
-                                   :dataset dataset
                                    :collection collection
                                    :id id
                                    :current-validity validity}))))
 
-(defn- delete-childs [processor {:keys [dataset parent-collection parent-id]}]
+(defn- delete-childs [processor {:keys [parent-collection parent-id]}]
   (let [persistence (:persistence processor)
-        ids (pers/childs persistence dataset parent-collection parent-id)
-        deleted (doall (mapcat (fn [[col id]] (delete-child* processor dataset col id)) ids))]
+        ids (pers/childs persistence parent-collection parent-id)
+        deleted (doall (mapcat (fn [[col id]] (delete-child* processor col id)) ids))]
     deleted))
 
 (defn process [processor feature]
@@ -338,17 +331,15 @@
         feature-lower-case (assoc feature :attributes attributes-lower-case)]
     (cond-> feature-lower-case
             ((complement str/blank?) (:collection feature-lower-case))
-            (update-in [:collection] str/lower-case)
-            ((complement str/blank?) (:dataset feature-lower-case))
-            (update-in [:dataset] str/lower-case))))
+            (update-in [:collection] str/lower-case))))
 
 (defn pre-process [processor feature]
   (let [prepped ((comp lower-case collect-attributes) feature)]
     (flatten processor prepped)))
 
 (defn- append-feature [persistence feature]
-  (let [{:keys [version action dataset collection id validity geometry attributes]} feature]
-    (pers/append-to-stream persistence version action dataset collection id validity geometry attributes)
+  (let [{:keys [version action collection id validity geometry attributes]} feature]
+    (pers/append-to-stream persistence version action collection id validity geometry attributes)
     feature))
 
 (defn- update-statistics [{:keys [statistics]} feature]
@@ -387,10 +378,10 @@
               (lazy-seq (consume processor (drop n features)))))))
 
 (defn replay [{:keys [persistence projectors batch-size statistics] :as processor}
-              dataset last-n root-collection]
+              last-n root-collection]
   "Sends the last n events from persistence to the projectors"
-  (let [collections (when root-collection (pers/collection-tree persistence dataset root-collection))
-        features (pers/get-last-n persistence dataset last-n collections)
+  (let [collections (when root-collection (pers/collection-tree persistence root-collection))
+        features (pers/get-last-n persistence last-n collections)
         parts (a/pipe features (a/chan 1 (partition-all batch-size)))]
     (loop [part (a/<!! parts)]
       (when (seq part)
@@ -417,17 +408,19 @@
      :statistics (if statistics @statistics {})}))
 
 (defn add-projector [processor projector]
-  (let [initialized-projector (proj/init projector)]
+  (let [initialized-projector (proj/init projector (:dataset processor))]
     (update-in processor [:projectors] conj initialized-projector)))
 
 (defn create
-  ([persistence] (create persistence []))
-  ([persistence projectors] (apply create {} persistence projectors))
-  ([options persistence & projectors]
-   (let [initialized-persistence (pers/init persistence)
-         initialized-projectors (doall (map proj/init (clojure.core/flatten projectors)))
+  ([dataset persistence] (create persistence dataset []))
+  ([dataset persistence projectors] (apply create {} dataset persistence projectors))
+  ([options dataset persistence & projectors]
+   {:pre [(map? options) (string? dataset)]}
+   (let [initialized-persistence (pers/init persistence dataset)
+         initialized-projectors (doall (map #(proj/init % dataset) (clojure.core/flatten projectors)))
          batch-size (or (config/env :processor-batch-size) 10000)]
-     (merge {:check-validity-on-delete true
+     (merge {:dataset dataset
+             :check-validity-on-delete true
              :disable-validation false
              :persistence initialized-persistence
              :projectors initialized-projectors

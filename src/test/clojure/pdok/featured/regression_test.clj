@@ -39,7 +39,7 @@
 
 (defn json-features [file-name]
   (let [stream (clojure.java.io/resource file-name)
-        [meta features] (json-reader/features-from-stream stream :dataset "regression-set")]
+        [meta features] (json-reader/features-from-stream stream)]
     [meta features]))
 
 (defn process-feature-permutation [meta feature-permutation]
@@ -48,7 +48,7 @@
          (map (fn [features]
                 (let [persistence (config/persistence)
                       projectors (conj (config/projectors persistence) (config/timeline persistence))
-                      processor (processor/create meta persistence projectors)]
+                      processor (processor/create meta "regression-set" persistence projectors)]
                   (dorun (processor/consume processor features))
                   (:statistics (processor/shutdown processor))))
               feature-permutation)))
@@ -57,12 +57,12 @@
   (println "  Replaying")
   (let [persistence (config/persistence)
         projectors (conj (config/projectors persistence) (config/timeline persistence))
-        processor (processor/create {} persistence projectors)]
-    (processor/replay processor "regression-set" 1000 nil)
+        processor (processor/create {} "regression-set" persistence projectors)]
+    (processor/replay processor 1000 nil)
     (:statistics (processor/shutdown processor))))
 
 (defn clean-db []
-  (j/execute! test-db ["DROP SCHEMA IF EXISTS featured_regression CASCADE"])
+  (j/execute! test-db ["DROP SCHEMA IF EXISTS \"featured_regression_regression-set\" CASCADE"])
   (j/execute! test-db ["DROP SCHEMA IF EXISTS \"regression-set\" CASCADE"]))
 
 (defmethod  clojure.test/report :begin-test-var [m]
@@ -72,8 +72,8 @@
 (defmacro defregressiontest* [name permutated? file stats-var & body]
   `(deftest ~name
      (with-bindings
-       {#'dc/*persistence-schema* :featured_regression
-        #'dc/*timeline-schema* :featured_regression}
+       {#'dc/*persistence-schema-prefix* :featured_regression
+        #'dc/*timeline-schema-prefix* :featured_regression}
        (let [[meta# features#] (json-features (str "regression/" ~file ".json"))
              permutated# (if ~permutated? (permutate-features features#) [[features#]])
              n# (count permutated#)
@@ -95,8 +95,8 @@
 
 (defn- query [table selector]
   (let [clauses (pg/map->where-clause selector)]
-  (j/query test-db [ (str "SELECT * FROM featured_regression." table " "
-                          "WHERE dataset = 'regression-set' "
+  (j/query test-db [ (str "SELECT * FROM \"featured_regression_regression-set\"." table " "
+                          "WHERE 1 = 1 "
                           "AND " clauses )])))
 
 (defn- test-persistence

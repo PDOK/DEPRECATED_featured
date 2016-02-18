@@ -15,12 +15,11 @@
          geometry-from-json
          upgrade-data)
 
-(defn map-to-feature [dataset obj]
+(defn map-to-feature [obj]
   (let [action (keyword (get obj "_action"))
         validity (parse-time (obj "_validity"))
         current-validity (parse-time (obj "_current_validity"))
         feature (cond-> (upgrade-data obj)
-                    true (assoc :dataset dataset)
                     true (assoc :action action)
                     true (assoc :validity validity)
                     current-validity (assoc :current-validity current-validity))]
@@ -69,17 +68,14 @@
     [])
   )
 
-(defn- features-from-stream* [^JsonParser jp & {:keys [dataset] :as overrides}]
+(defn- features-from-stream* [^JsonParser jp & overrides]
   (.nextToken jp)
   (when (= JsonToken/START_OBJECT (.getCurrentToken jp))
-    (let [meta (read-meta-data jp)
-          dataset (or dataset (:dataset meta))]
-      (if-not dataset
-        (throw (Exception. "dataset needed"))
-        ;; features should be array
-        (when (= JsonToken/START_ARRAY (.nextToken jp))
-          [meta (map (partial map-to-feature dataset) (read-features jp))])
-        ))))
+    (let [meta (read-meta-data jp)]
+      ;; features should be array
+      (when (= JsonToken/START_ARRAY (.nextToken jp))
+        [meta (map map-to-feature (read-features jp))])
+        )))
 
 (defn features-from-stream [input-stream & args]
   "Parses until 'features' for state. Then returns vector [meta <lazy sequence of features>]."

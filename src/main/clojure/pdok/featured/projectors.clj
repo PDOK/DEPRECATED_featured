@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [flush]))
 
 (defprotocol Projector
-  (init [proj])
+  (init [proj for-dataset])
   (flush [proj])
   (new-feature [proj feature])
   (change-feature [proj feature])

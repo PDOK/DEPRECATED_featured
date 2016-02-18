@@ -6,7 +6,6 @@
   "Create table with default fields"
   (pg/create-table db dc/*timeline-schema* dc/*timeline-history-table*
                [:id "serial" :primary :key]
-               [:dataset "varchar(100)"]
                [:collection "varchar(255)"]
                [:feature_id "varchar(100)"]
                [:version "uuid"]
@@ -14,13 +13,12 @@
                [:valid_to "timestamp without time zone"]
                [:feature "text"]
                [:tiles "integer[]"])
-  (pg/create-index db dc/*timeline-schema* dc/*timeline-history-table* :dataset :collection :feature_id)
+  (pg/create-index db dc/*timeline-schema* dc/*timeline-history-table* :collection :feature_id)
   (pg/create-index db dc/*timeline-schema* dc/*timeline-history-table* :version))
 
 (defn- create-current-table [db]
   (pg/create-table db dc/*timeline-schema* dc/*timeline-current-table*
                [:id "serial" :primary :key]
-               [:dataset "varchar(100)"]
                [:collection "varchar(255)"]
                [:feature_id "varchar(100)"]
                [:version "uuid"]
@@ -28,7 +26,7 @@
                [:valid_to "timestamp without time zone"]
                [:feature "text"]
                [:tiles "integer[]"])
-  (pg/create-index db dc/*timeline-schema* dc/*timeline-current-table* :dataset :collection :feature_id)
+  (pg/create-index db dc/*timeline-schema* dc/*timeline-current-table* :collection :feature_id)
   (pg/create-index db dc/*timeline-schema* dc/*timeline-current-table* :version))
 
 (defn up [db]

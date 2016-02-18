@@ -3,6 +3,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [pdok.featured
+             [projectors :as proj]
              [persistence :as pers]
              [geoserver :as gs]
              [timeline :as timeline]]
@@ -51,7 +52,7 @@
                      :password (or (env :extracts-database-password) "postgres")})
 
 (defn persistence []
-  (pers/cached-jdbc-processor-persistence
+  (pers/make-cached-jdbc-processor-persistence
                     {:db-config processor-db :batch-size 10000}))
 
 (defn timeline
@@ -61,6 +62,10 @@
    (timeline/create-chunked {:chunk-size (or (env :processor-batch-size) 10000)
                              :db-config processor-db
                              :persistence persistence})))
+
+(defn timeline-for-dataset [dataset]
+  (let [tl (timeline)]
+    (proj/init tl dataset)))
 
 (def projections
   {:RD {:proj-fn pdok.featured.feature/as-rd

@@ -16,7 +16,7 @@
 (def test-db config/processor-db)
 
 (defn clean-db []
-  (j/execute! test-db ["DROP SCHEMA IF EXISTS featured_performance CASCADE"])
+  (j/execute! test-db ["DROP SCHEMA IF EXISTS \"featured_performance_performance-set\" CASCADE"])
   (j/execute! test-db ["DROP SCHEMA IF EXISTS \"performance-set\" CASCADE"]))
 
 (defn generate-new-features [ids difficult?]
@@ -37,13 +37,14 @@
 
 (defn run [cfg feature-stream]
   (with-bindings
-    {#'dc/*persistence-schema* :featured_performance
-     #'dc/*timeline-schema* :featured_performance}
+    {#'dc/*persistence-schema-prefix* :featured_performance
+     #'dc/*timeline-schema-prefix* :featured_performance}
     (let [[meta features] (jr/features-from-stream (clojure.java.io/reader feature-stream))
           persistence (config/persistence)
           projectors (conj (config/projectors persistence) (config/timeline persistence))
           processor (processor/create
-                     (merge {:check-validity-on-delete false} cfg) persistence projectors)]
+                     (merge {:check-validity-on-delete false} cfg)
+                     "performance-set" persistence projectors)]
       (dorun (processor/consume processor features))
       (:statistics (processor/shutdown processor)))))
 

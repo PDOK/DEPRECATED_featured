@@ -101,7 +101,7 @@
         projectors [(config/projectors persistence
                                        :no-visualization (collections-with-option "no-visualization" (:processingOptions request)))
                     (config/timeline persistence)]
-        processor (processor/create persistence projectors)
+        processor (processor/create (:dataset request) persistence projectors)
         zipped? (= (:format request) "zip")
         [file err] (download-file (:file request) zipped?)]
     (if-not file
