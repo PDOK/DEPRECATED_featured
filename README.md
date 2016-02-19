@@ -103,6 +103,21 @@ FIXME: explanation
 ### Aanroep jar
     $ java -jar -Dprocessor_database_url=//localhost:5432/pdok -Dprocessor_database_user=pdok_owner -Dprocessor_database_password=pdok_owner -Ddata_database_url=//localhost:5432/pdok -Ddata_database_user=pdok_owner -Ddata_database_password=pdok_owner target\uberjar\featured-0.1.0-SNAPSHOT-standalone.jar -d bgt -f .test-files\new-features-single-collection-10.json
 
+### Aanroep CMD
+#### Verwerken JSON
+	lein run -d bgtmutatie -f "path"\"file"
+
+Voorbeeld
+
+	lein run -d bgtmutatie -f D:\\bgt\\49542013\\49542013-Bak-1.json
+	
+#### Genereren extracten
+	lein run -m pdok.featured.extracts "path_templates" "dataset" "format" (Optional "feature")
+
+Voorbeeld	
+	
+	lein run -m pdok.featured.extracts D:\\git-repos\\catalogus\\datasets\\bgtmutatie\\templates bgtmutatie citygml	bak
+
 ### Aanroep REST-calls
 #### Verwerken json-bestanden
 Op ../featured/api/process een POST uitvoeren met onderstaande request, waarbij de parameters _format_ en _callback_ optioneel zijn.
