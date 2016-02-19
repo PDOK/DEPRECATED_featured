@@ -104,8 +104,7 @@
       (update-in [:feature] pg/from-json)
       (update-in [:action] keyword)))
 
-(defn changed-features
-  ([{:keys [dataset] :as timeline} collection]
+(defn changed-features [{:keys [dataset] :as timeline} collection]
    (let [query (str "SELECT cl.collection, cl.feature_id, cl.old_version, cl.version, cl.action, tl.feature
  FROM " (qualified-changelog dataset) " AS cl
  LEFT JOIN
@@ -117,16 +116,16 @@
 ") as tl ON cl.collection = tl.collection AND cl.version = tl.version
  WHERE cl.collection = '" collection "'
  ORDER BY cl.id ASC")]
-     (query-with-results-on-channel timeline query upgrade-changelog))))
+     (query-with-results-on-channel timeline query upgrade-changelog)))
 
-(defn all-features [timeline dataset collection]
-  (let [query (str "SELECT dataset, collection, feature_id, NULL as old_version, version, 'new' as action, feature
-                    FROM " (qualified-current) "
-                    WHERE dataset = '" dataset "' and collection = '" collection "'
+(defn all-features [{:keys [dataset] :as timeline} collection]
+  (let [query (str "SELECT collection, feature_id, NULL as old_version, version, 'new' as action, feature
+                    FROM " (qualified-current dataset) "
+                    WHERE collection = '" collection "'
                     UNION ALL 
-                    SELECT dataset, collection, feature_id, NULL as old_version, version, 'new' as action, feature
-                    FROM " (qualified-history) "
-                    WHERE dataset = '" dataset "' and collection = '" collection "'")]
+                    SELECT collection, feature_id, NULL as old_version, version, 'new' as action, feature
+                    FROM " (qualified-history dataset) "
+                    WHERE collection = '" collection "'")]
      (query-with-results-on-channel timeline query upgrade-changelog)))
 
 (defn delete-changelog [{:keys [db dataset]}]
