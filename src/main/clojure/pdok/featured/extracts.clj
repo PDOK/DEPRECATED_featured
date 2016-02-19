@@ -134,15 +134,18 @@
         tl (config/timeline-for-dataset dataset)
         rc (fn-timeline-query tl collection)
         parts (a/pipe rc (a/chan 1 (partition-all batch-size)))]
-    (log/info "Create extracts for:" extract-type collection)
-    (loop [records (a/<!! parts)]
+    (log/info "Start create extracts" (str dataset "-" collection "-" extract-type))
+    (loop [i 1
+           records (a/<!! parts)]
       (when records
         (*process-delete-extract* dataset collection extract-type
                                   (filter (complement nil?) (mapcat changelog->change-deletes records)))
         (*process-insert-extract* dataset collection extract-type
                                   (filter (complement nil?) (map changelog->change-inserts records)))
         (*process-delete-extract* dataset collection extract-type (filter (complement nil?) (map changelog->deletes records)))
-        (recur (a/<!! parts))))))
+        (if (= 0 (mod i 10))
+          (log/info "Creating extracts" (str dataset "-" collection "-" extract-type) "processed:" (* i batch-size)))
+        (recur (inc i) (a/<!! parts))))))
 
 (defn- create-extract [dataset extract-type fn-timeline-query collections]
    (if-not (every? *initialized-collection?* (map (partial template/template-key dataset extract-type)
