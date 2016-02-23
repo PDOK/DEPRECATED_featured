@@ -35,6 +35,11 @@
                                           :ids ids :start-with-delete? true
                                           :change? true :close? true)))
 
+(defn generate-nested-new-change-features [ids difficult?]
+  (with-bindings {#'generator/*difficult-geometry?* difficult?}
+    (generator/random-json-feature-stream "performance-set" "col1" (* 3 (count ids))
+                                          :ids ids :nested 2 :change? true)))
+
 (defn run [cfg feature-stream]
   (with-bindings
     {#'dc/*persistence-schema-prefix* :featured_performance
@@ -65,5 +70,14 @@
     (let [n 15000
           ids (map str (range (* i n) (* (inc i) n)))
           stream-1 (.getBytes (slurp (generate-new-features ids false)))]
+      (println "Run" i)
+      (time (run {:disable-validation true} (ByteArrayInputStream. stream-1))))))
+
+(deftest nested-new-change-test
+  (clean-db)
+  (doseq [i (range 1 20)]
+    (let [n 7500
+          ids (map str (range (* i n) (* (inc i) n)))
+          stream-1 (.getBytes (slurp (generate-nested-new-change-features ids false)))]
       (println "Run" i)
       (time (run {:disable-validation true} (ByteArrayInputStream. stream-1))))))
