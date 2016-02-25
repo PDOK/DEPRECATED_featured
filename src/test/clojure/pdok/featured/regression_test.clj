@@ -138,6 +138,7 @@
 
 
 (defn- test-persistence
+  ([events-and-features] (test-persistence "col-1" "id-a" events-and-features))
   ([collection selectors] (test-persistence collection nil selectors))
   ([collection feature-id {:keys [events features]}]
    (testing "!>>> Persistence"
@@ -151,12 +152,13 @@
     (is (= (or ((keyword (str "n-" (name action))) expected-counts) 0)
            (action @changelog-counts)))))
 
-(defn- test-timeline [collection feature-id {:keys [timeline-current timeline timeline-changelog]} changelog-counts]
-  (testing "!>>> Timeline"
-    (is (= (:n timeline-current) (count (query "timeline_current" {:collection collection :feature_id feature-id}))))
-    (is (= (:n timeline) (count (query "timeline" {:collection collection :feature_id feature-id}))))
-    (test-timeline-changelog timeline-changelog changelog-counts)
-    ))
+(defn- test-timeline 
+  ([expected-counts changelog-counts] (test-timeline "col-1" "id-a" expected-counts changelog-counts))
+  ([collection feature-id {:keys [timeline-current timeline timeline-changelog]} changelog-counts]
+   (testing "!>>> Timeline"
+     (is (= (:n timeline-current) (count (query "timeline_current" {:collection collection :feature_id feature-id}))))
+     (is (= (:n timeline) (count (query "timeline" {:collection collection :feature_id feature-id}))))
+     (test-timeline-changelog timeline-changelog changelog-counts))))
 
 (defn- test-timeline->extract [extracts n-extracts]
   (is (= n-extracts (count @extracts))))
@@ -166,42 +168,45 @@
     []
     (j/query test-db [ (str "SELECT * FROM \"regression-set\".\"" table "\"" )])))
 
-(defn- test-geoserver [collection n]
-  (is (= n (count (query-geoserver collection)))))
+(defn- test-geoserver
+  ([n] (test-geoserver "col-1" n))  
+  ([collection n]
+  (is (= n (count (query-geoserver collection))))))
 
 
-(defpermutatedtest new-feature "col-2_id-b_new" results
+(defpermutatedtest new "new" results
   (is (= 1 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
-  (test-persistence "col-2" "id-b" {:events 1 :features 1})
-  (test-timeline "col-2" "id-b" {:timeline-current {:n 1}
-                                 :timeline {:n 0}
-                                 :timeline-changelog {:n-new 1}}
+  (test-persistence {:events 1 :features 1})
+  (test-timeline {:timeline-current {:n 1}
+                  :timeline {:n 0}
+                  :timeline-changelog {:n-new 1}}
                  (:changelog-counts results))
   (test-timeline->extract (:extracts results) 1)
-  (test-geoserver "col-2" 1)
+  (test-geoserver 1)
   )
 
-(defpermutatedtest new-change-feature "col-2_id-b_new-change" results
+(defpermutatedtest new-change "new-change" results
   (is (= 2 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
-  (test-persistence "col-2" "id-b" {:events 2 :features 1})
-  (test-timeline "col-2" "id-b" {:timeline-current {:n 1}
-                                 :timeline {:n 1}}
-                 (:changelog-counts results))
+  (test-persistence {:events 2 :features 1})
+  (test-timeline {:timeline-current {:n 1} 
+                  :timeline {:n 1} 
+                  :timeline-changelog {:n-new 1 :n-change 1}}
+                  (:changelog-counts results))
   (test-timeline->extract (:extracts results) 2)
-  (test-geoserver "col-2" 1))
+  (test-geoserver 1))
 
-(defpermutatedtest new-change-close-feature "col-2_id-b_new-change-close" results
+(defpermutatedtest new-change-close "new-change-close" results
   (is (= 3 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
-  (test-persistence "col-2" "id-b" {:events 3 :features 1})
-  (test-timeline "col-2" "id-b" {:timeline-current {:n 1}
+  (test-persistence {:events 3 :features 1})
+  (test-timeline {:timeline-current {:n 1}
                                  :timeline {:n 1}
                                  :timeline-changelog {:n-new 1 :n-change 1 :n-close 1}}
                  (:changelog-counts results))
   (test-timeline->extract (:extracts results) 2)
-  (test-geoserver "col-2" 0))
+  (test-geoserver 0))
 
 (defpermutatedtest new-change-close_with_attributes-feature "col-2_id-b_new-change-close_with_attributes" results
   (is (= 4 (:n-processed (:stats results))))
