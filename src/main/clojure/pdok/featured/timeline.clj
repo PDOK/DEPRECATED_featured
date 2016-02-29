@@ -13,9 +13,11 @@
             [clojure.core.cache :as cache]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [clojure.zip :as zip]
             [clj-time.core :as t]
-             [clojure.core.async :as a
-             :refer [>!! close! chan]]))
+            [clojure.core.async :as a
+             :refer [>!! close! chan]])
+  (:import [clojure.lang MapEntry]))
 
 (declare create)
 
@@ -122,7 +124,7 @@
   (let [query (str "SELECT collection, feature_id, NULL as old_version, version, 'new' as action, valid_from, feature
                     FROM " (qualified-current dataset) "
                     WHERE collection = '" collection "'
-                    UNION ALL 
+                    UNION ALL
                     SELECT collection, feature_id, NULL as old_version, version, 'new' as action, valid_from, feature
                     FROM " (qualified-history dataset) "
                     WHERE collection = '" collection "'")]
@@ -158,47 +160,88 @@
 (defn drop-nth [v n]
   (into [] (concat (subvec v 0 n) (subvec v (inc n) (count v)))))
 
+(defn mapvec-zipper [m]
+  (zip/zipper
+   (fn [x] (or
+           (when (vector? x) (vector? (nth x 1)))
+           (map? x)))
+   (fn [x] (cond
+            (map? x) (seq x)
+            (vector? x) (nth x 1)))
+   (fn [node children]
+     (cond
+       (instance? MapEntry node) (MapEntry. (first node) (vec children))
+       (map? node) (into {} children)
+       (vector? node) children))
+    m))
 
-;; we only check for close in an existing vector, so we can remove the entry
-;; we should check everywhere, but it is very unlikely that such a case can exist, because the processor
-;; does not allow a close before a new.
-(defn- path->merge-fn [target path action]
-  (if-not (empty? path)
-    (loop [[[field id] & rest] path
-           t target
-           f identity]
-      (if field
-        (let [field-value (get t field)]
-          (if field-value
-            (cond
-             (vector? field-value)
-             (if-let [i (index-of #(= id (:_id %)) field-value)]
-               (if (and (= :close action) (not (seq rest)))
-                 (recur rest nil (fn [_] (f (update-in t [field] (fn [v] (drop-nth v i))))))
-                 (recur rest (get field-value i) #(f (update-in t [field i] (fn [v] (clojure.core/merge v %))))))
-               ;; not found -> append
-               (if (= :close action)
-                 (recur nil nil (fn [_] (f target) ))
-                 (recur rest {} #(f (assoc-in t [field (count field-value)] %)))))
-             ;; if it is not a vector we are probable replacing existing values.
-             ;; Treat this as a non existing value, ie. override value;
-             :else (do ;(println "override:" field (f {}))
-                       (recur rest (init-root field id) #(f (assoc t field (vector %)))))
-             )
-            ;; no field-value => we are working with child objects, place it in a vector
-            (recur rest nil #(f (assoc t field (vector %))))))
-        ;; no path (f {})
-        f
-          ))
-    #(clojure.core/merge target %))
-  )
+(defn zip-find-key [zipper key]
+  (when zipper
+    (loop [inner (zip/down zipper)]
+      (when inner
+        (let [[[k v] _] inner]
+          (if-not (= k key)
+            (recur (zip/right inner))
+            inner))))))
 
-(defn- merge
+(defn zip-filter-seq [zipper filter-fn]
+  (when zipper
+    (loop [inner (zip/down zipper)]
+      (when inner
+        (if-not (filter-fn (zip/node inner))
+          (recur (zip/right inner))
+          inner)))))
+
+(defn insert* [target path feature]
+  (if (seq path)
+    (loop [zipper (mapvec-zipper target)
+           [[field id] & more] path]
+      (let [loc (zip-find-key zipper field)]
+        (cond
+          (and loc (not (vector? (nth (zip/node loc) 1))))
+          (insert* (zip/root (zip/remove loc)) path feature)
+          loc
+          (if-let [nested (zip-filter-seq loc #(= id (:_id %)))]
+            (if-not more
+              (zip/root (zip/replace nested (clojure.core/merge (zip/node nested) feature)))
+              (recur nested more))
+            (if-not more
+              (zip/root (zip/insert-child loc feature))
+              (recur (-> (zip/insert-child loc) zip/down) more)))
+          ;; add root and step into it
+          :else
+          (if-not more
+            (zip/root (zip/insert-child zipper (MapEntry. field [feature])))
+            (recur (-> (zip/insert-child zipper (MapEntry. field [{}]))
+                       zip/down zip/down)
+                   more)))))
+    (clojure.core/merge target feature)))
+
+(defn delete-in* [target path]
+  (if (seq path)
+    (loop [zipper (mapvec-zipper target)
+           [[field id] & more] path]
+      (when-let [loc (zip-find-key zipper field)]
+        (cond
+          (or (not (vector? (nth (zip/node loc) 1))) (not (seq (nth (zip/node loc) 1))))
+          target
+          :else
+          (when-let [nested (zip-filter-seq loc #(= id (:_id %)))]
+            (if more
+              (recur nested more)
+              (zip/root (zip/remove nested)))))))
+    target))
+
+(defn merge* [target action path feature]
+  (condp = action
+    :close (delete-in* target path)
+    (insert* target path feature)))
+
+(defn merge
   ([target path feature]
    (let [keyworded-path (map (fn [[_ _ field id]] [(keyword field) id]) path)
          mustafied (mustafy feature)
-         merger (path->merge-fn target keyworded-path (:action feature))
-         merged (merger mustafied)
+         merged (merge* target (:action feature) keyworded-path mustafied)
          merged (assoc merged :_version (:version feature))
          merged (update-in merged [:_all_versions] (fnil conj '()) (:version feature))
          merged (update merged :_tiles #((fnil clojure.set/union #{}) % (tiles/nl (:geometry feature))))]

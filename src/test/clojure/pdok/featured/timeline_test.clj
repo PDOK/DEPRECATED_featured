@@ -38,6 +38,42 @@
                          {:nested1 [(mustafied {:attribute "value"} {:dummy :dummy :nl-tiles #{ 666}} )]})]
     (is (= should-be merged))))
 
+(deftest append-to-empty-vector-merge
+  (let [starts-with (assoc (make-root '(1) 1) :nested1 [])
+        path '(["parent-collection" "parent-id" "nested1" "child-id"])
+        feature (make-feature {:attribute "value"} {:dummy :dummy :nl-tiles #{666}} "not-important" 3)
+        merged (#'timeline/merge starts-with path feature)
+        should-be (merge (make-root '(3 1) 1 666)
+                         {:nested1 [(mustafied {:attribute "value"} {:dummy :dummy :nl-tiles #{ 666}} )]})]
+    (is (= should-be merged))))
+
+(deftest merge-existing-nested
+  (let [starts-with (assoc (make-root '(1) 1) :nested1 [(mustafied {:attribute "value" :keep 1} {:dummy :dummy} "child-id")])
+        path '(["parent-collection" "parent-id" "nested1" "child-id"])
+        feature (make-feature {:attribute "new-value"} {:dummy :dummy :nl-tiles #{666}} "not-important" 3)
+        merged (#'timeline/merge starts-with path feature)
+        should-be (merge (make-root '(3 1) 1 666)
+                         {:nested1 [(mustafied {:attribute "new-value" :keep 1} {:dummy :dummy :nl-tiles #{ 666}} )]})]
+    (is (= should-be merged))))
+
+(deftest replace-attr-merge
+  (let [starts-with (assoc (make-root '(1) 1) :nested1 "value")
+        path '(["parent-collection" "parent-id" "nested1" "child-id"])
+        feature (make-feature {:attribute "value"} {:dummy :dummy :nl-tiles #{666}} "not-important" 3)
+        merged (#'timeline/merge starts-with path feature)
+        should-be (merge (make-root '(3 1) 1 666)
+                         {:nested1 [(mustafied {:attribute "value"} {:dummy :dummy :nl-tiles #{ 666}} )]})]
+    (is (= should-be merged))))
+
+(deftest replace-map-merge
+  (let [starts-with (assoc (make-root '(1) 1) :nested1 {:bla :bla})
+        path '(["parent-collection" "parent-id" "nested1" "child-id"])
+        feature (make-feature {:attribute "value"} {:dummy :dummy :nl-tiles #{666}} "not-important" 3)
+        merged (#'timeline/merge starts-with path feature)
+        should-be (merge (make-root '(3 1) 1 666)
+                         {:nested1 [(mustafied {:attribute "value"} {:dummy :dummy :nl-tiles #{ 666}} )]})]
+    (is (= should-be merged))))
+
 (deftest triple-depth-merge
   (let [starts-with (assoc (make-root '(1) 1) :attr1 :a)
         path '(["pc" "pid" "nested_1" "id1"] ["pc2" "pid2" "nested_2" "id2"])
@@ -48,14 +84,65 @@
                           [{:nested_2 [(mustafied {:attributeX "valueY"})]}]})]
     (is (= should-be merged))))
 
-(deftest close-child-merge ;; with tiles
+(deftest triple-depth-merge-in-existing-map
+  (let [starts-with (assoc (make-root '(1) 1) :nested_1 [{:_id "id1"}])
+        path '(["pc" "pid" "nested_1" "id1"] ["pc2" "pid2" "nested_2" "id2"])
+        feature (make-feature {:attributeX "valueY"} nil "not-important" 5)
+        merged (#'timeline/merge starts-with path feature)
+        should-be (merge (make-root '(5 1) 1)
+                         {:nested_1
+                          [{:_id "id1" :nested_2 [(mustafied {:attributeX "valueY"})]}]})]
+    (is (= should-be merged))))
+
+(deftest close-one-of-two-child-merge ;; with tiles
   (let [path '(["parent-collection" "parent-id" "nested1" "child-id"])
         feature (-> (make-feature {:attribute "value"} {:dummy :dummy} "child-id" 3)
                     (assoc :action :close))
         merged (#'timeline/merge
-                (-> (make-root '(1) 1) (assoc :nested1 [(mustafied {:attribute "value"} {:dummy :dummy} "child-id")]))
+                (-> (make-root '(1) 1)
+                    (assoc :nested1 [(mustafied {:attribute "value"} {:dummy :dummy} "child-id")
+                                     (mustafied {:attribute "value"} {:dummy :dummy} "keep-id")]))
+                path
+                feature)
+        should-be (merge (make-root '(3 1) 1)
+                         {:nested1 [(mustafied {:attribute "value"} {:dummy :dummy} "keep-id")]})]
+    (is (= should-be merged))))
+
+(deftest close-single-child-keeps-vector
+  (let [path '(["parent-collection" "parent-id" "nested1" "child-id"])
+        feature (-> (make-feature {:attribute "value"} {:dummy :dummy} "child-id" 3)
+                    (assoc :action :close))
+        merged (#'timeline/merge
+                (-> (make-root '(1) 1)
+                    (assoc :nested1 [(mustafied {:attribute "value"} {:dummy :dummy} "child-id")]))
                 path
                 feature)
         should-be (merge (make-root '(3 1) 1)
                          {:nested1 []})]
+    (is (= should-be merged))))
+
+(deftest close-non-existing-child-keeps-vector
+  (let [path '(["parent-collection" "parent-id" "nested1" "child-id"])
+        feature (-> (make-feature {:attribute "value"} {:dummy :dummy} "child-id" 3)
+                    (assoc :action :close))
+        merged (#'timeline/merge
+                (-> (make-root '(1) 1)
+                    (assoc :nested1 []))
+                path
+                feature)
+        should-be (merge (make-root '(3 1) 1)
+                         {:nested1 []})]
+    (is (= should-be merged))))
+
+(deftest close-no-vector->no-error+no-delete
+  (let [path '(["parent-collection" "parent-id" "nested1" "child-id"])
+        feature (-> (make-feature {:attribute "value"} {:dummy :dummy} "child-id" 3)
+                    (assoc :action :close))
+        merged (#'timeline/merge
+                (-> (make-root '(1) 1)
+                    (assoc :nested1 "err string"))
+                path
+                feature)
+        should-be (merge (make-root '(3 1) 1)
+                         {:nested1 "err string"})]
     (is (= should-be merged))))
