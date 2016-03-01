@@ -26,20 +26,22 @@
 
 
 (defn- jdbc-update-extract [db table entries]
-  (let [qualified-table (str extract-schema "." table)
-        query (str "UPDATE " qualified-table " SET valid_to = ? WHERE version = ?")]
-    (try (j/execute! db (cons query entries) :multi? true :transaction? false)
-      (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
+  (when (seq entries)
+    (let [qualified-table (str extract-schema "." table)
+          query (str "UPDATE " qualified-table " SET valid_to = ? WHERE version = ?")]
+      (try (j/execute! db (cons query entries) :multi? true :transaction? false)
+           (catch java.sql.SQLException e (j/print-sql-exception-chain e))))))
 
 (defn update-extract-records [db dataset feature-type extract-type items]
   (jdbc-update-extract db (str dataset "_" extract-type "_v0_" feature-type) items))
 
 (defn- jdbc-insert-extract [db table entries]
-  (let [qualified-table (str extract-schema "." table)
-        query (str "INSERT INTO " qualified-table
-                   " (feature_type, version, valid_from, valid_to, publication, tiles, xml) VALUES (?, ?, ?, ?, ?, ?, ?)")]
-    (try (j/execute! db (cons query entries) :multi? true :transaction? false)
-      (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
+  (when (seq entries)
+    (let [qualified-table (str extract-schema "." table)
+          query (str "INSERT INTO " qualified-table
+                     " (feature_type, version, valid_from, valid_to, publication, tiles, xml) VALUES (?, ?, ?, ?, ?, ?, ?)")]
+      (try (j/execute! db (cons query entries) :multi? true :transaction? false)
+           (catch java.sql.SQLException e (j/print-sql-exception-chain e))))))
 
 (defn get-or-add-extractset [db extractset version]
   "return id"
@@ -129,7 +131,7 @@
 (defn changelog->change-inserts [record]
   (condp = (:action record)
     :new (:feature record)
-    :change (:feature record) 
+    :change (:feature record)
     :close (:feature record)
     nil))
 
@@ -155,9 +157,9 @@
       (when records
         (*process-insert-extract* dataset collection extract-type
                                   (filter (complement nil?) (map changelog->change-inserts records)))
-        (*process-update-extract* dataset collection extract-type 
+        (*process-update-extract* dataset collection extract-type
                                   (filter (complement nil?) (map changelog->updates records)))
-        (*process-delete-extract* dataset collection extract-type 
+        (*process-delete-extract* dataset collection extract-type
                                   (filter (complement nil?) (map changelog->deletes records)))
         (if (= 0 (mod i 10))
           (log/info "Creating extracts" (str dataset "-" collection "-" extract-type) "processed:" (* i batch-size)))
@@ -167,7 +169,7 @@
    (if-not (every? *initialized-collection?* (map (partial template/template-key dataset extract-type)
                                        collections))
       {:status "error" :msg "missing template(s)" :collections collections}
-      (do 
+      (do
         (doseq [collection collections]
           (create-extract* dataset extract-type collection fn-timeline-query))
         {:status "ok" :collections collections})))
