@@ -9,6 +9,7 @@
                [:feature_id "varchar(100)"]
                [:old_version "uuid"]
                [:version "uuid"]
+               [:valid_from "timestamp without time zone"]
                [:action "varchar(12)"]
                )
   (pg/create-index db dc/*timeline-schema* dc/*timeline-changelog* :version :action)

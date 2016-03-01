@@ -105,13 +105,13 @@
       (update-in [:action] keyword)))
 
 (defn changed-features [{:keys [dataset] :as timeline} collection]
-   (let [query (str "SELECT cl.collection, cl.feature_id, cl.old_version, cl.version, cl.action, tl.feature
+   (let [query (str "SELECT cl.collection, cl.feature_id, cl.old_version, cl.version, cl.action, cl.valid_from, tl.feature
  FROM " (qualified-changelog dataset) " AS cl
  LEFT JOIN
-(SELECT collection, feature_id, version, feature FROM "
+(SELECT collection, feature_id, version, valid_from, feature  FROM "
  (qualified-current dataset)
 " UNION ALL
- SELECT collection, feature_id, version, feature FROM "
+ SELECT collection, feature_id, version, valid_from, feature FROM "
 (qualified-history dataset)
 ") as tl ON cl.collection = tl.collection AND cl.version = tl.version
  WHERE cl.collection = '" collection "'
@@ -119,11 +119,11 @@
      (query-with-results-on-channel timeline query upgrade-changelog)))
 
 (defn all-features [{:keys [dataset] :as timeline} collection]
-  (let [query (str "SELECT collection, feature_id, NULL as old_version, version, 'new' as action, feature
+  (let [query (str "SELECT collection, feature_id, NULL as old_version, version, 'new' as action, valid_from, feature
                     FROM " (qualified-current dataset) "
                     WHERE collection = '" collection "'
                     UNION ALL 
-                    SELECT collection, feature_id, NULL as old_version, version, 'new' as action, feature
+                    SELECT collection, feature_id, NULL as old_version, version, 'new' as action, valid_from, feature
                     FROM " (qualified-history dataset) "
                     WHERE collection = '" collection "'")]
      (query-with-results-on-channel timeline query upgrade-changelog)))
@@ -207,8 +207,13 @@
 (defn- sync-valid-from [acc feature]
   (assoc acc :_valid_from  (:validity feature)))
 
+(defn- sync-version [acc feature]
+  (let [_ (println "feature in sync-version " feature)])
+  (assoc acc :_version (:current-version feature)))
+
 (defn- sync-valid-to [acc feature]
-  (assoc acc :_valid_to (:validity feature)))
+  (let [changed (assoc acc :_valid_to (:validity feature))]
+    changed))
 
 (defn- reset-valid-to [acc]
   (assoc acc :_valid_to nil))
@@ -284,13 +289,13 @@ VALUES (?, ?, ?, ?, ?, ?, ?)"))
 
 (defn- append-to-changelog-sql [dataset]
   (str "INSERT INTO " (qualified-changelog dataset)
-       " (collection, feature_id, old_version, version, action)
- SELECT ?, ?, ?, ?, ?
+       " (collection, feature_id, old_version, version, valid_from, action)
+ SELECT ?, ?, ?, ?, ?, ?
  WHERE NOT EXISTS (SELECT 1 FROM " (qualified-changelog dataset)
  " WHERE version = ? AND action = ?)"))
 
 (defn- append-to-changelog [{:keys [db dataset]} log-entries]
-  "([collection id old-version version action] .... )"
+  "([collection id old-version version valid_from action] .... )"
   (try
     (let [transform-fn  (fn [rec] (let [[_ _ ov v a] rec] (conj rec v a)))
           records (map transform-fn log-entries)]
@@ -378,12 +383,12 @@ VALUES (?, ?, ?, ?, ?, ?, ?)"))
           batched-append-changelog (batched changelog-batch changelog-batch-size flush-fn)]
       (if-let [current (cached-get-current root-col root-id)]
         (when (util/uuid> (:version feature) (:_version current))
-          (let [new-current (merge current path feature)]
-            (if (= (:action feature) :close)
+          (let [new-current (merge current path feature)
+]            (if (= (:action feature) :close)
               (do (cache-batched-update (sync-valid-to new-current feature))
                   (batched-append-changelog [(:_collection new-current)
-                                             (:_id new-current) (:_version current)
-                                             (:_version new-current) :close]))
+                                               (:_id new-current) (:_version current)
+                                               (:_version new-current) (:validity feature) :close]))
               (if (t/before? (:_valid_from current) (:validity feature))
                 (do ;(println "NOT-SAME")
                   (batched-history (sync-valid-to current feature))
@@ -391,18 +396,18 @@ VALUES (?, ?, ?, ?, ?, ?, ?)"))
                   (cache-batched-update (reset-valid-to (sync-valid-from new-current feature)))
                   (batched-append-changelog [(:_collection new-current)
                                              (:_id new-current) (:_version current)
-                                             (:_version new-current) :change]))
+                                             (:_version new-current) (:validity feature) :change]))
                 (do ;(println "SAME")
                   ;; reset valid-to because it might be closed because of nested features.
                   (cache-batched-update (reset-valid-to (sync-valid-from new-current feature)))
                   (batched-append-changelog [(:_collection new-current)
                                              (:_id new-current) (:_version current)
-                                             (:_version new-current) :change]))))))
+                                             (:_version new-current) (:validity feature) :change]))))))
         (let [nw (sync-valid-from (merge (init-root root-col root-id) path feature) feature)]
           (cache-batched-new nw)
           (batched-append-changelog [(:_collection nw)
                                      (:_id nw) nil
-                                     (:_version nw) :new])))))
+                                     (:_version nw) (:validity feature) :new])))))
   (proj/change-feature [this feature]
     ;; change can be the same, because a new nested feature validity change will also result in a new validity
     ;(println "CHANGE")
@@ -423,7 +428,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?)"))
           (doseq [v (:_all_versions current)]
             (batched-append-changelog [(:_collection current)
                                        (:_id current) nil
-                                       v :delete]))))))
+                                       v (:validity current) :delete]))))))
   (proj/accept? [_ feature] true)
   (proj/close [this]
     (proj/flush this)

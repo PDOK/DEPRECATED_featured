@@ -1,8 +1,8 @@
 {"_check_validity_on_delete" : false,
  "Features": [
      {"_action":"new",
-      "_id":"id-b",
-      "_collection":"col-2",
+      "_id":"id-a",
+      "_collection":"col-1",
       "attra":"2",
       "nested": {
           "info": "a",

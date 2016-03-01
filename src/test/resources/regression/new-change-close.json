@@ -1,0 +1,5 @@
+{"Features": [
+{"_action":"new","_id":"id-a","_validity":"2016-02-01T11:00:00.000","_collection":"col-1","attra-a":"first","_geometry":{"type":"gml","gml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><gml:Point xmlns:gml=\"http://www.opengis.net/gml\"><gml:pos>154742.108 464096.362</gml:pos></gml:Point>"}},
+{"_action":"change","_id":"id-a","_current_validity":"2016-02-01T11:00:00.000","_validity":"2016-02-10T09:00:00.000","_collection":"col-1","attr-a":"second","_geometry":{"type":"gml","gml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><gml:Point xmlns:gml=\"http://www.opengis.net/gml\"><gml:pos>154742.108 464096.362</gml:pos></gml:Point>"}},
+{"_action":"close","_id":"id-a","_current_validity":"2016-02-10T09:00:00.000","_validity":"2016-02-11T09:00:00.000","_collection":"col-1"}
+]}

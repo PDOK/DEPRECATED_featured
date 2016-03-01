@@ -24,6 +24,16 @@
       [nil (map #(vector feature-type (:_version %) (:_tiles %) (m/render template-key %)
                            (:_valid_from %) (:_valid_to %) (:lv-publicatiedatum %)) features)])))
 
+
+(defn- jdbc-update-extract [db table entries]
+  (let [qualified-table (str extract-schema "." table)
+        query (str "UPDATE " qualified-table " SET valid_to = ? WHERE version = ?")]
+    (try (j/execute! db (cons query entries) :multi? true :transaction? false)
+      (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
+
+(defn update-extract-records [db dataset feature-type extract-type items]
+  (jdbc-update-extract db (str dataset "_" extract-type "_v0_" feature-type) items))
+
 (defn- jdbc-insert-extract [db table entries]
   (let [qualified-table (str extract-schema "." table)
         query (str "INSERT INTO " qualified-table
@@ -105,26 +115,31 @@
   (with-open [s (clojure.java.io/reader path)]
    (doall (json-reader/features-from-stream s :dataset dataset))))
 
-(defn changelog->change-deletes [record]
-  (let [versions (juxt :version :old_version)]
-    (condp = (:action record)
-      :new (versions record)
-      :change (versions record)
-      :close (versions record)
-      [])))
+(defn- change-record [record]
+  (let [version (:old_version record)
+        valid-to (:valid_from record)]
+    (when-not (or (nil? version) (nil? valid-to))
+      [valid-to version])))
+
+(defn changelog->updates [record]
+  (condp = (:action record)
+      :change (change-record record)
+      nil))
 
 (defn changelog->change-inserts [record]
   (condp = (:action record)
     :new (:feature record)
-    :change (:feature record)
+    :change (:feature record) 
     :close (:feature record)
     nil))
 
 (defn changelog->deletes [record]
   (condp = (:action record)
     :delete (:version record)
+    :close (:old_version record)
     nil))
 
+(def ^:dynamic *process-update-extract* (partial update-extract-records config/extracts-db))
 (def ^:dynamic *process-insert-extract* (partial transform-and-add-extract config/extracts-db))
 (def ^:dynamic *process-delete-extract* (partial delete-extracts-with-version config/extracts-db))
 (def ^:dynamic *initialized-collection?* m/registered?)
@@ -138,11 +153,12 @@
     (loop [i 1
            records (a/<!! parts)]
       (when records
-        (*process-delete-extract* dataset collection extract-type
-                                  (filter (complement nil?) (mapcat changelog->change-deletes records)))
         (*process-insert-extract* dataset collection extract-type
                                   (filter (complement nil?) (map changelog->change-inserts records)))
-        (*process-delete-extract* dataset collection extract-type (filter (complement nil?) (map changelog->deletes records)))
+        (*process-update-extract* dataset collection extract-type 
+                                  (filter (complement nil?) (map changelog->updates records)))
+        (*process-delete-extract* dataset collection extract-type 
+                                  (filter (complement nil?) (map changelog->deletes records)))
         (if (= 0 (mod i 10))
           (log/info "Creating extracts" (str dataset "-" collection "-" extract-type) "processed:" (* i batch-size)))
         (recur (inc i) (a/<!! parts))))))
