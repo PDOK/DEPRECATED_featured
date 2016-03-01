@@ -31,8 +31,8 @@
     (try (j/execute! db (cons query entries) :multi? true :transaction? false)
       (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
 
-(defn update-extract-records [db dataset extract-type items]
-  (jdbc-update-extract db (str dataset "_" extract-type "_v0") items))
+(defn update-extract-records [db dataset feature-type extract-type items]
+  (jdbc-update-extract db (str dataset "_" extract-type "_v0_" feature-type) items))
 
 (defn- jdbc-insert-extract [db table entries]
   (let [qualified-table (str extract-schema "." table)
@@ -119,8 +119,7 @@
   (let [version (:old_version record)
         valid-to (:valid_from record)]
     (when-not (or (nil? version) (nil? valid-to))
-      {:version version
-       :valid-to valid-to})))
+      [valid-to version])))
 
 (defn changelog->updates [record]
   (condp = (:action record)

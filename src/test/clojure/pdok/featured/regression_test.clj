@@ -56,7 +56,7 @@
   (map (partial update-record* version valid-to) extracts))
 
 (defn- updated-features [extracts dataset collection extract-type changed-records]
-  (doseq [{:keys [version valid-to]} changed-records]
+  (doseq [[valid-to version] changed-records]
     (swap! extracts update-records version valid-to)))
 
 (defn- remove-extract-record [extracts version-to-delete ]
