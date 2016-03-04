@@ -93,6 +93,7 @@
    [nil "--no-projectors"]
    [nil "--no-timeline"]
    [nil "--no-state" "Use only with no nesting and action :new"]
+   [nil "--disable-validation"]
    [nil "--projection PROJ" "RD / ETRS89 / SOURCE"]
    ["-r" "--replay [N/root-collection]" "Replay last N events or all events from root-collection tree from persistence to projectors"]
    [nil "--clear-timeline-changelog" "Clear timeline changelog for dataset"]
