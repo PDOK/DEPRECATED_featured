@@ -72,9 +72,16 @@
                           "WHERE 1 = 1 "
                           "AND " clauses )])))
 
-(defn- add-changelog-counts [changelog-counts action]
-  (swap! changelog-counts assoc action (+ (or (action @changelog-counts) 0)
-                                          (count (query "timeline_changelog" {:action (name action)})))))
+(defn- update-changelog-counts [changelog-counts]
+  (let [records (j/query test-db ["SELECT * FROM \"featured_regression_regression-set\".timeline_changelog"])]
+    (doseq [action [:new :change :close :delete]]
+      (let [n (count (filter #(= (:action %1) (name action)) records)) ]
+        (swap! changelog-counts update action (fnil + 0) n)))
+
+    (doseq [[column stat-name] [[:collection :nil-collections]
+                                [:feature_id :nil-ids]]]
+      (let [nils (count (filter #(= (get %1 column) nil) records)) ]
+        (swap! changelog-counts update stat-name (fnil + 0) nils)))))
 
 
 (defn process-feature-permutation [meta feature-permutation]
@@ -92,13 +99,11 @@
                       projectors (conj (config/projectors persistence) (config/timeline persistence))
                       processor (processor/create meta "regression-set" persistence projectors)]
                   (dorun (processor/consume processor features))
-                  (doseq [action [:new :change :close :delete]]
-                    (add-changelog-counts changelog-counts action)
-                    )
+                  (update-changelog-counts changelog-counts)
                   (e/fill-extract "regression-set" nil)
                   (e/flush-changelog "regression-set")
                   (:statistics (processor/shutdown processor))))
-              feature-permutation)) 
+              feature-permutation))
       :extracts extracts
       :changelog-counts changelog-counts})))
 
@@ -154,11 +159,13 @@
                                                feature-id (assoc :feature_id feature-id)))))))))
 
 (defn- test-timeline-changelog [expected-counts changelog-counts]
+  (is (= 0 (:nil-collections @changelog-counts)))
+  (is (= 0 (:nil-ids @changelog-counts)))
   (doseq [action [:new :change :close :delete]]
     (is (= (or ((keyword (str "n-" (name action))) expected-counts) 0)
            (action @changelog-counts)))))
 
-(defn- test-timeline 
+(defn- test-timeline
   ([expected-counts changelog-counts] (test-timeline "col-1" "id-a" expected-counts changelog-counts))
   ([collection feature-id {:keys [timeline-current timeline timeline-changelog]} changelog-counts]
    (testing "!>>> Timeline"
@@ -176,7 +183,7 @@
     (j/query test-db [ (str "SELECT * FROM \"regression-set\".\"" table "\"" )])))
 
 (defn- test-geoserver
-  ([n] (test-geoserver "col-1" n))  
+  ([n] (test-geoserver "col-1" n))
   ([collection n]
   (is (= n (count (query-geoserver collection))))))
 
@@ -199,8 +206,8 @@
   (is (= 2 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 2 :features 1})
-  (test-timeline {:timeline-current {:n 1} 
-                  :timeline {:n 1} 
+  (test-timeline {:timeline-current {:n 1}
+                  :timeline {:n 1}
                   :timeline-changelog {:n-new 1 :n-change 1}}
                   (:changelog-counts results))
   (test-timeline->extract {:n-extracts 2
@@ -225,8 +232,8 @@
   (is (= 3 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 3 :features 1})
-  (test-timeline {:timeline-current {:n 1} 
-                  :timeline {:n 2} 
+  (test-timeline {:timeline-current {:n 1}
+                  :timeline {:n 2}
                   :timeline-changelog {:n-new 1 :n-change 2}}
                   (:changelog-counts results))
   (test-timeline->extract {:n-extracts 3
@@ -376,4 +383,3 @@
   (test-geoserver 1)
   (test-geoserver "col-1$nestedserie" 0)
   (test-geoserver "col-1$nestedserie$label" 1))
-
