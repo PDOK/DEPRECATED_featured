@@ -16,7 +16,8 @@
              [extracts :as extracts]
              [template :as template]
              [json-reader :as reader]
-             [zipfiles :as zipfiles]]
+             [zipfiles :as zipfiles]
+             [persistence :as persistence]]
             [ring.middleware.defaults :refer :all]
             [ring.middleware.json :refer :all]
             [ring.util.response :as r]
@@ -45,7 +46,9 @@
    (s/optional-key :format) (s/enum "json" "zip")
    (s/optional-key :processingOptions) [{:collection s/Str
                                          :options [(s/enum "no-visualization")]}]
-   (s/optional-key :callback) URI})
+   (s/optional-key :callback) URI
+   (s/optional-key :no-timeline) boolean
+   (s/optional-key :no-state) boolean})
 
 (def ExtractRequest
   "A schema for a JSON extract request"
@@ -97,10 +100,10 @@
 (defn- process* [stats callback-chan request]
   (log/info "Processsing: " request)
   (swap! stats assoc-in [:processing] request)
-  (let [persistence (config/persistence)
-        projectors [(config/projectors persistence
-                                       :no-visualization (collections-with-option "no-visualization" (:processingOptions request)))
-                    (config/timeline persistence)]
+  (let [persistence (if (:no-state request) (persistence/make-no-state) (config/persistence))
+        projectors (cond-> [(config/projectors persistence
+                                       :no-visualization (collections-with-option "no-visualization" (:processingOptions request)))]
+                    (not (:no-timeline request)) (conj (config/timeline persistence)))
         processor (processor/create (:dataset request) persistence projectors)
         zipped? (= (:format request) "zip")
         [file err] (download-file (:file request) zipped?)]

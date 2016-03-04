@@ -8,7 +8,7 @@
             [cognitect.transit :as transit]
             [clojure.java.io :as io]
             [clojure.tools.logging :as log])
-  (:import [nl.pdok.gml3 GML3Parser]
+  (:import [nl.pdok.gml3.impl GMLMultiVersionParserImpl]
            [pdok.featured.xslt TransformXSLT]
            [pdok.featured.converters Transformer]
            [com.vividsolutions.jts.geom Geometry]
@@ -59,15 +59,21 @@
 
 (def simple-gml-transfomer (TransformXSLT. (io/input-stream xslt-simple-gml)))
 
-(def gml3-parser (GML3Parser.))
+(def gml3-parser
+  (GMLMultiVersionParserImpl.))
 
 (defn gml3-as-jts [gml]
-  (locking gml3-parser (.toJTSGeometry ^GML3Parser gml3-parser gml)))
+  (try
+    (.toJTSGeometry ^GMLMultiVersionParserImpl gml3-parser gml)
+    (catch nl.pdok.gml3.exceptions.GML3ParseException e
+      (log/error "Could not transform GML to JTS:" (.getMessage  e))
+      nil)))
 
 (def wkt-writer (WKTWriter.))
 
 (defn jts-as-wkt [jts]
-  (.write ^WKTWriter wkt-writer jts))
+  (if-not (nil? jts)
+    (.write ^WKTWriter wkt-writer jts)))
 
 (defmulti valid-geometry? (fn [obj] (lower-case (get obj "type"))))
 (defmethod valid-geometry? :default [_] nil)
