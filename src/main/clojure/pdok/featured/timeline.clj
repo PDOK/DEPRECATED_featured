@@ -221,15 +221,17 @@
   (if (seq path)
     (loop [zipper (mapvec-zipper target)
            [[field id] & more] path]
-      (when-let [loc (zip-find-key zipper field)]
+      (if-let [loc (zip-find-key zipper field)]
         (cond
           (or (not (vector? (nth (zip/node loc) 1))) (not (seq (nth (zip/node loc) 1))))
           target
           :else
-          (when-let [nested (zip-filter-seq loc #(= id (:_id %)))]
+          (if-let [nested (zip-filter-seq loc #(= id (:_id %)))]
             (if more
               (recur nested more)
-              (zip/root (zip/remove nested)))))))
+              (zip/root (zip/remove nested)))
+            target))
+        target))
     target))
 
 (defn merge* [target action path feature]
@@ -251,7 +253,6 @@
   (assoc acc :_valid_from  (:validity feature)))
 
 (defn- sync-version [acc feature]
-  (let [_ (println "feature in sync-version " feature)])
   (assoc acc :_version (:current-version feature)))
 
 (defn- sync-valid-to [acc feature]
@@ -426,8 +427,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?)"))
           batched-append-changelog (batched changelog-batch changelog-batch-size flush-fn)]
       (if-let [current (cached-get-current root-col root-id)]
         (when (util/uuid> (:version feature) (:_version current))
-          (let [new-current (merge current path feature)
-]            (if (= (:action feature) :close)
+          (let [new-current (merge current path feature)]
+            (if (= (:action feature) :close)
               (do (cache-batched-update (sync-valid-to new-current feature))
                   (batched-append-changelog [(:_collection new-current)
                                                (:_id new-current) (:_version current)

@@ -383,3 +383,20 @@
   (test-geoserver 1)
   (test-geoserver "col-1$nestedserie" 0)
   (test-geoserver "col-1$nestedserie$label" 1))
+
+(defregressiontest pand-new-change-change-test "new-change-change-pand-test" results
+  (is (= 19 (:n-processed (:stats results))))
+  (test-persistence "pand" "id-a" {:events 3 :features 1})
+  (test-persistence "pand$nummeraanduidingreeks" {:events 9 :features 6})
+  (test-persistence "pand$nummeraanduidingreeks$positie" {:events 7 :features 5})
+  (test-timeline "pand" "id-a"
+                 {:timeline-current {:n 1}
+                  :timeline {:n 2}
+                  :timeline-changelog {:n-new 1 :n-change 13 :n-close 5}}
+                 (:changelog-counts results))
+  (test-timeline->extract {:n-extracts 3
+                           :n-valid-to 2}
+                          (:extracts results))
+  (test-geoserver "pand" 1)
+  (test-geoserver "pand$nummeraanduidingreeks" 0)
+  (test-geoserver "pand$nummeraanduidingreeks$positie" 3))

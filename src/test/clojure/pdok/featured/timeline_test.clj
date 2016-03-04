@@ -99,13 +99,13 @@
         feature (-> (make-feature {:attribute "value"} {:dummy :dummy} "child-id" 3)
                     (assoc :action :close))
         merged (#'timeline/merge
-                (-> (make-root '(1) 1)
+                (-> (assoc (make-root '(1) 1) :extra-attr 1)
                     (assoc :nested1 [(mustafied {:attribute "value"} {:dummy :dummy} "child-id")
                                      (mustafied {:attribute "value"} {:dummy :dummy} "keep-id")]))
                 path
                 feature)
         should-be (merge (make-root '(3 1) 1)
-                         {:nested1 [(mustafied {:attribute "value"} {:dummy :dummy} "keep-id")]})]
+                         {:extra-attr 1 :nested1 [(mustafied {:attribute "value"} {:dummy :dummy} "keep-id")]})]
     (is (= should-be merged))))
 
 (deftest close-single-child-keeps-vector
@@ -113,12 +113,12 @@
         feature (-> (make-feature {:attribute "value"} {:dummy :dummy} "child-id" 3)
                     (assoc :action :close))
         merged (#'timeline/merge
-                (-> (make-root '(1) 1)
+                (-> (assoc (make-root '(1) 1) :extra-attr "value")
                     (assoc :nested1 [(mustafied {:attribute "value"} {:dummy :dummy} "child-id")]))
                 path
                 feature)
         should-be (merge (make-root '(3 1) 1)
-                         {:nested1 []})]
+                         {:extra-attr "value" :nested1 []})]
     (is (= should-be merged))))
 
 (deftest close-non-existing-child-keeps-vector
@@ -126,12 +126,12 @@
         feature (-> (make-feature {:attribute "value"} {:dummy :dummy} "child-id" 3)
                     (assoc :action :close))
         merged (#'timeline/merge
-                (-> (make-root '(1) 1)
+                (-> (assoc (make-root '(1) 1) :extra-attr "val")
                     (assoc :nested1 []))
                 path
                 feature)
         should-be (merge (make-root '(3 1) 1)
-                         {:nested1 []})]
+                         {:extra-attr "val" :nested1 []})]
     (is (= should-be merged))))
 
 (deftest close-no-vector->no-error+no-delete
@@ -145,4 +145,27 @@
                 feature)
         should-be (merge (make-root '(3 1) 1)
                          {:nested1 "err string"})]
+    (is (= should-be merged))))
+
+(deftest close-double-nested
+  (let [starts-with (merge (make-root '(1) 1)
+                         {:nested_1
+                          [{:_id "id1" :nested_2 [{:_id "id2"}]}]})
+        path '(["pc" "pid" "nested_1" "id1"] ["" "" "nested_2" "id2"])
+        feature (-> (make-feature {:attributeX "valueY"} nil "not-important" 5)
+                    (assoc :action :close))
+        merged (#'timeline/merge starts-with path feature)
+        should-be (merge (make-root '(5 1) 1)
+                         {:nested_1
+                          [{:_id "id1" :nested_2 []}]})]
+    (is (= should-be merged))))
+
+(deftest close-non-existing-double-nested
+  (let [starts-with (assoc (make-root '(1) 1) :nested_1 [{:_id "id2"}])
+        path '(["pc" "pid" "nested_1" "id1"] ["pc2" "pid2" "nested_2" "id2"])
+        feature (assoc (make-feature {:attributeX "valueY"} nil "not-important" 5) :action :close)
+        merged (#'timeline/merge starts-with path feature)
+        should-be (merge (make-root '(5 1) 1)
+                         {:nested_1
+                          [{:_id "id2"}]})]
     (is (= should-be merged))))
