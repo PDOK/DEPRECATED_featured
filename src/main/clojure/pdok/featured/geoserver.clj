@@ -96,7 +96,7 @@
      (cond-> (transient [])
        (f/valid-geometry? geometry)
        (conj!-coll :_geometry_point :_geometry_line :_geometry_polygon :_geo_group)
-       attributes (conj!-coll (keys attributes))
+       (seq attributes) (conj!-coll (keys attributes))
        true (persistent!))))
 
  (defn- feature-to-update-record [proj-fn feature]
@@ -110,7 +110,7 @@
         (when (= :line geo-group) (proj-fn (f/as-jts geometry)))
         (when (= :polygon geo-group)  (proj-fn (f/as-jts geometry)))
         geo-group)
-       attributes (conj!-coll (vals attributes))
+       (seq attributes) (conj!-coll (vals attributes))
        true (conj! (:id feature))
        true (conj! (:current-version feature))
        true (persistent!))))
