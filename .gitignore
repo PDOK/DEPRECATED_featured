@@ -14,3 +14,4 @@ profiles.clj
 .idea/
 src/main/main.iml
 src/main/resources/version
+*.iml
