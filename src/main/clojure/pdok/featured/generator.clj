@@ -1,7 +1,17 @@
 (ns pdok.featured.generator
-  (:require [cheshire.core :as json]
-            [clj-time [core :as t] [format :as tf] [local :refer [local-now]]])
-  (:import  [java.io PipedInputStream PipedOutputStream]))
+  (:require [cheshire
+             [core :as json]
+             [generate :refer [add-encoder]]]
+            [clj-time
+             [core :as t]
+             [format :as tf]
+             [local :refer [local-now]]
+             [coerce :refer [to-long to-date-time to-local-date to-local-date-time]]]
+            [clojure.walk :as walk])
+  (:import [java.io PipedInputStream PipedOutputStream OutputStream InputStream ByteArrayOutputStream]
+           (com.fasterxml.jackson.dataformat.smile SmileFactory SmileGenerator)
+           (org.joda.time LocalDateTime LocalDate)
+           (clojure.lang MapEntry)))
 
 (def ^:dynamic *difficult-geometry?* false)
 
@@ -99,37 +109,52 @@
         "</gml:Polygon> ")})
 
 (defn random-date []
-  (let [date (local-now)
-        date-string (tf/unparse date-formatter date)]
+  (let [date (to-local-date (local-now))]
+    date))
+
+(defn date->text [date]
+  (tf/unparse date-formatter (to-date-time date)))
+
+(defn texify-date [date]
+  (let [date-string (date->text date)]
     ["~#date", [date-string]]))
 
 (defn random-moment []
-  (let [moment (local-now)
-        date-time-string (tf/unparse date-time-formatter moment)]
+  (let [date (to-local-date-time (local-now))]
+    date))
+
+(defn moment->text [moment]
+  (tf/unparse date-time-formatter (to-date-time moment)))
+
+(defn texify-moment [moment]
+  (let [date-time-string (moment->text moment)]
     ["~#moment", [date-time-string]]))
 
 (def attribute-generators [#(random-word 5) random-date random-moment])
 
+(def ^:dynamic *attribute-generators* attribute-generators)
+
+(defn texify-validity [validity]
+  (tf/unparse date-time-formatter validity))
+
 (defn new-feature [collection id]
-   {:_action "new"
-    :_collection collection
-    :_id id
-    :_validity (tf/unparse date-time-formatter (local-now))
-    :_geometry (if *difficult-geometry?* difficult-geometry (random-geometry))})
+  {:_action     "new"
+   :_collection collection
+   :_id         id
+   :_validity   (to-local-date-time (local-now))
+   :_geometry   (if *difficult-geometry?* difficult-geometry (random-geometry))})
 
 (defn transform-to-change [feature]
   (-> feature
       (assoc :_action "change")
       (assoc :_current_validity (:_validity feature))
-      (assoc :_validity (tf/unparse date-time-formatter
-                          (t/plus (tf/parse date-time-formatter (:_validity feature)) (t/minutes 1))))))
+      (assoc :_validity (t/plus (:_validity feature) (t/minutes 1)))))
 
 (defn transform-to-close [feature]
   (-> feature
       (assoc :_action "close")
       (assoc :_current_validity (:_validity feature))
-      (assoc :_validity (tf/unparse date-time-formatter
-                          (t/plus (tf/parse date-time-formatter (:_validity feature)) (t/minutes 1))))))
+      (assoc :_validity (t/plus (:_validity feature) (t/minutes 1)))))
 
 (defn transform-to-delete [{:keys [_dataset _collection _id _validity]}]
   {:_action "delete"
@@ -193,12 +218,62 @@
 
 (defn create-attributes [simple-attributes & {:keys [names]}]
   (let [attribute-names (or names (repeatedly simple-attributes #(random-word 5)))
-        generators (cycle attribute-generators)
+        generators (cycle *attribute-generators*)
         attributes (map #(vector %1 %2) attribute-names generators)]
     attributes))
 
+(defn generate-smile-stream
+  "Returns a SMILE-encoded writer for the given Clojure object.
+  Takes an optional date format string that Date objects will be encoded with.
+
+  The default date format (in UTC) is: yyyy-MM-dd'T'HH:mm:ss'Z'"
+  ([obj ^OutputStream os]
+   (generate-smile-stream obj nil os))
+  ([obj opt-map ^OutputStream os]
+   (let [generator (.createGenerator ^SmileFactory
+                                     cheshire.factory/smile-factory
+                                     ^OutputStream os)]
+     (cheshire.generate/generate generator obj (or (:date-format opt-map)
+                                     cheshire.factory/default-date-format)
+                   (:ex opt-map)
+                   (:key-fn opt-map))
+     (.flush generator)
+     os)))
+
+(defn generate-smile [obj]
+  (let [baos (ByteArrayOutputStream.)]
+    (.toByteArray (generate-smile-stream obj baos))))
+
+
+(defn texify-feature [feature]
+  (walk/postwalk
+    (fn [e]
+      (cond (instance? LocalDateTime e)
+            (texify-moment e)
+            (instance? LocalDate e)
+            (texify-date e)
+            (and (instance? MapEntry e) (= :_validity (first e)))
+            (MapEntry. :_validity (texify-validity (second e)))
+            :else e))
+    feature))
+
+(add-encoder LocalDate
+             (fn [c ^SmileGenerator smile-generator]
+               (doto smile-generator
+                 (.writeStartArray 2)
+                 (.writeString "D")
+                 (.writeNumber (to-long c))
+                 (.writeEndArray))))
+(add-encoder LocalDateTime
+             (fn [c ^SmileGenerator smile-generator]
+               (doto smile-generator
+                 (.writeStartArray 2)
+                 (.writeString "M")
+                 (.writeNumber (to-long c))
+                 (.writeEndArray))))
+
 (defn random-json-features [out-stream dataset collection total & args]
-  (let [{:keys [change? close? delete? start-with-delete? nested geometry? ids]
+  (let [{:keys [change? close? delete? start-with-delete? nested geometry? ids smile?]
          :or {change? false close? false delete? false
               start-with-delete? false nested 0 geometry? true
               ids (repeatedly #(random-word 10))}} args
@@ -207,58 +282,61 @@
         new-features (map #(random-new-feature collection attributes %) ids)
         with-nested (map #(combine-to-nested-feature % "nested" geometry?) (partition (+ 1 nested) new-features))
         with-extra (mapcat #(followed-by % change? close? delete? start-with-delete?) with-nested)
+        features (cond->> with-extra (not smile?) (map texify-feature))
         package {:_meta {}
                  :dataset dataset
-                 :features (take total with-extra)}]
-    (json/generate-stream package out-stream)))
+                 :features (take total features)}]
+    (if smile?
+      (generate-smile-stream package out-stream)
+      (json/generate-stream package (clojure.java.io/writer out-stream)))))
 
 (defn- random-json-feature-stream* [out-stream dataset collection total & args]
   (with-open [writer (clojure.java.io/writer out-stream)]
     (apply random-json-features writer dataset collection total args)))
 
 (defn random-json-feature-stream
-  (^java.io.InputStream [dataset collection total & args]
+  (^InputStream [dataset collection total & args]
    (let [pipe-in (PipedInputStream.)
          pipe-out (PipedOutputStream. pipe-in)]
      (future (apply random-json-feature-stream* pipe-out dataset collection total args))
      pipe-in)))
 
-(defn generate-test-files []
-  (doseq [c [10 100 1000 10000 100000]]
-    (with-open [w (clojure.java.io/writer (str ".test-files/new-features-single-collection-" c ".json"))]
-      (random-json-features w "newset" "collection1" c))))
+(defn generate-test-files [smile?]
+  (doseq [c [1 10 100 1000 10000 100000]]
+    (with-open [w (clojure.java.io/output-stream (str ".test-files/new-features-single-collection-" c (if smile? ".smile" ".json")))]
+      (random-json-features w "newset" "collection1" c :smile? smile?))))
 
-(defn generate-test-files-with-changes []
+(defn generate-test-files-with-changes [smile?]
   (doseq [c [10 100 1000 10000 100000]]
-    (with-open [w (clojure.java.io/writer (str ".test-files/change-features-single-collection-" c ".json"))]
-      (random-json-features w "changeset" "collection1" c :change? true))))
+    (with-open [w (clojure.java.io/output-stream (str ".test-files/change-features-single-collection-" c (if smile? ".smile" ".json")))]
+      (random-json-features w "changeset" "collection1" c :smile? smile? :change? true))))
 
-(defn generate-test-files-with-closes []
+(defn generate-test-files-with-closes [smile?]
   (doseq [c [10 100 1000 10000 100000]]
-    (with-open [w (clojure.java.io/writer (str ".test-files/close-features-single-collection-" c ".json"))]
-      (random-json-features w "closeset" "collection1" c :close? true))))
+    (with-open [w (clojure.java.io/output-stream (str ".test-files/close-features-single-collection-" c (if smile? ".smile" ".json")))]
+      (random-json-features w "closeset" "collection1" c :smile? smile? :close? true))))
 
-(defn generate-test-files-with-deletes []
+(defn generate-test-files-with-deletes [smile?]
   (doseq [c [2 10 100 1000 10000 100000]]
-    (with-open [w (clojure.java.io/writer (str ".test-files/delete-features-single-collection-" c ".json"))]
-      (random-json-features w "deleteset" "collection1" c :delete? true))))
+    (with-open [w (clojure.java.io/output-stream (str ".test-files/delete-features-single-collection-" c (if smile? ".smile" ".json")))]
+      (random-json-features w "deleteset" "collection1" c :smile? smile? :delete? true))))
 
-(defn generate-test-files-with-nested-feature []
+(defn generate-test-files-with-nested-feature [smile?]
   (doseq [c [5 50 500 5000 50000]]
-    (with-open [w (clojure.java.io/writer (str ".test-files/new-features-nested-feature-" c ".json"))]
-      (random-json-features w "nestedset" "collection1" c :nested 1))))
+    (with-open [w (clojure.java.io/output-stream (str ".test-files/new-features-nested-feature-" c (if smile? ".smile" ".json")))]
+      (random-json-features w "nestedset" "collection1" c :smile? smile? :nested 1))))
 
-(defn generate-test-files-with-nested-features []
+(defn generate-test-files-with-nested-features [smile?]
   (doseq [c [3 33 333 3333 33333]]
-    (with-open [w (clojure.java.io/writer (str ".test-files/new-features-nested-features-" c ".json"))]
-      (random-json-features w "nestedset" "collection1" c :nested 2))))
+    (with-open [w (clojure.java.io/output-stream (str ".test-files/new-features-nested-features-" c (if smile? ".smile" ".json")))]
+      (random-json-features w "nestedset" "collection1" c :smile? smile? :nested 2))))
 
-(defn generate-test-files-with-nested-feature-no-top-geometry []
+(defn generate-test-files-with-nested-feature-no-top-geometry [smile?]
   (doseq [c [10 100 1000 10000 100000]]
-    (with-open [w (clojure.java.io/writer (str ".test-files/new-features-nested-feature-no-top-geometry-" c ".json"))]
-      (random-json-features w "nestedset" "collection1" c :nested 1 :geometry? false))))
+    (with-open [w (clojure.java.io/output-stream (str ".test-files/new-features-nested-feature-no-top-geometry-" c (if smile? ".smile" ".json")))]
+      (random-json-features w "nestedset" "collection1" c :smile? smile? :nested 1 :geometry? false))))
 
-(defn generate-test-files-with-nested-features-no-top-geometry []
+(defn generate-test-files-with-nested-features-no-top-geometry [smile?]
   (doseq [c [5 50 500 5000 50000]]
-    (with-open [w (clojure.java.io/writer (str ".test-files/new-features-nested-features-no-top-geometry-" c ".json"))]
-      (random-json-features w "nestedset" "collection1" c :nested 2 :geometry? false))))
+    (with-open [w (clojure.java.io/output-stream (str ".test-files/new-features-nested-features-no-top-geometry-" c (if smile? ".smile" ".json")))]
+      (random-json-features w "nestedset" "collection1" c :smile? smile? :nested 2 :geometry? false))))
