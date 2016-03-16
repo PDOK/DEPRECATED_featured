@@ -37,19 +37,22 @@
          (load-props "plp.properties")))
 
 (def processor-db {:subprotocol "postgresql"
-                     :subname (or (env :processor-database-url) "//localhost:5432/pdok")
-                     :user (or (env :processor-database-user) "postgres")
-                     :password (or (env :processor-database-password) "postgres")})
+                   :subname (or (env :processor-database-url) "//localhost:5432/pdok")
+                   :user (or (env :processor-database-user) "postgres")
+                   :password (or (env :processor-database-password) "postgres")
+                   :transaction? true})
 
 (def data-db {:subprotocol "postgresql"
-                     :subname (or (env :data-database-url) "//localhost:5432/pdok")
-                     :user (or (env :data-database-user) "postgres")
-                     :password (or (env :data-database-password) "postgres")})
+              :subname (or (env :data-database-url) "//localhost:5432/pdok")
+              :user (or (env :data-database-user) "postgres")
+              :password (or (env :data-database-password) "postgres")
+              :transaction? true})
 
 (def extracts-db {:subprotocol "postgresql"
-                     :subname (or (env :extracts-database-url) "//localhost:5432/pdok")
-                     :user (or (env :extracts-database-user) "postgres")
-                     :password (or (env :extracts-database-password) "postgres")})
+                  :subname (or (env :extracts-database-url) "//localhost:5432/pdok")
+                  :user (or (env :extracts-database-user) "postgres")
+                  :password (or (env :extracts-database-password) "postgres")
+                  :transaction? true})
 
 (defn persistence []
   (pers/make-cached-jdbc-processor-persistence

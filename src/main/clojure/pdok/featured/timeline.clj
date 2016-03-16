@@ -274,7 +274,7 @@ VALUES (?, ? ,?, ?, ?, ?, ?)"))
                               :_valid_from :_valid_to pg/to-json :_tiles)
            records (map transform-fn features)
            versions (map (juxt :_collection :_version :_version) features)]
-       (j/execute! db (cons (new-current-sql dataset) records) :multi? true :transaction? false))
+       (j/execute! db (cons (new-current-sql dataset) records) :multi? true :transaction? (:transaction? db)))
      (catch java.sql.SQLException e
        (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))))))
 
@@ -303,7 +303,7 @@ VALUES (?, ? ,?, ?, ?, ?, ?)"))
   "([collection version version] ... )"
   (let [versions (map #(vector (get % 1)) records)]
     (try
-      (j/execute! db (cons (delete-current-sql dataset) versions) :multi? true :transaction? false)
+      (j/execute! db (cons (delete-current-sql dataset) versions) :multi? true :transaction? (:transaction? db))
      (catch java.sql.SQLException e
        (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))))))
 
@@ -316,7 +316,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?)"))
     (let [transform-fn (juxt :_collection :_id :_version :_valid_from :_valid_to pg/to-json :_tiles)
           records (map transform-fn features)
           versions (map (juxt :_collection :_version :_version) features)]
-      (j/execute! db (cons (new-history-sql dataset) records) :multi? true :transaction? false))
+      (j/execute! db (cons (new-history-sql dataset) records) :multi? true :transaction? (:transaction? db)))
      (catch java.sql.SQLException e
        (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
@@ -327,7 +327,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?)"))
 (defn- delete-history [{:keys [db dataset]} features]
   (try
     (let [records (map vector (mapcat :_all_versions features))]
-      (j/execute! db (cons (delete-history-sql dataset) records) :multi? true :transaction? false))
+      (j/execute! db (cons (delete-history-sql dataset) records) :multi? true :transaction? (:transaction? db)))
      (catch java.sql.SQLException e
        (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
@@ -343,7 +343,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?)"))
   (try
     (let [transform-fn  (fn [rec] (let [[_ _ ov v a] rec] (conj rec v a)))
           records (map transform-fn log-entries)]
-      (j/execute! db (cons (append-to-changelog-sql dataset) records) :multi? true :transaction? false))
+      (j/execute! db (cons (append-to-changelog-sql dataset) records) :multi? true :transaction? (:transaction? db)))
     (catch java.sql.SQLException e
       (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 

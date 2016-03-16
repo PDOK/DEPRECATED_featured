@@ -166,7 +166,7 @@ If n nil => no limit, if collections nil => all collections")
   ([{:keys [db dataset]} entries]
    (with-bench t (log/debug "Created streams in" t "ms")
      (try (j/with-db-connection [c db]
-            (apply ( partial j/insert! c (qualified-features dataset) :transaction? false?
+            (apply ( partial j/insert! c (qualified-features dataset) :transaction? (:transaction? db)
                              [:collection :feature_id :parent_collection :parent_id :parent_field])
                    entries))
           (catch java.sql.SQLException e
@@ -205,7 +205,7 @@ If n nil => no limit, if collections nil => all collections")
    (with-bench t (log/debug "Inserted events in" t "ms")
      (try (j/with-db-connection [c db]
             (apply
-             (partial j/insert! c (qualified-feature-stream dataset) :transaction? false
+             (partial j/insert! c (qualified-feature-stream dataset) :transaction? (:transaction? db)
                       [:version :action :collection :feature_id :validity :geometry :attributes])
              entries))
           (catch java.sql.SQLException e

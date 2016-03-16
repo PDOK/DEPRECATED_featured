@@ -141,7 +141,7 @@
              (let [fields (concat [:_id :_version :_geometry_point :_geometry_line :_geometry_polygon :_geo_group]
                                   all-attributes)
                    sql (gs-insert-sql dataset collection fields)]
-               (j/execute! db (cons sql records) :multi? true :transaction? false))))))
+               (j/execute! db (cons sql records) :multi? true :transaction? (:transaction? db)))))))
      (catch java.sql.SQLException e
        (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e))))))
 
@@ -155,7 +155,7 @@
   (try
     (let [table collection
           sql (gs-update-sql dataset table (map name columns))]
-      (j/execute! db (cons sql update-vals) :multi? true :transaction? false))
+      (j/execute! db (cons sql update-vals) :multi? true :transaction? (:transaction? db)))
     (catch java.sql.SQLException e
       (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e)))))
 
@@ -185,7 +185,7 @@
         (let [table collection
               sql (gs-delete-sql dataset table)
               ids (map #(vector (:id %1) (:current-version %1)) collection-features)]
-          (j/execute! db (cons sql ids) :multi? true :transaction? false))))
+          (j/execute! db (cons sql ids) :multi? true :transaction? (:transaction? db)))))
     (catch java.sql.SQLException e
       (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e)))))
 

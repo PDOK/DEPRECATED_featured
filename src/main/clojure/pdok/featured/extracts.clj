@@ -29,7 +29,7 @@
   (when (seq entries)
     (let [qualified-table (str extract-schema "." table)
           query (str "UPDATE " qualified-table " SET valid_to = ? WHERE version = ?")]
-      (try (j/execute! db (cons query entries) :multi? true :transaction? false)
+      (try (j/execute! db (cons query entries) :multi? true :transaction? (:transaction? db))
            (catch java.sql.SQLException e (j/print-sql-exception-chain e))))))
 
 (defn update-extract-records [db dataset feature-type extract-type items]
@@ -40,7 +40,7 @@
     (let [qualified-table (str extract-schema "." table)
           query (str "INSERT INTO " qualified-table
                      " (feature_type, version, valid_from, valid_to, publication, tiles, xml) VALUES (?, ?, ?, ?, ?, ?, ?)")]
-      (try (j/execute! db (cons query entries) :multi? true :transaction? false)
+      (try (j/execute! db (cons query entries) :multi? true :transaction? (:transaction? db))
            (catch java.sql.SQLException e (j/print-sql-exception-chain e))))))
 
 (defn get-or-add-extractset [db extractset version]
@@ -99,7 +99,7 @@
   (when (seq versions)
     (let [query (str "DELETE FROM " extract-schema "." table
                      " WHERE version = ?")]
-      (try (j/execute! db (cons query (map vector versions)) :multi? true :transaction? false)
+      (try (j/execute! db (cons query (map vector versions)) :multi? true (:transaction? db))
            (catch java.sql.SQLException e (j/print-sql-exception-chain e))))))
 
 (defn- delete-extracts-with-version [db dataset feature-type extract-type versions]
