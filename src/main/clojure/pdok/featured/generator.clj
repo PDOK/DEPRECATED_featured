@@ -135,7 +135,7 @@
 (def ^:dynamic *attribute-generators* attribute-generators)
 
 (defn texify-validity [validity]
-  (tf/unparse date-time-formatter validity))
+  (tf/unparse date-time-formatter (to-date-time validity)))
 
 (defn new-feature [collection id]
   {:_action     "new"
@@ -242,18 +242,18 @@
 
 (defn generate-smile [obj]
   (let [baos (ByteArrayOutputStream.)]
-    (.toByteArray (generate-smile-stream obj baos))))
+    (.toByteArray ^ByteArrayOutputStream (generate-smile-stream obj baos))))
 
 
 (defn texify-feature [feature]
-  (walk/postwalk
+  (walk/prewalk
     (fn [e]
-      (cond (instance? LocalDateTime e)
+      (cond (and (instance? MapEntry e) (= :_validity (first e)))
+            (MapEntry. :_validity (texify-validity (second e)))
+            (instance? LocalDateTime e)
             (texify-moment e)
             (instance? LocalDate e)
             (texify-date e)
-            (and (instance? MapEntry e) (= :_validity (first e)))
-            (MapEntry. :_validity (texify-validity (second e)))
             :else e))
     feature))
 
@@ -262,14 +262,14 @@
                (doto smile-generator
                  (.writeStartArray 2)
                  (.writeString "D")
-                 (.writeNumber (to-long c))
+                 (.writeNumber ^long (to-long c))
                  (.writeEndArray))))
 (add-encoder LocalDateTime
              (fn [c ^SmileGenerator smile-generator]
                (doto smile-generator
                  (.writeStartArray 2)
                  (.writeString "M")
-                 (.writeNumber (to-long c))
+                 (.writeNumber ^long (to-long c))
                  (.writeEndArray))))
 
 (defn random-json-features [out-stream dataset collection total & args]
