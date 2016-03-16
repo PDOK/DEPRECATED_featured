@@ -64,7 +64,7 @@
 
 (defn gml3-as-jts [gml]
   (try
-    (.toJTSGeometry ^GMLMultiVersionParserImpl gml3-parser gml)
+    (.toJTSGeometry ^GMLMultiVersionParserImpl gml3-parser ^String gml)
     (catch nl.pdok.gml3.exceptions.GML3ParseException e
       (log/error "Could not transform GML to JTS:" (.getMessage  e))
       nil)))
