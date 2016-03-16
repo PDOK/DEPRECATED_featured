@@ -17,7 +17,7 @@ public class Helpers {
             return new Geographic(coord.x, coord.y);
         }
     }
-    
+
     public static Cartesian toCartesian (Coordinate coord, boolean withZ) {
         if (withZ) {
             return new Cartesian (coord.x, coord.y, coord.z);
@@ -26,16 +26,16 @@ public class Helpers {
             return new Cartesian (coord.x, coord.y);
         }
     }
-    
+
     public static Coordinate toCoordinate(Geographic coord, boolean withZ) {
         if (withZ) {
-            return new Coordinate(coord.phi, coord.lambda, coord.h);
+            return new Coordinate(coord.lambda, coord.phi, coord.h);
         }
         else {
-            return new Coordinate(coord.phi, coord.lambda);
+            return new Coordinate(coord.lambda, coord.phi);
         }
     }
-    
+
     public static Coordinate toCoordinate(Cartesian coord, boolean withZ) {
         if (withZ) {
             return new Coordinate(coord.X, coord.Y, coord.Z);

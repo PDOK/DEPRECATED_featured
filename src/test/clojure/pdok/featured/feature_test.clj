@@ -2,7 +2,8 @@
   (:require [clojure.test :refer :all]
             [pdok.featured.feature :refer :all]
             [clojure.java.io :refer :all])
-  (:import [pdok.featured.xslt TransformXSLT]))
+  (:import [pdok.featured.xslt TransformXSLT]
+           [nl.pdok.gml3.impl GMLMultiVersionParserImpl]))
 
 
 (def gml-with-hole (slurp (resource "gml/gml-with-hole.gml")))
@@ -23,6 +24,12 @@
 (def gml-object-surface-with-more-elements {"type" "gml" "gml" gml-surface-with-more-elements})
 
 (def broken-gml (slurp (resource "gml/broken-gml.gml")))
+
+(def bag-gml-in-rd (slurp (resource "gml/bag-polygon-rd.gml")))
+(def bag-gml-in-etrs89 (slurp (resource "gml/bag-polygon-etrs89.gml")))
+
+(def gml3-etrs-parser
+  (GMLMultiVersionParserImpl. 0.01 4258))
 
 (deftest test-as-jts-with-curves
  (is (re-find #"curve" (as-gml gml-object-with-hole)))
@@ -56,6 +63,14 @@
   "Test converting a broken GML results in a nil geometry"
   (is (nil?  (gml3-as-jts broken-gml)))
   (is (nil?  (-> broken-gml gml3-as-jts jts-as-wkt))))
+
+(defn gml3-in-etrs89-as-jts [gml]
+    (.toJTSGeometry ^GMLMultiVersionParserImpl gml3-parser gml))
+
+(deftest rd-to-etrs89-conversion
+  "Test if a geometry is correctly transformed from/to RD to ETRS89"
+  (is (= (-> bag-gml-in-rd gml3-as-jts as-etrs89 jts-as-wkt) (-> bag-gml-in-etrs89 gml3-in-etrs89-as-jts jts-as-wkt))))
+
 
   ; (def transformed-gml (transform (TransformXSLT. (clojure.java.io/input-stream (clojure.java.io/resource "pdok/featured/xslt/curve2linearring.xsl"))) (strip-gml-ns gml-surface)))
   ; (parse-to-jts transformed-gml)
