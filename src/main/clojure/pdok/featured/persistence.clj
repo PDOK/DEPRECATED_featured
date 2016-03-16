@@ -4,8 +4,6 @@
             [pdok.featured.dynamic-config :as dc]
             [pdok.postgres :as pg]
             [pdok.util :refer [with-bench]]
-            [joplin.core :as joplin]
-            [joplin.jdbc.database]
             [clojure.core.cache :as cache]
             [clojure.java.jdbc :as j]
             [clojure.tools.logging :as log]
@@ -75,23 +73,42 @@ If n nil => no limit, if collections nil => all collections")
 (defn- qualified-feature-stream [dataset]
   (str (pg/quoted (schema dataset)) "." (name dc/*persistence-feature-stream*)))
 
-(defn- qualified-persistence-migrations [dataset]
-  (str (pg/quoted (schema dataset)) "." (name dc/*persistence-migrations*)))
-
 (defn- qualified-persistence-collections [dataset]
   (str (pg/quoted (schema dataset)) "." (name dc/*persistence-collections*)))
 
 (defn- jdbc-init [db dataset]
   (when-not (pg/schema-exists? db (schema dataset))
     (pg/create-schema db (schema dataset)))
-  (let [jdb {:db (assoc db
-                        :type :jdbc
-                        :url (pg/dbspec->url db))
-             :migrator "/pdok/featured/migrations/persistence"
-             :migrations-table (qualified-persistence-migrations dataset)}]
-    (log/with-logs ['pdok.featured.persistence :trace :error]
-      (with-bindings {#'dc/*persistence-schema* (schema dataset)}
-        (joplin/migrate-db jdb)))))
+  (with-bindings {#'dc/*persistence-schema* (schema dataset)}
+    (when-not (pg/table-exists? db dc/*persistence-schema* dc/*persistence-features*)
+      (pg/create-table db dc/*persistence-schema* dc/*persistence-features*
+                       [:id "bigserial" :primary :key]
+                       [:collection "varchar(100)"]
+                       [:feature_id "varchar(50)"]
+                       [:parent_collection "varchar(255)"]
+                       [:parent_id "varchar(50)"]
+                       [:parent_field "varchar(255)"])
+      (pg/create-index db dc/*persistence-schema* dc/*persistence-features* :collection :feature_id)
+      (pg/create-index db dc/*persistence-schema* dc/*persistence-features* :parent_collection :parent_id))
+
+    (when-not (pg/table-exists? db dc/*persistence-schema* dc/*persistence-feature-stream*)
+      (pg/create-table db dc/*persistence-schema* dc/*persistence-feature-stream*
+                       [:id "bigserial" :primary :key]
+                       [:version "uuid"]
+                       [:action "varchar(12)"]
+                       [:collection "varchar(255)"]
+                       [:feature_id "varchar(50)"]
+                       [:validity "timestamp without time zone"]
+                       [:geometry "text"]
+                       [:attributes "text"])
+      (pg/create-index db dc/*persistence-schema* dc/*persistence-feature-stream* :collection :feature_id))
+    (when-not (pg/table-exists? db dc/*persistence-schema* dc/*persistence-collections*)
+      (pg/create-table db dc/*persistence-schema* dc/*persistence-collections*
+                       [:id "bigserial" :primary :key]
+                       [:collection "varchar(255)"]
+                       [:parent_collection "varchar(100)"])
+      (pg/create-index db dc/*persistence-schema* dc/*persistence-collections*
+                       :collection :parent_collection))))
 
 (defn collection-exists? [{:keys [db dataset]} collection parent-collection]
   (j/with-db-connection [c db]

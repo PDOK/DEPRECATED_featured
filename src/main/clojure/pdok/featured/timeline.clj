@@ -7,8 +7,6 @@
             [pdok.featured.projectors :as proj]
             [pdok.featured.persistence :as pers]
             [pdok.featured.tiles :as tiles]
-            [joplin.core :as joplin]
-            [joplin.jdbc.database]
             [clojure.java.jdbc :as j]
             [clojure.core.cache :as cache]
             [clojure.string :as str]
@@ -39,20 +37,46 @@
 (defn- qualified-changelog [dataset]
   (str (pg/quoted (schema dataset)) "." (name dc/*timeline-changelog*)))
 
-(defn- qualified-timeline-migrations [dataset]
-  (str (pg/quoted (schema dataset)) "." (name dc/*timeline-migrations*)))
-
 (defn- init [db dataset]
   (when-not (pg/schema-exists? db (schema dataset))
     (pg/create-schema db (schema dataset)))
-  (let [jdb {:db (assoc db
-                        :type :jdbc
-                        :url (pg/dbspec->url db))
-             :migrator "/pdok/featured/migrations/timeline"
-             :migrations-table (qualified-timeline-migrations dataset)}]
-    (log/with-logs ['pdok.featured.timeline :trace :error]
-      (with-bindings {#'dc/*timeline-schema* (schema dataset)}
-        (joplin/migrate-db jdb)))))
+  (with-bindings {#'dc/*timeline-schema* (schema dataset)}
+    (when-not (pg/table-exists? db dc/*timeline-schema* dc/*timeline-history-table*)
+      (pg/create-table db dc/*timeline-schema* dc/*timeline-history-table*
+                       [:id "serial" :primary :key]
+                       [:collection "varchar(255)"]
+                       [:feature_id "varchar(100)"]
+                       [:version "uuid"]
+                       [:valid_from "timestamp without time zone"]
+                       [:valid_to "timestamp without time zone"]
+                       [:feature "text"]
+                       [:tiles "integer[]"])
+      (pg/create-index db dc/*timeline-schema* dc/*timeline-history-table* :collection :feature_id)
+      (pg/create-index db dc/*timeline-schema* dc/*timeline-history-table* :version))
+    (when-not (pg/table-exists? db dc/*timeline-schema* dc/*timeline-current-table*)
+      (pg/create-table db dc/*timeline-schema* dc/*timeline-current-table*
+                       [:id "serial" :primary :key]
+                       [:collection "varchar(255)"]
+                       [:feature_id "varchar(100)"]
+                       [:version "uuid"]
+                       [:valid_from "timestamp without time zone"]
+                       [:valid_to "timestamp without time zone"]
+                       [:feature "text"]
+                       [:tiles "integer[]"])
+      (pg/create-index db dc/*timeline-schema* dc/*timeline-current-table* :collection :feature_id)
+      (pg/create-index db dc/*timeline-schema* dc/*timeline-current-table* :version))
+    (when-not (pg/table-exists? db dc/*timeline-schema* dc/*timeline-changelog*)
+      (pg/create-table db dc/*timeline-schema* dc/*timeline-changelog*
+                       [:id "serial" :primary :key]
+                       [:collection "varchar(255)"]
+                       [:feature_id "varchar(100)"]
+                       [:old_version "uuid"]
+                       [:version "uuid"]
+                       [:valid_from "timestamp without time zone"]
+                       [:action "varchar(12)"]
+                       )
+      (pg/create-index db dc/*timeline-schema* dc/*timeline-changelog* :version :action)
+      (pg/create-index db dc/*timeline-schema* dc/*timeline-changelog* :collection))))
 
 (defn- execute-query [timeline query]
   (try (j/with-db-connection [c (:db timeline)]
