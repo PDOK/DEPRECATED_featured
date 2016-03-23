@@ -48,7 +48,8 @@
                                          :options [(s/enum "no-visualization")]}]
    (s/optional-key :callback) URI
    (s/optional-key :no-timeline) boolean
-   (s/optional-key :no-state) boolean})
+   (s/optional-key :no-state) boolean
+   (s/optional-key :projection) s/Str})
 
 (def ExtractRequest
   "A schema for a JSON extract request"
@@ -102,7 +103,8 @@
   (swap! stats assoc-in [:processing] request)
   (let [persistence (if (:no-state request) (persistence/make-no-state) (config/persistence))
         projectors (cond-> [(config/projectors persistence
-                                       :no-visualization (collections-with-option "no-visualization" (:processingOptions request)))]
+                                               :projection (:projection request)
+                                               :no-visualization (collections-with-option "no-visualization" (:processingOptions request)))]
                     (not (:no-timeline request)) (conj (config/timeline persistence)))
         processor (processor/create (:dataset request) persistence projectors)
         zipped? (= (:format request) "zip")
