@@ -64,7 +64,7 @@
                  [ring/ring-json "0.3.1"]
                  [xalan/xalan "2.7.2"]
                  [nl.pdok/gml3-jts "0.1.0"]
-                 [nl.pdok/rdnaptrans-java "1.0"]]
+                 [nl.pdok/rdnaptrans-java "1.1"]]
   :plugins [[lein-ring "0.9.6" ]
             [lein-filegen "0.1.0-SNAPSHOT"]]
   :ring {:handler pdok.featured.api/app
