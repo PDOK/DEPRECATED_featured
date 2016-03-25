@@ -99,7 +99,7 @@
   (when (seq versions)
     (let [query (str "DELETE FROM " extract-schema "." table
                      " WHERE version = ?")]
-      (try (j/execute! db (cons query (map vector versions)) :multi? true (:transaction? db))
+      (try (j/execute! db (cons query (map vector versions)) :multi? true :transaction? (:transaction? db))
            (catch java.sql.SQLException e (j/print-sql-exception-chain e))))))
 
 (defn- delete-extracts-with-version [db dataset feature-type extract-type versions]
