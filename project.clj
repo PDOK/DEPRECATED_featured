@@ -59,12 +59,13 @@
                  [org.slf4j/slf4j-api "1.7.12"]
                  [org.slf4j/slf4j-log4j12 "1.7.12"]
                  [postgresql "9.3-1102.jdbc41"]
-                 [prismatic/schema "0.4.3"]
                  [ring/ring-defaults "0.1.5"]
                  [ring/ring-json "0.3.1"]
                  [xalan/xalan "2.7.2"]
-                 [nl.pdok/gml3-jts "0.1.0"]
-                 [nl.pdok/rdnaptrans-java "1.1"]]
+                 [prismatic/schema "0.4.3"]
+                 [cddr/integrity "0.3.0-SNAPSHOT" :exclusions [org.clojure/clojure]]
+                 [nl.pdok/gml3-jts "0.1.0-SNAPSHOT"]
+                 [nl.pdok/rdnaptrans-java "1.0"]]
   :plugins [[lein-ring "0.9.6" ]
             [lein-filegen "0.1.0-SNAPSHOT"]]
   :ring {:handler pdok.featured.api/app
@@ -91,7 +92,7 @@
   :profiles {:uberjar {:aot :all}
              :test {:resource-paths ["src/test/resources"]
                     :dependencies [[org.clojure/math.combinatorics "0.1.1"]]
-                    :jvm-opts ["-Xmx3072M" "-Dlog4j.configuration=no-logging.properties"]}
+                    :jvm-opts ["-Xmx3072M" ]}
              :dev {:dependencies [[javax.servlet/servlet-api "2.5"]
                                   [ring-mock "0.1.5"]
                                   [org.clojure/math.combinatorics "0.1.1"]]
