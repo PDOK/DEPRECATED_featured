@@ -16,11 +16,11 @@
 (def ^{:private true } extractset-table "extractmanagement.extractset")
 (def ^{:private true } extractset-area-table "extractmanagement.extractset_area")
 
-(defn features-for-extract [dataset feature-type extract-type features]
+(defn features-for-extract [dataset-name feature-type extract-type features]
   "Returns the rendered representation of the collection of features for a given feature-type inclusive tiles-set"
   (if (empty? features)
     [nil nil]
-    (let [template-key (template/template-key dataset extract-type feature-type)]
+    (let [template-key (template/template-key dataset-name extract-type feature-type)]
       [nil (map #(vector feature-type (:_version %) (:_tiles %) (m/render template-key %)
                            (:_valid_from %) (:_valid_to %) (:lv-publicatiedatum %)) features)])))
 
@@ -83,8 +83,9 @@
     (count rendered-features)))
 
 
-(defn transform-and-add-extract [extracts-db dataset feature-type extract-type features]
-    (let [[error features-for-extract] (features-for-extract dataset
+(defn transform-and-add-extract [extracts-db dataset-name dataset-version feature-type extract-type features]
+    (let [dataset (config/versionize-datasetname dataset-name dataset-version)
+          [error features-for-extract] (features-for-extract dataset-name
                                                              feature-type
                                                              extract-type
                                                              features)]
@@ -146,8 +147,9 @@
 (def ^:dynamic *process-delete-extract* (partial delete-extracts-with-version config/extracts-db))
 (def ^:dynamic *initialized-collection?* m/registered?)
 
-(defn- create-extract* [dataset extract-type collection fn-timeline-query]
-  (let [batch-size 10000
+(defn- create-extract* [dataset-name dataset-version extract-type collection fn-timeline-query]
+  (let [dataset (config/versionize-datasetname dataset-name dataset-version)
+        batch-size 10000
         tl (config/timeline-for-dataset dataset)
         rc (fn-timeline-query tl collection)
         parts (a/pipe rc (a/chan 1 (partition-all batch-size)))]
@@ -155,7 +157,7 @@
     (loop [i 1
            records (a/<!! parts)]
       (when records
-        (*process-insert-extract* dataset collection extract-type
+        (*process-insert-extract* dataset-name dataset-version collection extract-type
                                   (filter (complement nil?) (map changelog->change-inserts records)))
         (*process-update-extract* dataset collection extract-type
                                   (filter (complement nil?) (map changelog->updates records)))
@@ -165,26 +167,27 @@
           (log/info "Creating extracts" (str dataset "-" collection "-" extract-type) "processed:" (* i batch-size)))
         (recur (inc i) (a/<!! parts))))))
 
-(defn- create-extract [dataset extract-type fn-timeline-query collections]
-   (if-not (every? *initialized-collection?* (map (partial template/template-key dataset extract-type)
+(defn- create-extract [dataset-name dataset-version extract-type fn-timeline-query collections]
+   (if-not (every? *initialized-collection?* (map (partial template/template-key dataset-name extract-type)
                                        collections))
       {:status "error" :msg "missing template(s)" :collections collections}
       (do
         (doseq [collection collections]
-          (create-extract* dataset extract-type collection fn-timeline-query))
+          (create-extract*  dataset-name dataset-version extract-type collection fn-timeline-query))
         {:status "ok" :collections collections})))
 
-(defn fill-extract [dataset extract-type & more]
-  (let [collection (first more)
+(defn fill-extract [dataset-name dataset-version extract-type & more]
+  (let [dataset (config/versionize-datasetname dataset-name dataset-version)
+        collection (first more)
         tl (config/timeline-for-dataset dataset)]
     (if (nil? collection)
-      (create-extract dataset extract-type timeline/changed-features (timeline/collections-in-changelog tl))
-      (create-extract dataset extract-type timeline/all-features (list collection)))))
+      (create-extract dataset-name dataset-version extract-type timeline/changed-features (timeline/collections-in-changelog tl))
+      (create-extract dataset-name dataset-version extract-type timeline/all-features (list collection)))))
 
-(defn -main [template-location dataset extract-type & more]
-  (let [templates-with-metadata (template/templates-with-metadata dataset template-location)]
+(defn -main [template-location dataset-name extract-type & more]
+  (let [templates-with-metadata (template/templates-with-metadata dataset-name template-location)]
     (if-not (some false? (map template/add-or-update-template templates-with-metadata))
-      (println (apply fill-extract dataset extract-type more))
+      (println (apply fill-extract dataset-name extract-type more))
       (println "could not load template(s)"))))
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))
