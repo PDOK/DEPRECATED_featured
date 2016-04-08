@@ -26,11 +26,11 @@
   :url "http://github.so.kadaster.nl/PDOK/featured"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :repositories [["releases" "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/releases/"]
+  :repositories [["releases" "http://ota-portal.so.kadaster.nl/artifactory/mvn-release-local/"]
                  ["osgeo" {:url "http://download.osgeo.org/webdav/geotools/" :snapshots false}]
                  ["local" "file:repo"]]
   :mirrors {"*" {:name "kadaster"
-                   :url "http://mvnrepository.so.kadaster.nl:8081/nexus/content/repositories/public/"}}
+                   :url "http://ota-portal.so.kadaster.nl/artifactory/mvn-registry"}}
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [cheshire "5.5.0"]
                  [clj-time "0.11.0"]
