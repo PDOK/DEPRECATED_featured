@@ -8,8 +8,6 @@
              [clojure.test :refer :all]
              [clojure.java.io :as io]))
 
-
-
 (defn- test-feature [name something other]
               {"name" name
                "something" something
@@ -25,17 +23,16 @@
 (def test-gml2extract-start-partial (slurp (io/resource "templates/test/gml2extract/partials/start.mustache")))
 (def test-gml2extract-end-partial (slurp (io/resource "templates/test/gml2extract/partials/end.mustache")))
 
-
 (deftest test-two-rendered-features
-  (let [_ (template/add-or-update-template {:dataset "test"
+  (let [_ (template/add-or-update-template {:dataset-name "test"
                                             :extract-type "gml2extract"
                                             :name "dummy"
                                             :template test-gml2extract-dummy-template})
-        _ (template/add-or-update-template {:dataset "test"
+        _ (template/add-or-update-template {:dataset-name "test"
                                             :extract-type "gml2extract"
                                             :name "start"
                                             :template test-gml2extract-start-partial})
-        _ (template/add-or-update-template {:dataset "test"
+        _ (template/add-or-update-template {:dataset-name "test"
                                             :extract-type "gml2extract"
                                             :name "end"
                                             :template test-gml2extract-end-partial})
@@ -44,17 +41,13 @@
     (is (= 2 (count features)))
     (is (= test-expected-rendered-feature rendered-feature))))
 
-
-
-
 (def ^{:private true} extract-type-citygml "citygml")
 
-(defn write-xml-to-database [dataset feature-type path template-dir]
+(defn write-xml-to-database [dataset feature-type path]
   "Helper function to write features to an extract-schema."
   (let [features (file-to-features path dataset)
-       [error features-for-extract] (features-for-extract dataset feature-type extract-type-citygml features template-dir)]
-    (add-extract-records config/extracts-db dataset feature-type extract-type-citygml 14 features-for-extract)))
-
+        [error features-for-extract] (features-for-extract dataset feature-type extract-type-citygml features)]
+    (add-extract-records config/extracts-db dataset extract-type-citygml 14 )))
 
 ;; The -elem-at- construction can be used in mustache templates to get an element from a specific position in a list. For instance elem-at-1 returns the second element in list.
 ;; In the example template 3 elements are used. In the example input data there are two elements in "nummeraanduidingreeks" present. In the output only these two elements can be found.
@@ -62,13 +55,12 @@
 (def test-indexed-section (slurp (io/resource "templates/test/elemat/indexedsection.mustache")))
 (def elem-at-expectedoutput "<imgeo-s:Pand><elem1>1111111111111111<hoek1>A</hoek1><hoek2>B</hoek2></elem1><elem2>9999999999999999<hoek3>C</hoek3></elem2></imgeo-s:Pand>")
 (deftest test-elem-at
-  (let [_ (template/add-or-update-template {:dataset "bgtmutatie"
+  (let [_ (template/add-or-update-template {:dataset-name "bgtmutatie"
                                             :extract-type "testing"
                                             :name "indexedsection"
                                             :template test-indexed-section})
         [error features] (features-for-extract "bgtmutatie" "indexedsection" "testing" elem-at-inputdata)]
   (is (= elem-at-expectedoutput (clojure.string/replace (nth (first features) 3) " " "")))))
-
 
 ;(write-xml-to-database "bgt" "bord" "D:\\data\\pdok\\bgt\\mutatie-leveringen\\bord\\973140-Bord-1.json" "D:\\projects\\featured\\src\\main\\resources\\pdok\\featured\\templates")
 
