@@ -26,8 +26,7 @@
   :url "http://github.so.kadaster.nl/PDOK/featured"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :repositories [["releases" "http://ota-portal.so.kadaster.nl/artifactory/mvn-release-local/"]
-                 ["osgeo" {:url "http://download.osgeo.org/webdav/geotools/" :snapshots false}]
+  :repositories [["osgeo" {:url "http://download.osgeo.org/webdav/geotools/" :snapshots false}]
                  ["local" "file:repo"]]
   :mirrors {"*" {:name "kadaster"
                    :url "http://ota-portal.so.kadaster.nl/artifactory/mvn-registry"}}
@@ -63,8 +62,8 @@
                  [ring/ring-defaults "0.1.5"]
                  [ring/ring-json "0.3.1"]
                  [xalan/xalan "2.7.2"]
-                 [nl.pdok/gml3-jts "0.1.0"]
-                 [nl.pdok/rdnaptrans-java "1.1"]]
+                 [nl.pdok/gml3-jts "0.1.6"]
+                 [nl.pdok/rdnaptrans-java "1.1.0"]]
   :plugins [[lein-ring "0.9.6" ]
             [lein-filegen "0.1.0-SNAPSHOT"]]
   :ring {:handler pdok.featured.api/app
