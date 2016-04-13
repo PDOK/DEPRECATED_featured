@@ -15,3 +15,6 @@ profiles.clj
 src/main/main.iml
 src/main/resources/version
 *.iml
+.project
+.classpath
+.settings/
