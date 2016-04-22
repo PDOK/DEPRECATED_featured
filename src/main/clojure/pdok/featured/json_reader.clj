@@ -8,7 +8,8 @@
 
 (def ^:private pdok-field-replacements
   {"_action" :action "_collection" :collection "_id" :id "_validity" :validity
-   "_geometry" :geometry "_current_validity" :current-validity})
+   "_geometry" :geometry "_current_validity" :current-validity
+   "_parent_id" :parent-id "_parent_collection" :parent-collection "_parent_field" :parent-field})
 
 (declare parse-time
          parse-date

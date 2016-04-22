@@ -502,17 +502,17 @@ VALUES (?, ?, ?, ?, ?, ?, ?)"))
     (proj/flush this)
     this))
 
-(defn create-cache [db dataset chunk]
-  (let [selector (juxt :collection)
-        per-c (group-by selector chunk)
+(defn create-cache [db persistence dataset chunk]
+  (let [roots (map (fn [feature] (pers/root persistence (:collection feature) (:id feature))) chunk)
+        per-c (group-by first roots)
         cache (volatile! (cache/basic-cache-factory {}))]
-    (doseq [[[collection] features] per-c]
+    (doseq [[collection roots-grouped-by] per-c]
       (apply-to-cache cache
-                      (load-current-feature-cache db dataset collection (map :id features))))
+                      (load-current-feature-cache db dataset collection (map second roots-grouped-by))))
     cache))
 
 (defn process-chunk* [config dataset chunk]
-  (let [cache (create-cache (:db-config config) dataset chunk)
+  (let [cache (create-cache (:db-config config) (:persistence config) dataset chunk)
         timeline (proj/init (create config cache dataset) dataset)]
     (doseq [f chunk]
       (condp = (:action f)

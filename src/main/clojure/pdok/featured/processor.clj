@@ -129,7 +129,7 @@
   (let [{:keys [collection id validity geometry attributes]} feature]
     (when-not (pers/stream-exists? persistence collection id)
       (pers/create-stream persistence collection id
-                          (:parent-collection feature) (:parent-id feature) (:parent-field feature)))
+                          (:parent-collection feature) (:parent-id feature) (and (:parent-collection feature) (or (:parent-field feature) (:collection feature)))))
     (append-feature persistence feature)
     (project! processor proj/new-feature feature))
   feature)

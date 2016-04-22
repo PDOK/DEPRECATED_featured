@@ -42,13 +42,14 @@
         [meta features] (json-reader/features-from-stream stream)]
     [meta features]))
 
-(defn- inserted-features [extracts dataset collection extract-type features]
+(defn- inserted-features [extracts dataset dataset-version collection extract-type features]
   (doseq [f features]
     (let [record (vector (:_version f) (:_valid_to f) f)]
       (swap! extracts conj record))))
 
 (defn- update-record* [version valid-to extract-record]
-  (let [is-version? (= version (first extract-record))]
+  (let [_ (println "update\n" version "\n" valid-to "\n" extract-record)
+        is-version? (= version (first extract-record))]
     (cond-> extract-record
             is-version? (assoc 1 valid-to))))
 
@@ -100,7 +101,7 @@
                       processor (processor/create meta "regression-set" persistence projectors)]
                   (dorun (processor/consume processor features))
                   (update-changelog-counts changelog-counts)
-                  (e/fill-extract "regression-set" nil)
+                  (e/fill-extract "regression-set" nil nil)
                   (e/flush-changelog "regression-set")
                   (:statistics (processor/shutdown processor))))
               feature-permutation))
@@ -201,6 +202,22 @@
                           (:extracts results))
   (test-geoserver 1)
   )
+
+(defpermutatedtest new-with-child "new-with-child" results
+                   (is (= 2 (:n-processed (:stats results))))
+                   (is (= 0 (:n-errored (:stats results))))
+                   (test-persistence {:events 1 :features 1})
+                   (test-persistence "col-1-child" {:events 1 :features 1})
+                   (test-timeline {:timeline-current {:n 1}
+                                   :timeline {:n 0}
+                                   :timeline-changelog {:n-new 1 :n-change 1}}
+                                  (:changelog-counts results))
+                   (test-timeline->extract {:n-extracts 1
+                                            :n-valid-to 0}
+                                           (:extracts results))
+                   (test-geoserver 1)
+                   (test-geoserver "col-1-child" 1)
+                   )
 
 (defpermutatedtest new-change "new-change" results
   (is (= 2 (:n-processed (:stats results))))
