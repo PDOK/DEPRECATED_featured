@@ -1,4 +1,5 @@
 /target
+/releases
 /classes
 /checkouts
 pom.xml
