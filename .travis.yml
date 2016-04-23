@@ -1,15 +1,34 @@
 language: clojure
 
+addons:
+  postgresql: "9.4"
+
 jdk:
 - oraclejdk7
 - oraclejdk8
+
+services:
+  - postgresql
 
 install:
   - curl https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein > $HOME/lein
   - chmod u+x $HOME/lein
   - export lein=$HOME/lein
 
-script: $lein with-profile +web-war do test, build
+before_script:
+  - psql -c 'create database pdok;' -U postgres
+  - psql -U postgres -d pdok -c "create extension postgis"
+  - psql -U postgres -d pdok -c "CREATE EXTENSION postgis_topology;"
+  - psql -U postgres -d pdok  -c "CREATE EXTENSION fuzzystrmatch"
+  - psql -U postgres -d pdok -c "CREATE EXTENSION postgis_tiger_geocoder;"
+  - export PROCESSOR_DATABASE_PASSWORD=
+  - export DATA_DATABASE_PASSWORD=
+  - export EXTRACTS_DATABASE_PASSWORD=
+
+script:
+  - $lein test
+  - $lein test :regression
+  - $lein with-profile +web-war build
 
 before_deploy:
   - export VERSION=$(printf $(cat VERSION))
