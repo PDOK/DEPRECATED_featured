@@ -1,4 +1,4 @@
-# featured
+# featured [![Build Status](https://travis-ci.org/PDOK/featured.svg?branch=master)](https://travis-ci.org/PDOK/featured)
 
 PDOK JSON data processor. Accepts JSON and processes it for data visualizations (Geoserver at the moment) and data extracts. 
  
