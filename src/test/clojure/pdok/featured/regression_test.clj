@@ -48,8 +48,7 @@
       (swap! extracts conj record))))
 
 (defn- update-record* [version valid-to extract-record]
-  (let [_ (println "update\n" version "\n" valid-to "\n" extract-record)
-        is-version? (= version (first extract-record))]
+  (let [is-version? (= version (first extract-record))]
     (cond-> extract-record
             is-version? (assoc 1 valid-to))))
 
