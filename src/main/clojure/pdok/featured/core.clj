@@ -51,7 +51,7 @@
   (let [n (when (int? replay) (Integer/parseInt replay))
         root-col (when-not (int? replay) replay)
         processor (setup-processor options)]
-    (processor/replay processor dataset n root-col)
+    (processor/replay processor n root-col)
     (log/info "Shutting down")
     (shutdown processor)
     (log/info "Done replaying")))
