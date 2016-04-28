@@ -5,11 +5,8 @@
 (def ^:dynamic *persistence-features* :feature)
 (def ^:dynamic *persistence-feature-stream* :feature_stream)
 (def ^:dynamic *persistence-collections* :collections)
-(def ^:dynamic *persistence-migrations* :persistence_migrations)
 
 (def ^:dynamic *timeline-schema-prefix* :featured)
 (def ^:dynamic *timeline-schema* "for init only")
-(def ^:dynamic *timeline-current-table* :timeline_current)
-(def ^:dynamic *timeline-history-table* :timeline)
+(def ^:dynamic *timeline-table* :timeline)
 (def ^:dynamic *timeline-changelog* :timeline_changelog)
-(def ^:dynamic *timeline-migrations* :timeline_migrations)

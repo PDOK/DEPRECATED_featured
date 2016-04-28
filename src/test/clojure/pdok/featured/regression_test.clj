@@ -44,27 +44,19 @@
 
 (defn- inserted-features [extracts dataset dataset-version collection extract-type features]
   (doseq [f features]
-    (let [record (vector (:_version f) (:_valid_to f) f)]
+    (let [record (vector (:_version f) (:_valid_from f) (:_valid_to f) f)]
       (swap! extracts conj record))))
 
-(defn- update-record* [version valid-to extract-record]
-  (let [is-version? (= version (first extract-record))]
-    (cond-> extract-record
-            is-version? (assoc 1 valid-to))))
+(defn- remove-extract-record [extracts record-info]
+  (let [[version valid-from] record-info]
+    (if valid-from
+      (into [] (remove #(and (= version  (nth %1 0))
+                             (= valid-from (nth %1 1))) extracts))
+      (into [] (remove #(= version (nth % 0)) extracts)))))
 
-(defn- update-records [extracts version valid-to]
-  (map (partial update-record* version valid-to) extracts))
-
-(defn- updated-features [extracts dataset collection extract-type changed-records]
-  (doseq [[valid-to version] changed-records]
-    (swap! extracts update-records version valid-to)))
-
-(defn- remove-extract-record [extracts version-to-delete ]
-  (into [] (remove #(= version-to-delete (:_version (nth % 2))) extracts)))
-
-(defn- deleted-versions [extracts dataset collection extract-type versions-to-delete]
-    (doseq [version-to-delete versions-to-delete]
-      (swap! extracts remove-extract-record version-to-delete)))
+(defn- deleted-versions [extracts dataset collection extract-type records]
+    (doseq [record records]
+      (swap! extracts remove-extract-record record)))
 
 (defn- query [table selector]
   (let [clauses (pg/map->where-clause selector)]
@@ -90,7 +82,6 @@
         changelog-counts (atom{})]
     (with-bindings
       {#'e/*process-insert-extract* (partial inserted-features extracts)
-       #'e/*process-update-extract* (partial updated-features extracts)
        #'e/*process-delete-extract* (partial deleted-versions extracts)
        #'e/*initialized-collection?* (constantly true)}
       {:stats (apply merge-with (fn [a b] (if (seq? a) (conj a b) (+ a b)))
@@ -139,7 +130,8 @@
              ~@body
              (when (= @i# n#)
                (replay)
-               ~@body)))))))
+               ~@body)
+             ))))))
 
 (defmacro defpermutatedtest [name file results-var & body]
   `(defregressiontest* ~name true ~file ~results-var ~@body))
@@ -167,15 +159,15 @@
 
 (defn- test-timeline
   ([expected-counts changelog-counts] (test-timeline "col-1" "id-a" expected-counts changelog-counts))
-  ([collection feature-id {:keys [timeline-current timeline timeline-changelog]} changelog-counts]
+  ([collection feature-id {:keys [timeline timeline-changelog]} changelog-counts]
    (testing "!>>> Timeline"
-     (is (= (:n timeline-current) (count (query "timeline_current" {:collection collection :feature_id feature-id}))))
      (is (= (:n timeline) (count (query "timeline" {:collection collection :feature_id feature-id}))))
      (test-timeline-changelog timeline-changelog changelog-counts))))
 
 (defn- test-timeline->extract [expected extracts]
+  ;  (println "EXTRACTS\n" (clojure.string/join "\n" (map (fn [e] (into [] (take 2 e))) @extracts)))
   (is (= (:n-extracts expected) (count @extracts)))
-  (is (= (:n-valid-to expected) (count (filter #((complement nil?) (second %)) @extracts)))))
+  (is (= (:n-valid-to expected) (count (filter #((complement nil?) (nth % 2)) @extracts)))))
 
 (defn- query-geoserver [table]
   (if-not (pg/table-exists? test-db "regression-set" table)
@@ -192,8 +184,7 @@
   (is (= 1 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 1 :features 1})
-  (test-timeline {:timeline-current {:n 1}
-                  :timeline {:n 0}
+  (test-timeline {:timeline {:n 1}
                   :timeline-changelog {:n-new 1}}
                  (:changelog-counts results))
   (test-timeline->extract {:n-extracts 1
@@ -207,8 +198,7 @@
                    (is (= 0 (:n-errored (:stats results))))
                    (test-persistence {:events 1 :features 1})
                    (test-persistence "col-1-child" {:events 1 :features 1})
-                   (test-timeline {:timeline-current {:n 1}
-                                   :timeline {:n 0}
+                   (test-timeline {:timeline {:n 1}
                                    :timeline-changelog {:n-new 1 :n-change 1}}
                                   (:changelog-counts results))
                    (test-timeline->extract {:n-extracts 1
@@ -222,9 +212,8 @@
   (is (= 2 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 2 :features 1})
-  (test-timeline {:timeline-current {:n 1}
-                  :timeline {:n 1}
-                  :timeline-changelog {:n-new 1 :n-change 1}}
+  (test-timeline {:timeline {:n 2}
+                  :timeline-changelog {:n-new 2 :n-close 1}}
                   (:changelog-counts results))
   (test-timeline->extract {:n-extracts 2
                            :n-valid-to 1}
@@ -235,9 +224,8 @@
   (is (= 2 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 2 :features 1})
-  (test-timeline {:timeline-current {:n 0}
-                                 :timeline {:n 0}
-                                 :timeline-changelog {:n-new 1 :n-delete 1}}
+  (test-timeline {:timeline {:n 0}
+                  :timeline-changelog {:n-new 1 :n-delete 1}}
                  (:changelog-counts results))
   (test-timeline->extract {:n-extracts 0
                            :n-valid-to 0}
@@ -248,9 +236,8 @@
   (is (= 3 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 3 :features 1})
-  (test-timeline {:timeline-current {:n 1}
-                  :timeline {:n 2}
-                  :timeline-changelog {:n-new 1 :n-change 2}}
+  (test-timeline {:timeline {:n 3}
+                  :timeline-changelog {:n-new 3 :n-close 2}}
                   (:changelog-counts results))
   (test-timeline->extract {:n-extracts 3
                            :n-valid-to 2}
@@ -261,22 +248,20 @@
   (is (= 3 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 3 :features 1})
-  (test-timeline {:timeline-current {:n 1}
-                                 :timeline {:n 1}
-                                 :timeline-changelog {:n-new 1 :n-change 1 :n-close 1}}
+  (test-timeline {:timeline {:n 2}
+                  :timeline-changelog {:n-new 2 :n-close 2}}
                  (:changelog-counts results))
   (test-timeline->extract {:n-extracts 2
                            :n-valid-to 2}
                           (:extracts results))
   (test-geoserver 0))
 
-(defpermutatedtest new-change-close_with_attributes "new-change-close_with_attributes" results
+(defpermutatedtest new-change-close-with-attributes "new-change-close_with_attributes" results
   (is (= 4 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 4 :features 1})
-  (test-timeline {:timeline-current {:n 1}
-                  :timeline {:n 2}
-                  :timeline-changelog {:n-new 1 :n-change 2 :n-close 1}}
+  (test-timeline {:timeline {:n 3}
+                  :timeline-changelog {:n-new 3 :n-close 3}}
                  (:changelog-counts results))
   (test-timeline->extract {:n-extracts 3
                            :n-valid-to 3}
@@ -287,9 +272,8 @@
   (is (= 4 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 4 :features 1})
-  (test-timeline {:timeline-current {:n 0}
-                  :timeline {:n 0}
-                  :timeline-changelog {:n-new 1 :n-change 2 :n-delete 3}}
+  (test-timeline {:timeline{:n 0}
+                  :timeline-changelog {:n-new 3 :n-close 2 :n-delete 3}}
                  (:changelog-counts results))
   (test-timeline->extract {:n-extracts 0
                            :n-valid-to 0}
@@ -300,36 +284,33 @@
   (is (= 6 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence  {:events 6 :features 1})
-  (test-timeline  {:timeline-current {:n 1}
-                   :timeline {:n 1}
-                   :timeline-changelog {:n-new 2 :n-change 3 :n-delete 3}}
+  (test-timeline  {:timeline {:n 2}
+                   :timeline-changelog {:n-new 5 :n-close 3 :n-delete 3}}
                  (:changelog-counts results))
   (test-timeline->extract {:n-extracts 2
                            :n-valid-to 1}
                           (:extracts results))
   (test-geoserver 1))
 
-(defpermutatedtest new_with_nested_null_geom "new_with_nested_null_geom" results
+(defpermutatedtest new-with-nested-null-geom "new_with_nested_null_geom" results
   (is (= 2 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence  {:events 1 :features 1})
   (test-persistence "col-1$nested" {:events 1 :features 1})
-  (test-timeline {:timeline-current {:n 1}
-                                 :timeline {:n 0}
-                                 :timeline-changelog {:n-new 1 :n-change 1}}
+  (test-timeline {:timeline {:n 1}
+                  :timeline-changelog {:n-new 1 :n-change 1}}
                  (:changelog-counts results))
   (test-timeline->extract {:n-extracts 1
                            :n-valid-to 0}
                           (:extracts results))
   (test-geoserver 1))
 
-(defpermutatedtest new_with_nested_crappy_geom "new_with_nested_crappy_geom" results
+(defpermutatedtest new-with-nested-crappy-geom "new_with_nested_crappy_geom" results
   (is (= 2 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 1 :features 1})
   (test-persistence "col-1$nested" {:events 1 :features 1})
-  (test-timeline {:timeline-current {:n 1}
-                  :timeline {:n 0}
+  (test-timeline {:timeline {:n 1}
                   :timeline-changelog {:n-new 1 :n-change 1}}
                  (:changelog-counts results))
   (test-timeline->extract {:n-extracts 1
@@ -338,14 +319,13 @@
   (test-geoserver 1))
 
 
-(defpermutatedtest new_nested-change_nested-change_nested "new_nested-change_nested-change_nested" results
+(defpermutatedtest new-nested_change-nested_change-nested "new_nested-change_nested-change_nested" results
   (is (= 8 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 3 :features 1})
   (test-persistence "col-1$nested" {:events 5 :features 3})
-  (test-timeline {:timeline-current {:n 1}
-                  :timeline {:n 2}
-                  :timeline-changelog {:n-new 1 :n-change 5 :n-close 2}}
+  (test-timeline {:timeline {:n 3}
+                  :timeline-changelog {:n-new 3 :n-change 3 :n-close 4}}
                  (:changelog-counts results))
   (test-timeline->extract {:n-extracts 3
                            :n-valid-to 2}
@@ -358,9 +338,8 @@
   (test-persistence {:events 4 :features 1})
   (test-persistence "col-1$nestedserie" {:events 5 :features 3})
   (test-persistence "col-1$nestedserie$label" {:events 5 :features 3})
-  (test-timeline {:timeline-current {:n 1}
-                  :timeline {:n 1}
-                  :timeline-changelog {:n-new 2 :n-change 7 :n-delete 3 :n-close 2}}
+  (test-timeline {:timeline {:n 2}
+                  :timeline-changelog {:n-new 3 :n-change 6 :n-delete 3 :n-close 3}}
                  (:changelog-counts results))
   (test-timeline->extract {:n-extracts 2
                            :n-valid-to 1}
@@ -373,8 +352,7 @@
   (is (= 2 (:n-errored (:stats results))))
   (test-persistence {:events 0 :features 0})
   (test-persistence "col-1$nested" {:events 0 :features 0})
-  (test-timeline {:timeline-current {:n 0}
-                  :timeline {:n 0}
+  (test-timeline {:timeline {:n 0}
                   :timeline-changelog {}}
                  (:changelog-counts results))
   (test-timeline->extract {:n-extracts 0
@@ -389,8 +367,7 @@
   (test-persistence {:events 1 :features 1})
   (test-persistence "col-1$nestedserie" {:events 1 :features 1})
   (test-persistence "col-1$nestedserie$label" {:events 1 :features 1})
-  (test-timeline {:timeline-current {:n 1}
-                  :timeline {:n 0}
+  (test-timeline {:timeline {:n 1}
                   :timeline-changelog {:n-new 1 :n-change 2}}
                  (:changelog-counts results))
   (test-timeline->extract {:n-extracts 1
@@ -406,9 +383,8 @@
   (test-persistence "pand$nummeraanduidingreeks" {:events 9 :features 6})
   (test-persistence "pand$nummeraanduidingreeks$positie" {:events 7 :features 5})
   (test-timeline "pand" "id-a"
-                 {:timeline-current {:n 1}
-                  :timeline {:n 2}
-                  :timeline-changelog {:n-new 1 :n-change 13 :n-close 5}}
+                 {:timeline {:n 3}
+                  :timeline-changelog {:n-new 3 :n-change 11 :n-close 7}}
                  (:changelog-counts results))
   (test-timeline->extract {:n-extracts 3
                            :n-valid-to 2}

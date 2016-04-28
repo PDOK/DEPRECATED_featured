@@ -15,7 +15,8 @@
             [clj-time.core :as t]
             [clojure.core.async :as a
              :refer [>!! close! chan]])
-  (:import [clojure.lang MapEntry]))
+  (:import [clojure.lang MapEntry PersistentQueue]
+           (java.sql SQLException)))
 
 (declare create)
 
@@ -28,11 +29,8 @@
 (defn schema [dataset]
   (str (name dc/*timeline-schema-prefix*) "_" dataset))
 
-(defn- qualified-history [dataset]
-  (str (pg/quoted (schema dataset)) "." (name dc/*timeline-history-table*)))
-
-(defn- qualified-current [dataset]
-  (str (pg/quoted (schema dataset)) "." (name dc/*timeline-current-table*)))
+(defn- qualified-timeline [dataset]
+  (str (pg/quoted (schema dataset)) "." (name dc/*timeline-table*)))
 
 (defn- qualified-changelog [dataset]
   (str (pg/quoted (schema dataset)) "." (name dc/*timeline-changelog*)))
@@ -41,8 +39,8 @@
   (when-not (pg/schema-exists? db (schema dataset))
     (pg/create-schema db (schema dataset)))
   (with-bindings {#'dc/*timeline-schema* (schema dataset)}
-    (when-not (pg/table-exists? db dc/*timeline-schema* dc/*timeline-history-table*)
-      (pg/create-table db dc/*timeline-schema* dc/*timeline-history-table*
+    (when-not (pg/table-exists? db dc/*timeline-schema* dc/*timeline-table*)
+      (pg/create-table db dc/*timeline-schema* dc/*timeline-table*
                        [:id "serial" :primary :key]
                        [:collection "varchar(255)"]
                        [:feature_id "varchar(100)"]
@@ -51,20 +49,8 @@
                        [:valid_to "timestamp without time zone"]
                        [:feature "text"]
                        [:tiles "integer[]"])
-      (pg/create-index db dc/*timeline-schema* dc/*timeline-history-table* :collection :feature_id)
-      (pg/create-index db dc/*timeline-schema* dc/*timeline-history-table* :version))
-    (when-not (pg/table-exists? db dc/*timeline-schema* dc/*timeline-current-table*)
-      (pg/create-table db dc/*timeline-schema* dc/*timeline-current-table*
-                       [:id "serial" :primary :key]
-                       [:collection "varchar(255)"]
-                       [:feature_id "varchar(100)"]
-                       [:version "uuid"]
-                       [:valid_from "timestamp without time zone"]
-                       [:valid_to "timestamp without time zone"]
-                       [:feature "text"]
-                       [:tiles "integer[]"])
-      (pg/create-index db dc/*timeline-schema* dc/*timeline-current-table* :collection :feature_id)
-      (pg/create-index db dc/*timeline-schema* dc/*timeline-current-table* :version))
+      (pg/create-index db dc/*timeline-schema* dc/*timeline-table* :collection :feature_id)
+      (pg/create-index db dc/*timeline-schema* dc/*timeline-table* :version))
     (when-not (pg/table-exists? db dc/*timeline-schema* dc/*timeline-changelog*)
       (pg/create-table db dc/*timeline-schema* dc/*timeline-changelog*
                        [:id "serial" :primary :key]
@@ -83,31 +69,23 @@
          (let [results (j/query c [query] :as-arrays? true)
                results (map (fn [[f]] (pg/from-json f)) (drop 1 results))]
            results))
-       (catch java.sql.SQLException e
+       (catch SQLException e
           (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
 (defn current
   ([{:keys [dataset] :as timeline} collection]
-   (current timeline {:dataset dataset :collection collection}))
-  ([timeline selector _]
-   (let [query (str "SELECT feature FROM " (qualified-current) " "
+   (current timeline dataset {:collection collection}))
+  ([timeline dataset selector]
+   (let [query (str "SELECT feature FROM " (qualified-timeline dataset) " "
                     "WHERE valid_to is null AND " (pg/map->where-clause selector))]
      (execute-query timeline query))))
 
 (defn closed
   ([{:keys [dataset] :as timeline} collection]
-   (closed timeline {:dataset dataset :collection collection}))
-  ([timeline selector _]
-   (let [query (str "SELECT feature FROM " (qualified-current) " "
+   (closed timeline dataset {:collection collection}))
+  ([timeline dataset selector]
+   (let [query (str "SELECT feature FROM " (qualified-timeline dataset) " "
                     "WHERE valid_to is not null AND " (pg/map->where-clause selector))]
-     (execute-query timeline query))))
-
-(defn history
-  ([{:keys [dataset] :as timeline} collection]
-   (history timeline {:dataset dataset :collection collection}))
-  ([timeline selector _]
-   (let [query (str "SELECT feature FROM " (qualified-history) " "
-                    "WHERE " (pg/map->where-clause selector))]
      (execute-query timeline query))))
 
 (defn- record->result [fn-transform c record]
@@ -135,36 +113,29 @@
  FROM " (qualified-changelog dataset) " AS cl
  LEFT JOIN
 (SELECT collection, feature_id, version, valid_from, feature  FROM "
- (qualified-current dataset)
-" UNION ALL
- SELECT collection, feature_id, version, valid_from, feature FROM "
-(qualified-history dataset)
-") as tl ON cl.collection = tl.collection AND cl.version = tl.version
+ (qualified-timeline dataset)
+") as tl ON cl.collection = tl.collection AND cl.version = tl.version AND cl.valid_from = tl.valid_from
  WHERE cl.collection = '" collection "'
  ORDER BY cl.id ASC")]
      (query-with-results-on-channel timeline query upgrade-changelog)))
 
 (defn all-features [{:keys [dataset] :as timeline} collection]
   (let [query (str "SELECT collection, feature_id, NULL as old_version, version, 'new' as action, valid_from, feature
-                    FROM " (qualified-current dataset) "
-                    WHERE collection = '" collection "'
-                    UNION ALL
-                    SELECT collection, feature_id, NULL as old_version, version, 'new' as action, valid_from, feature
-                    FROM " (qualified-history dataset) "
+                    FROM " (qualified-timeline dataset) "
                     WHERE collection = '" collection "'")]
      (query-with-results-on-channel timeline query upgrade-changelog)))
 
 (defn delete-changelog [{:keys [db dataset]}]
   (try
     (j/delete! db (qualified-changelog dataset) [])
-  (catch java.sql.SQLException e
+  (catch SQLException e
     (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
 (defn collections-in-changelog [{:keys [db dataset]}]
   (let [sql (str "SELECT DISTINCT collection FROM " (qualified-changelog dataset)) ]
     (try
       (flatten (drop 1 (j/query db [sql] :as-arrays? true)))
-       (catch java.sql.SQLException e
+       (catch SQLException e
          (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))))))
 
 
@@ -172,7 +143,7 @@
   ([feature]
    (init-root (:collection feature) (:id feature)))
   ([collection id]
-   {:_collection collection :_id id }))
+   {:_collection collection :_id id}))
 
 (defn- mustafy [feature]
   (let [result (init-root feature)
@@ -231,7 +202,7 @@
               (recur nested more))
             (if-not more
               (zip/root (zip/insert-child loc feature))
-              (recur (-> (zip/insert-child loc) zip/down) more)))
+              (recur (-> (zip/insert-child loc zip/down)) more)))
           ;; add root and step into it
           :else
           (if-not more
@@ -277,7 +248,9 @@
   (assoc acc :_valid_from  (:validity feature)))
 
 (defn- sync-version [acc feature]
-  (assoc acc :_version (:current-version feature)))
+  (-> acc
+      (update-in [:_all_versions] (fnil conj '()) (:version feature))
+      (assoc :_version (:version feature))))
 
 (defn- sync-valid-to [acc feature]
   (let [changed (assoc acc :_valid_to (:validity feature))]
@@ -287,26 +260,31 @@
   (assoc acc :_valid_to nil))
 
 (defn- new-current-sql [dataset]
-  (str "INSERT INTO " (qualified-current dataset)
+  (str "INSERT INTO " (qualified-timeline dataset)
        " (collection, feature_id, version, valid_from, valid_to, feature, tiles)
-VALUES (?, ? ,?, ?, ?, ?, ?)"))
+VALUES (?, ? , ?, ?, ?, ?, ?)"))
+
+(def feature-info (juxt :_collection :_id #(.toString (:_valid_from %)) #(when (:_valid_to %1) (.toString (:_valid_to %1))) :_version))
 
 (defn- new-current
   ([{:keys [db dataset]} features]
+    ;(println "NEW-CURRENT" (map feature-info features))
    (try
      (let [transform-fn (juxt :_collection :_id :_version
                               :_valid_from :_valid_to pg/to-json :_tiles)
-           records (map transform-fn features)
-           versions (map (juxt :_collection :_version :_version) features)]
+           records (map transform-fn features)]
        (j/execute! db (cons (new-current-sql dataset) records) :multi? true :transaction? (:transaction? db)))
-     (catch java.sql.SQLException e
+     (catch SQLException e
        (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))))))
 
 (defn- load-current-feature-cache-sql [dataset n]
-  (str "SELECT collection, feature_id, feature  FROM " (qualified-current dataset)
-       " WHERE collection = ? AND feature_id in ("
-       (clojure.string/join "," (repeat n "?")) ")")
-  )
+  (str "WITH last_version AS (
+   SELECT collection, feature_id, feature,
+    ROW_NUMBER() OVER (PARTITION BY collection, feature_id ORDER BY version DESC, valid_from DESC) as rk
+    FROM " (qualified-timeline dataset) ")
+    SELECT * FROM last_version WHERE rk = 1
+     AND collection = ? AND feature_id in ("
+       (clojure.string/join "," (repeat n "?")) ")"))
 
 (defn- load-current-feature-cache [db dataset collection ids]
   (try (j/with-db-connection [c db]
@@ -316,44 +294,32 @@ VALUES (?, ? ,?, ?, ?, ?, ?)"))
                for-cache
                (map (fn [[col fid f]] [[col fid] (pg/from-json f)] ) (drop 1 results))]
            for-cache))
-       (catch java.sql.SQLException e
+       (catch SQLException e
           (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
-(defn- delete-current-sql [dataset]
-  (str "DELETE FROM " (qualified-current dataset)
+(defn- delete-version-sql [dataset]
+  (str "DELETE FROM " (qualified-timeline dataset)
        " WHERE version = ?"))
 
-(defn- delete-current [{:keys [db dataset]} records]
-  "([collection version version] ... )"
-  (let [versions (map #(vector (get % 1)) records)]
-    (try
-      (j/execute! db (cons (delete-current-sql dataset) versions) :multi? true :transaction? (:transaction? db))
-     (catch java.sql.SQLException e
-       (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))))))
+(defn- delete-version-with-valid-from-sql [dataset]
+  (str "DELETE FROM " (qualified-timeline dataset)
+       " WHERE version = ? AND valid_from = ?"))
 
-(defn- new-history-sql [dataset]
-  (str "INSERT INTO " (qualified-history dataset) " (collection, feature_id, version, valid_from, valid_to, feature, tiles)
-VALUES (?, ?, ?, ?, ?, ?, ?)"))
-
-(defn- new-history [{:keys [db dataset]} features]
-  (try
-    (let [transform-fn (juxt :_collection :_id :_version :_valid_from :_valid_to pg/to-json :_tiles)
-          records (map transform-fn features)
-          versions (map (juxt :_collection :_version :_version) features)]
-      (j/execute! db (cons (new-history-sql dataset) records) :multi? true :transaction? (:transaction? db)))
-     (catch java.sql.SQLException e
-       (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
-
-(defn- delete-history-sql [dataset]
-  (str "DELETE FROM " (qualified-history dataset)
-       " WHERE version = ?"))
-
-(defn- delete-history [{:keys [db dataset]} features]
-  (try
-    (let [records (map vector (mapcat :_all_versions features))]
-      (j/execute! db (cons (delete-history-sql dataset) records) :multi? true :transaction? (:transaction? db)))
-     (catch java.sql.SQLException e
-       (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
+(defn- delete-version [{:keys [db dataset]} records]
+  "([version valid-from] ... )"
+  ;(println "DELETE-CURRENT" records)
+  (let [versions-only (map #(take 1 %) (filter (fn [[_ valid-from]] (not valid-from)) records))
+        with-valid-from (filter (fn [[_ valid-from]] valid-from) records)]
+    (when (seq versions-only)
+      (try
+        (j/execute! db (cons (delete-version-sql dataset) versions-only) :multi? true :transaction? (:transaction? db))
+        (catch SQLException e
+          (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
+    (when (seq with-valid-from)
+      (try
+        (j/execute! db (cons (delete-version-with-valid-from-sql dataset) with-valid-from) :multi? true :transaction? (:transaction? db))
+        (catch SQLException e
+          (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))))
 
 (defn- append-to-changelog-sql [dataset]
   (str "INSERT INTO " (qualified-changelog dataset)
@@ -364,25 +330,23 @@ VALUES (?, ?, ?, ?, ?, ?, ?)"))
 
 (defn- append-to-changelog [{:keys [db dataset]} log-entries]
   "([collection id old-version version valid_from action] .... )"
+  ;(println "CHANGELOG\n" (clojure.string/join "\n" (map (fn [e] (update-in e [4] #(when-not (nil? %1) (.toString %1)))) log-entries)))
   (try
     (let [transform-fn  (fn [rec] (let [[_ _ ov v a] rec] (conj rec v a)))
           records (map transform-fn log-entries)]
       (j/execute! db (cons (append-to-changelog-sql dataset) records) :multi? true :transaction? (:transaction? db)))
-    (catch java.sql.SQLException e
+    (catch SQLException e
       (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
 
 (defn- feature-key [feature]
   [(:collection feature) (:id feature)])
 
-(defn- make-flush-all [new-current-batch delete-current-batch new-history-batch
-                  delete-history-batch changelog-batch]
+(defn- make-flush-all [new-batch delete-batch changelog-batch]
   "Used for flushing all batches, so update current is always performed after new current"
   (fn [timeline]
     (fn []
-      (flush-batch new-current-batch (partial new-current timeline))
-      (flush-batch delete-current-batch (partial delete-current timeline))
-      (flush-batch new-history-batch (partial new-history timeline))
-      (flush-batch delete-history-batch (partial delete-history timeline))
+      (flush-batch new-batch (partial new-current timeline))
+      (flush-batch delete-batch (partial delete-version timeline))
       (flush-batch changelog-batch (partial append-to-changelog timeline)))))
 
 (defn- cache-store-key [f]
@@ -395,35 +359,32 @@ VALUES (?, ?, ?, ?, ?, ?, ?)"))
 (defn- cache-use-key [collection id]
   [collection id])
 
-(defn- batched-updater [timeline ncb ncb-size dcb dcb-size flush-fn feature-cache]
+(defn- batched-updater [timeline new-batch new-batch-size delete-batch delete-batch-size flush-fn feature-cache]
   "Cache batched updater consisting of insert and delete"
-  (let [batched-new (batched ncb ncb-size flush-fn)
+  (let [batched-new (batched new-batch new-batch-size flush-fn)
         cache-batched-new (with-cache feature-cache batched-new cache-store-key cache-value)
-        batched-delete (batched dcb dcb-size flush-fn)]
+        batched-delete (batched delete-batch delete-batch-size flush-fn)]
     (fn [f]
       (cache-batched-new f)
       (let [version (first (rest (:_all_versions f)))]
-        (batched-delete [(:_collection f) version version])))))
+        (batched-delete [version (:_valid_from f)])))))
 
-(defn- batched-deleter [timeline dcb dcb-size dhb dhb-size flush-fn feature-cache]
-  "Cache batched deleter (thrasher) of current and history"
-  (let [batched-delete-cur (batched dcb dcb-size flush-fn)
-        cache-remove-cur (with-cache feature-cache identity cache-store-key cache-invalidate)
-        batched-delete-his (batched dhb dhb-size flush-fn)]
+(defn- batched-deleter [timeline delete-batch delete-batch-size flush-fn feature-cache]
+  "Cache batched deleter (thrasher) of timeline data"
+  (let [batched-delete (batched delete-batch delete-batch-size flush-fn)
+        cache-remove (with-cache feature-cache identity cache-store-key cache-invalidate)]
     (fn [f]
-      (cache-remove-cur f)
-      (batched-delete-cur [(:_collection f) (:_version f) (:_version f)])
-      (batched-delete-his f))))
+      (cache-remove f)
+      (doseq [v (:_all_versions f)]
+        (batched-delete [v])))))
 
 (defn- create-changelog-entry [feature]
   [(:_collection feature) (:_id feature)])
 
 (defrecord Timeline [dataset db root-fn path-fn
                      feature-cache
-                     new-current-batch new-current-batch-size
-                     delete-current-batch delete-current-batch-size
-                     new-history-batch new-history-batch-size
-                     delete-history-batch delete-history-batch-size
+                     new-batch new-batch-size
+                     delete-batch delete-batch-size
                      changelog-batch changelog-batch-size
                      make-flush-fn flush-fn]
   proj/Projector
@@ -441,12 +402,11 @@ VALUES (?, ?, ?, ?, ?, ?, ?)"))
     (let [[collection id] (feature-key feature)
           [root-col root-id] (root-fn collection id)
           path (path-fn collection id)
-          batched-new (batched new-current-batch new-current-batch-size flush-fn)
+          batched-new (batched new-batch new-batch-size flush-fn)
           cache-batched-new (with-cache feature-cache batched-new cache-store-key cache-value)
-          cache-batched-update (batched-updater this new-current-batch new-current-batch-size
-                                          delete-current-batch delete-current-batch-size
+          cache-batched-update (batched-updater this new-batch new-batch-size
+                                          delete-batch delete-batch-size
                                           flush-fn feature-cache)
-          batched-history (batched new-history-batch new-history-batch-size flush-fn)
           cached-get-current (use-cache feature-cache cache-use-key)
           batched-append-changelog (batched changelog-batch changelog-batch-size flush-fn)]
       (if-let [current (cached-get-current root-col root-id)]
@@ -456,15 +416,18 @@ VALUES (?, ?, ?, ?, ?, ?, ?)"))
               (do (cache-batched-update (sync-valid-to new-current feature))
                   (batched-append-changelog [(:_collection new-current)
                                                (:_id new-current) (:_version current)
-                                               (:_version new-current) (:validity feature) :close]))
+                                               (:_version new-current) (:_valid_from new-current) :close]))
               (if (t/before? (:_valid_from current) (:validity feature))
                 (do ;(println "NOT-SAME")
-                  (batched-history (sync-valid-to current feature))
+                  (cache-batched-update (sync-version (sync-valid-to current feature) feature))
                   ;; reset valid-to for new-current.
-                  (cache-batched-update (reset-valid-to (sync-valid-from new-current feature)))
+                  (cache-batched-new (reset-valid-to (sync-valid-from new-current feature)))
                   (batched-append-changelog [(:_collection new-current)
-                                             (:_id new-current) (:_version current)
-                                             (:_version new-current) (:validity feature) :change]))
+                                             (:_id new-current) (:_version current) (:_version new-current)
+                                             (:_valid_from current) :close])
+                  (batched-append-changelog [(:_collection new-current)
+                                             (:_id new-current) nil
+                                             (:_version new-current) (:validity feature) :new]))
                 (do ;(println "SAME")
                   ;; reset valid-to because it might be closed because of nested features.
                   (cache-batched-update (reset-valid-to (sync-valid-from new-current feature)))
@@ -485,8 +448,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?)"))
   (proj/delete-feature [this feature]
     (let [[collection id] (feature-key feature)
           [root-col root-id] (root-fn collection id)
-          cache-batched-delete (batched-deleter db delete-current-batch delete-current-batch-size
-                                                delete-history-batch delete-history-batch-size
+          cache-batched-delete (batched-deleter db delete-batch delete-batch-size
                                                 flush-fn feature-cache)
           cached-get-current (use-cache feature-cache cache-use-key)
           batched-append-changelog (batched changelog-batch changelog-batch-size flush-fn)]
@@ -549,32 +511,25 @@ VALUES (?, ?, ?, ?, ?, ?, ?)"))
   ([config cache for-dataset]
    (let [db (:db-config config)
          persistence (or (:persistence config) (pers/make-cached-jdbc-processor-persistence config))
-         new-current-batch-size (or (:new-current-batch-size config) (:batch-size config) 10000)
-         new-current-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
-         delete-current-batch-size (or (:delete-current-batch-size config) (:batch-size config) 10000)
-         delete-current-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
-         new-history-batch-size (or (:new-history-batch-size config) (:batch-size config) 10000)
-         new-history-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
-         delete-history-batch-size (or (:delete-history-batch-size config) (:batch-size config) 10000)
-         delete-history-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
+         new-batch-size (or (:new-current-batch-size config) (:batch-size config) 10000)
+         new-batch (volatile! (PersistentQueue/EMPTY))
+         delete-batch-size (or (:delete-current-batch-size config) (:batch-size config) 10000)
+         delete-batch (volatile! (PersistentQueue/EMPTY))
          changelog-batch-size (or (:changelog-batch-size config) (:batch-size config) 10000)
-         changelog-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
-         make-flush-fn (make-flush-all new-current-batch delete-current-batch new-history-batch
-                              delete-history-batch changelog-batch)]
+         changelog-batch (volatile! (PersistentQueue/EMPTY))
+         make-flush-fn (make-flush-all new-batch delete-batch changelog-batch)]
      (->Timeline for-dataset
       db (partial pers/root persistence) (partial pers/path persistence)
       cache
-      new-current-batch new-current-batch-size
-      delete-current-batch delete-current-batch-size
-      new-history-batch new-history-batch-size
-      delete-history-batch delete-history-batch-size
+      new-batch new-batch-size
+      delete-batch delete-batch-size
       changelog-batch changelog-batch-size
       make-flush-fn (fn [])))))
 
 
 (defn create-chunked [config]
   (let [chunk-size (or (:chunk-size config) 10000)
-        chunk (volatile! (clojure.lang.PersistentQueue/EMPTY))
+        chunk (volatile! (PersistentQueue/EMPTY))
         make-process-fn (fn [tl] (batched chunk chunk-size #(process-chunk tl)))
         db (:db-config config)]
     (->ChunkedTimeline config "unknown-dataset" db chunk make-process-fn (fn []))))

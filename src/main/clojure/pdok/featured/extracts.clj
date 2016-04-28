@@ -2,14 +2,15 @@
   (:require [clojure.java.jdbc :as j]
             [pdok.featured.config :as config]
             [pdok.featured.json-reader :as json-reader]
-            [pdok.featured.mustache  :as m]
+            [pdok.featured.mustache :as m]
             [pdok.featured.timeline :as timeline]
             [pdok.featured.template :as template]
             [pdok.cache :as cache]
             [clojure.tools.logging :as log]
             [clojure.core.async :as a
              :refer [>! <! >!! <!! go chan]])
-  (:gen-class))
+  (:gen-class)
+  (:import (java.sql SQLException)))
 
 
 (def ^{:private true } extract-schema "extractmanagement")
@@ -24,24 +25,13 @@
       [nil (map #(vector feature-type (:_version %) (:_tiles %) (m/render template-key %)
                            (:_valid_from %) (:_valid_to %) (:lv-publicatiedatum %)) features)])))
 
-
-(defn- jdbc-update-extract [db table entries]
-  (when (seq entries)
-    (let [qualified-table (str extract-schema "." table)
-          query (str "UPDATE " qualified-table " SET valid_to = ? WHERE version = ?")]
-      (try (j/execute! db (cons query entries) :multi? true :transaction? (:transaction? db))
-           (catch java.sql.SQLException e (j/print-sql-exception-chain e))))))
-
-(defn update-extract-records [db dataset feature-type extract-type items]
-  (jdbc-update-extract db (str dataset "_" extract-type "_v0_" feature-type) items))
-
 (defn- jdbc-insert-extract [db table entries]
   (when (seq entries)
     (let [qualified-table (str extract-schema "." table)
           query (str "INSERT INTO " qualified-table
                      " (feature_type, version, valid_from, valid_to, publication, tiles, xml) VALUES (?, ?, ?, ?, ?, ?, ?)")]
       (try (j/execute! db (cons query entries) :multi? true :transaction? (:transaction? db))
-           (catch java.sql.SQLException e (j/print-sql-exception-chain e))))))
+           (catch SQLException e (j/print-sql-exception-chain e))))))
 
 (defn get-or-add-extractset [db extractset version]
   "return id"
@@ -97,11 +87,19 @@
 
 
 (defn- jdbc-delete-versions [db table versions]
-  (when (seq versions)
-    (let [query (str "DELETE FROM " extract-schema "." table
-                     " WHERE version = ?")]
-      (try (j/execute! db (cons query (map vector versions)) :multi? true :transaction? (:transaction? db))
-           (catch java.sql.SQLException e (j/print-sql-exception-chain e))))))
+  "([version valid_from][version valid_from] ... )"
+  (let [versions-only (map #(take 1 %) (filter (fn [[_ valid-from]] (not valid-from)) versions))
+        with-valid-from (filter (fn [[_ valid-from]] valid-from) versions)]
+    (when (seq versions-only)
+      (let [query (str "DELETE FROM " extract-schema "." table
+                       " WHERE version = ?")]
+        (try (j/execute! db (cons query versions-only) :multi? true :transaction? (:transaction? db))
+             (catch SQLException e (j/print-sql-exception-chain e)))))
+    (when (seq versions-only)
+      (let [query (str "DELETE FROM " extract-schema "." table
+                       " WHERE version = ? AND valid_from = ?")]
+        (try (j/execute! db (cons query with-valid-from) :multi? true :transaction? (:transaction? db))
+             (catch SQLException e (j/print-sql-exception-chain e)))))))
 
 (defn- delete-extracts-with-version [db dataset feature-type extract-type versions]
   (let [table (str dataset "_" extract-type "_v0_" feature-type)]
@@ -118,17 +116,6 @@
   (with-open [s (clojure.java.io/reader path)]
    (doall (json-reader/features-from-stream s :dataset dataset))))
 
-(defn- change-record [record]
-  (let [version (:old_version record)
-        valid-to (:valid_from record)]
-    (when-not (or (nil? version) (nil? valid-to))
-      [valid-to version])))
-
-(defn changelog->updates [record]
-  (condp = (:action record)
-      :change (change-record record)
-      nil))
-
 (defn changelog->change-inserts [record]
   (condp = (:action record)
     :new (:feature record)
@@ -138,11 +125,11 @@
 
 (defn changelog->deletes [record]
   (condp = (:action record)
-    :delete (:version record)
-    :close (:old_version record)
+    :delete [(:version record)]
+    :change [(:old_version record) (:valid_from record)]
+    :close [(:old_version record) (:valid_from record)]
     nil))
 
-(def ^:dynamic *process-update-extract* (partial update-extract-records config/extracts-db))
 (def ^:dynamic *process-insert-extract* (partial transform-and-add-extract config/extracts-db))
 (def ^:dynamic *process-delete-extract* (partial delete-extracts-with-version config/extracts-db))
 (def ^:dynamic *initialized-collection?* m/registered?)
@@ -159,8 +146,6 @@
       (when records
         (*process-insert-extract* dataset-name dataset-version collection extract-type
                                   (filter (complement nil?) (map changelog->change-inserts records)))
-        (*process-update-extract* dataset collection extract-type
-                                  (filter (complement nil?) (map changelog->updates records)))
         (*process-delete-extract* dataset collection extract-type
                                   (filter (complement nil?) (map changelog->deletes records)))
         (if (= 0 (mod i 10))
