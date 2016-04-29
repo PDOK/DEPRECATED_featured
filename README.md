@@ -1,90 +1,8 @@
-# featured [![Build Status](http://sou592.so.kadaster.nl:8084/buildStatus/icon?job=featured)](http://sou592.so.kadaster.nl:8084/job/featured/)
+# featured [![Build Status](https://travis-ci.org/PDOK/featured.svg?branch=master)](https://travis-ci.org/PDOK/featured)
 
-FIXME: description
-
-## Installation
-
-### Windows-Installer
-	Download from http://leiningen-win-installer.djpowell.net/ the installer and execute.
-
-### Windows-manual
-	Example
-		Download lein.bat from https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein.bat
-		set PATH %USERHOME%\.lein\bin		
-	
-### Linux
-
-## Issues
-
-### Proxy & Certificates
-	Multiple applications need proxy parameters these are best set through ENV_VAR
-	- LEIN_JAVA_CMD = D:\Programs\Java\jdk1.8.0_25\bin\java.exe
-	- http_proxy = www-proxy.cs.kadaster.nl:8082
-	- https_proxy = www-proxy.cs.kadaster.nl:8082
-	- MAVEN_OPTS = -Xmx512m -XX:MaxPermSize=2048m -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true
-	- JAVA_OPTS = -Dhttp.proxyHost=http://www-proxy.cs.kadaster.nl -Dhttp.proxyPort=8082 -Dhttps.proxyHost=http://www-proxy.cs.kadaster.nl -Dhttps.proxyPort=8082 -Dhttp.nonProxyHosts="localhost|127.0.0.1|*.SO.kadaster.nl|*.so.kadaster.nl|orchestration-plp.cs.kadaster.nl|10.*|fme*"
-	
-	Because we are behind a proxy we need to add certificates to the java keystore
-	To check which certificates are need can be done through a internet browser.
-		- load the page https://github.com 
-		- click the https symbol in the addressbar
-		- click on something like check certificate 
-		- select the Certification Path, a path will be show (something like Kadaster CA, www-proxy.cs.kadaster.nl, github.com) 
-		- we will need the all the certificates with the exception of the last one (github.com)
-		- for each certificate select it and view the certificate, a option for downloading(/saving) the certificate will be show,... so do that!
-		- when the certificates are saved they need to be added/imported to the java keystore.
-		- first we need to check which keystore we are going to update, that can be done by checking the 'active' java installation
-		- then the certificates can be added to the keystore
-		Example
-		keytool -keystore "C:\Program Files\Java\jre1.8.0_31\lib\security\cacerts" -importcert -alias kadaster_proxy -file kadaster_proxy.cer
-		keytool -keystore "C:\Program Files\Java\jre1.8.0_31\lib\security\cacerts" -importcert -alias kadaster_ca -file kadaster_ca.cer
-
-####Maven Settings
-Leiningen uses maven's settings.xml
-Set the proxy and nonproxyhosts as follows, make sure to replace the {pathToLocalRepository} placeholder with your local repository location:
-```
-<?xml version="1.0" encoding="UTF-8"?>
-<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
-          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
-
-	<localRepository>{pathToLocalRepository}</localRepository>
-
-	<interactiveMode>false</interactiveMode>
-
-	<offline>false</offline>
-
-	<pluginGroups>
-		<pluginGroup>nl.kadaster.maven.plugins</pluginGroup>
-	</pluginGroups>
-
-	<!-- All traffic goes through the Nexus Repository Manager -->
-	<proxies>
-		<proxy>
-		  <id>https-proxy</id>
-		  <active>true</active>
-		  <protocol>https</protocol>
-		  <host>www-proxy.cs.kadaster.nl</host>
-		  <port>8082</port>
-		  <nonProxyHosts>*.kadaster.nl</nonProxyHosts>
-		</proxy>
-	</proxies> 
-</settings>
-````
-
-No mirror is used, references to the kadaster nexus repository should be configured in each project to prevent configuration issues
-
-##Building the project
-Use "lein deps" to download the project dependencies (optional)
-
-Use "lein compile" and then "lein uberjar" to compile and create the jar file
-
+PDOK JSON data processor. Accepts JSON and processes it for data visualizations (Geoserver at the moment) and data extracts. 
  
 ## Usage
-
-https://github.com/technomancy/leiningen
-
-FIXME: explanation
 
     $ java -jar featured-0.1.0-standalone.jar [args]
 
@@ -100,65 +18,35 @@ FIXME: explanation
 
 ## Examples
 
-### Aanroep jar
-    $ java -jar -Dprocessor_database_url=//localhost:5432/pdok -Dprocessor_database_user=pdok_owner -Dprocessor_database_password=pdok_owner -Ddata_database_url=//localhost:5432/pdok -Ddata_database_user=pdok_owner -Ddata_database_password=pdok_owner target\uberjar\featured-0.1.0-SNAPSHOT-standalone.jar -d bgt -f .test-files\new-features-single-collection-10.json
+### call jar
+    $ java -jar -Dprocessor_database_url=//localhost:5432/pdok -Dprocessor_database_user=postgres -Dprocessor_database_password=postgres -Ddata_database_url=//localhost:5432/pdok -Ddata_database_user=postgres -Ddata_database_password=postgres featured-standalone.jar -d dataset -f path/to/file.json
 
-### Aanroep CMD
-#### Verwerken JSON
-	lein run -d bgtmutatie -f "path"\"file"
-
-Voorbeeld
-
-	lein run -d bgtmutatie -f D:\\bgt\\49542013\\49542013-Bak-1.json
+### CLI
+#### Process JSON
+	lein run -d dataset -f path/to/file
 	
-#### Genereren extracten
-	lein run -m pdok.featured.extracts "path_templates" "dataset" "format" (Optional "feature")
+#### Generate extracts
+	lein run -m pdok.featured.extracts path/to/templates-dir dataset format [feature])
 
-Voorbeeld	
-	
-	lein run -m pdok.featured.extracts D:\\git-repos\\catalogus\\datasets\\bgtmutatie\\templates bgtmutatie citygml	bak
-
-### Aanroep REST-calls
-#### Verwerken json-bestanden
-Op ../featured/api/process een POST uitvoeren met onderstaande request, waarbij de parameters _format_ en _callback_ optioneel zijn.
+### Call REST api
+#### Process json file
+On <featured-root>/api/process POST. Parameters  _format_ and _callback_ are optional.
     
-    {"dataset": "bgt", "file": "file://D:/Development/PDOK/featured/.test-files/change-features-single-collection-1000.json", "format":"zip", "callback": "http://localhost:3000/api/ping"}
+    {"dataset": "<dataset>", "file": "<URI to file>", "format":"zip/json", "callback": "<URI to callback>"}
     
-#### Registreren templates
-Op ../featured/api/template een POST uitvoeren met request:
+#### Register templates
+On <featured-root>/api/template POST:
 
-    {"dataset":"bgt", "extractType":"citygml", "collection":"bak", "partial": false, "template":"{{>start-model}}<imgeo:Bak gml:id=\"_{{_version}}\">{{>start-feature-type}}<function xmlns=\"http://www.opengis.net/citygml/cityfurniture/2.0\" codeSpace=\"{{type_codespace}}\">{{type}}</function><imgeo:plus-type codeSpace=\"{{plus-type_codespace}}\">{{plus-type}}{{plus-type_leeg}}</imgeo:plus-type><imgeo:geometrie2dBak>{{{_geometry.gml}}}</imgeo:geometrie2dBak></imgeo:Bak>{{>end-model}}"}
+    {"dataset":"<dataset>", "extractType":"<extracttype>", "collection":"<collection>", "partial": <bool>, "template":"<mustache template>"}
 
-#### Aanmaken extract-records    
-Op ../featured/api/extract een POST uitvoeren met request:
+#### Create extract-records    
+On <featured-root>/api/extract een POST uitvoeren met request:
   
-    {"dataset": "bgt", "collection": "buurt", "extractType": "citygml", "extractVersion": "25",  "callback": "http://localhost:3000/api/ping"}
+    {"dataset": "<dataset>", "collection": "<collection>", "extractType": "<extracttype>", "extractVersion": "<version>",  "callback": "<callback-uri>"}
     
-    
-### Bugs
-
-...
-
-### Any Other Sections
-### That You Think
-### Might be Useful
-
-For use with the REPL add the file _profiles.clj_ to your project and add the map:
-
-       {:dev  {:env {:processor-database-url "//localhost:5432/pdok"
-              :processor-database-user "pdok_owner"
-              :processor-database-password "pdok_owner"
-              :data-database-url "//localhost:5432/pdok"
-              :data-database-user "pdok_owner"
-              :data-database-password "pdok_owner"
-              }}
-        :test {:env {:database-user "test-user"}}}
-
-See also: https://github.com/weavejester/environ        
-
 ## License
 
-Copyright © 2015 FIXME
+Copyright © 2015 PDOK
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.

@@ -1,35 +1,20 @@
-(def feature-version (or (System/getenv "FEATURE_VERSION") "0.1"))
-(def build-number (or (System/getenv "BUILD_NUMBER") "HANDBUILT"))
-(def change-number (or (System/getenv "CHANGE_NUMBER") "031415"))
-(def release-version (str feature-version "." build-number))
-(def project-name "featured")
-(def uberjar-name (str project-name "-standalone.jar"))
-(def uberwar-name (str project-name ".war"))
+(def version (slurp "VERSION"))
+(def artifact-name (str "featured-" version))
+(def uberjar-name (str artifact-name "-standalone.jar"))
+(def webjar-name (str artifact-name "-web.jar"))
+(def uberwar-name (str artifact-name ".war"))
 (def git-ref (clojure.string/replace (:out (clojure.java.shell/sh "git" "rev-parse" "HEAD"))#"\n" "" ))
 
-(create-ns 'pdok.lein)
-(defn key->placeholder [k]
-  (re-pattern (str "\\$\\{" (name k) "\\}")))
-
-(defn generate-from-template [template-file replacement-map]
-  (let [template (slurp template-file)
-        replacements (map (fn [[k v]] [(key->placeholder k) (str v)]) replacement-map)]
-    (reduce (fn [acc [k v]] (clojure.string/replace acc k v)) template replacements)))
-
-(intern 'pdok.lein 'key->placeholder key->placeholder)
-(intern 'pdok.lein 'generate-from-template generate-from-template)
-
-(defproject featured release-version
+(defproject featured version
+  :min-lein-version "2.5.4"
   :uberjar-name ~uberjar-name
-  :manifest {"Implementation-Version" ~(str release-version "(" git-ref ")")}
+  :manifest {"Implementation-Version" ~(str version "(" git-ref ")")}
   :description "PDOK - No FME"
-  :url "http://github.so.kadaster.nl/PDOK/featured"
+  :url "http://github.com/PDOK/featured"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :repositories [["osgeo" {:url "http://download.osgeo.org/webdav/geotools/" :snapshots false}]
                  ["local" "file:repo"]]
-  :mirrors {"*" {:name "kadaster"
-                   :url "http://ota-portal.so.kadaster.nl/artifactory/mvn-registry"}}
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [cheshire "5.5.0"]
                  [clj-time "0.11.0"]
@@ -76,18 +61,15 @@
   :test-selectors {:default (fn [m] (not (or (:performance m) (:regression m))))
                    :regression :regression
                    :performance :performance}
-  :filegen [{:data {:RELEASE_VERSION ~release-version :CHANGE_NUMBER ~change-number}
-             :template-fn (partial pdok.lein/generate-from-template "deployit-manifest.xml.template")
-             :target "target/deployit-manifest.xml"}
-            {:data ~release-version
-             :template-fn #(str "FEATURED_VERSION=" %1 "\n")
-             :target "target/featured.properties"}
-            {:data ~(str release-version "(" git-ref ")")
+  :filegen [{:data ~(str version "(" git-ref ")")
              :template-fn #(str %1)
              :target "src/main/resources/version"}]
-  :aliases {"build" ["do" ["compile"] ["test"] ["filegen"]
-                     ["ring" "uberwar"]]}
   :profiles {:uberjar {:aot :all}
+             :cli {:uberjar-name ~uberjar-name
+                   :aliases {"build" ["do" "uberjar"]}}
+             :web-war {:aliases {"build" ["do" "filegen" ["ring" "uberwar"]]}}
+             :web-jar {:uberjar-name ~webjar-name
+                       :aliases {"build" ["do" "filegen" ["ring" "uberjar"]]}}
              :test {:resource-paths ["src/test/resources"]
                     :dependencies [[org.clojure/math.combinatorics "0.1.1"]]
                     :jvm-opts ["-Xmx3072M" "-Dlog4j.configuration=no-logging.properties"]}

@@ -1,4 +1,5 @@
 /target
+/releases
 /classes
 /checkouts
 pom.xml
@@ -12,6 +13,7 @@ pom.xml.asc
 .test-files/
 profiles.clj
 .idea/
+*.iml
 src/main/main.iml
 src/main/resources/version
 *.iml

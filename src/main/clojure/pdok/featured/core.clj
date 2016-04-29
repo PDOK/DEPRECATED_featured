@@ -30,17 +30,23 @@
         processor (processor/create meta dataset persistence projectors)]
     processor))
 
-(defn process [{:keys [json-files dataset] :as options}]
-  (log/info "Processing mode")
-  (let [[meta features] (features-from-files json-files :dataset dataset)
-        processor (setup-processor (merge meta options))]
+(defn process-features [features options]
+  (log/info "Start processing")
+  (let [processor (setup-processor options)]
     (dorun (consume processor features))
     (do (log/info "Shutting down.")
         (shutdown processor)))
-  (log/info "Done processing")
-  )
+  (log/info "Done processing"))
 
-(defn int? [^java.lang.String s]
+(defn process [{:keys [json-files dataset single-processor] :as options}]
+  (if single-processor
+    (let [[meta features] (features-from-files json-files :dataset dataset)]
+      (process-features features (merge meta options)))
+    (doseq [file json-files]
+      (let [[meta features] (features-from-files [file] :dataset dataset)]
+        (process-features features (merge meta options))))))
+
+  (defn int? [^java.lang.String s]
   (try
     (Integer/parseInt s)
     true
@@ -51,7 +57,7 @@
   (let [n (when (int? replay) (Integer/parseInt replay))
         root-col (when-not (int? replay) replay)
         processor (setup-processor options)]
-    (processor/replay processor dataset n root-col)
+    (processor/replay processor n root-col)
     (log/info "Shutting down")
     (shutdown processor)
     (log/info "Done replaying")))
@@ -97,6 +103,7 @@
    [nil "--projection PROJ" "RD / ETRS89 / SOURCE"]
    ["-r" "--replay [N/root-collection]" "Replay last N events or all events from root-collection tree from persistence to projectors"]
    [nil "--clear-timeline-changelog" "Clear timeline changelog for dataset"]
+   [nil "--single-processor" "One processor for all files, reads meta data of first file only."]
    ["-h" "--help"]
    ["-v" "--version"]])
 
@@ -132,10 +139,14 @@
   java.io.Closeable
     (close [this] (close-fn)))
 
-(defn features-from-files [files & args]
+(defn features-from-files [files & {:keys [drop-meta?] :as args}]
   (when (seq files)
     (let [f (first files)
-          fs (clojure.java.io/reader f)]
-      (log/info "Processing " f)
-      (concat (CloseableSeq. (apply features-from-stream f args) #(.close fs))
-              (lazy-seq (apply features-from-files (rest files) args))))))
+          fs (clojure.java.io/reader f)
+          [meta features] (apply features-from-stream fs args)
+          closeable-seq (concat (CloseableSeq. features #(.close fs))
+                                (lazy-seq (apply features-from-files (rest files) (mapcat identity (assoc args :drop-meta? true)))))]
+      (log/info "Reading " f)
+      (if drop-meta?
+        closeable-seq
+        [meta closeable-seq]))))

@@ -1,0 +1,54 @@
+language: clojure
+
+addons:
+  postgresql: "9.4"
+
+jdk:
+- oraclejdk7
+- oraclejdk8
+
+services:
+  - postgresql
+
+install:
+  - curl https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein > $HOME/lein
+  - chmod u+x $HOME/lein
+  - export lein=$HOME/lein
+
+before_script:
+  - psql -c 'create database pdok;' -U postgres
+  - psql -U postgres -d pdok -c "create extension postgis"
+  - psql -U postgres -d pdok -c "CREATE EXTENSION postgis_topology;"
+  - psql -U postgres -d pdok  -c "CREATE EXTENSION fuzzystrmatch"
+  - psql -U postgres -d pdok -c "CREATE EXTENSION postgis_tiger_geocoder;"
+  - export PROCESSOR_DATABASE_PASSWORD=
+  - export DATA_DATABASE_PASSWORD=
+  - export EXTRACTS_DATABASE_PASSWORD=
+
+script:
+  - $lein test
+  - $lein test :regression
+  - $lein with-profile +web-war build
+
+before_deploy:
+  - export VERSION=$(printf $(cat VERSION))
+  - chmod +x .travis/build-releases.sh
+  - .travis/build-releases.sh
+
+deploy:
+  provider: releases
+  api_key: $GITHUB_OAUTH_TOKEN
+  file_glob: true
+  file:
+    - "releases/featured-$VERSION-standalone.jar"
+    - "releases/featured-$VERSION-web.jar"
+    - "releases/featured-$VERSION.war"
+  skip_cleanup: true
+  on:
+    tags: true
+    jdk: oraclejdk7
+
+cache:
+  directories:
+    - $HOME/.m2
+    - $HOME/.lein

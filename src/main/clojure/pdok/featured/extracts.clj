@@ -187,7 +187,7 @@
 (defn -main [template-location dataset-name extract-type & more]
   (let [templates-with-metadata (template/templates-with-metadata dataset-name template-location)]
     (if-not (some false? (map template/add-or-update-template templates-with-metadata))
-      (println (apply fill-extract dataset-name extract-type more))
+      (println (apply fill-extract dataset-name nil extract-type more))
       (println "could not load template(s)"))))
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))
