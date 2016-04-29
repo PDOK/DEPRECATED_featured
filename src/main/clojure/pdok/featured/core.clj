@@ -140,7 +140,6 @@
     (close [this] (close-fn)))
 
 (defn features-from-files [files & {:keys [drop-meta?] :as args}]
-  (println "OPTS" drop-meta?)
   (when (seq files)
     (let [f (first files)
           fs (clojure.java.io/reader f)
