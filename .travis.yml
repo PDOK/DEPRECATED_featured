@@ -1,11 +1,15 @@
 language: clojure
 
+branches:
+  only:
+    - master
+
 addons:
   postgresql: "9.4"
 
 jdk:
-- oraclejdk7
-- oraclejdk8
+  - oraclejdk7
+  - oraclejdk8
 
 services:
   - postgresql
