@@ -1,3 +1,4 @@
 #!/usr/bin/env sh
 
-java -Xmx3072M -cp target/featured-standalone.jar pdok.featured.extracts "$@"
+jar=$(find target -name "*standalone.jar" -type f -exec ls "{}" +)
+java -Xmx3072M -cp $jar pdok.featured.extracts "$@"
