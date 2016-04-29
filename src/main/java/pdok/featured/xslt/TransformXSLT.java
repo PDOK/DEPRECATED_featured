@@ -1,7 +1,6 @@
 package pdok.featured.xslt;
 
 import java.io.IOException;
-import java.io.File;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.InputStream;
