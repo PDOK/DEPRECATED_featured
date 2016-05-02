@@ -64,6 +64,8 @@
       (pg/create-index db dc/*timeline-schema* dc/*timeline-changelog* :version :action)
       (pg/create-index db dc/*timeline-schema* dc/*timeline-changelog* :collection))))
 
+
+
 (defn- execute-query [timeline query]
   (try (j/with-db-connection [c (:db timeline)]
          (let [results (j/query c [query] :as-arrays? true)
@@ -264,7 +266,7 @@
        " (collection, feature_id, version, valid_from, valid_to, feature, tiles)
 VALUES (?, ? , ?, ?, ?, ?, ?)"))
 
-(def feature-info (juxt :_collection :_id #(.toString (:_valid_from %)) #(when (:_valid_to %1) (.toString (:_valid_to %1))) :_version))
+;;(def feature-info (juxt :_collection :_id #(.toString (:_valid_from %)) #(when (:_valid_to %1) (.toString (:_valid_to %1))) :_version))
 
 (defn- new-current
   ([{:keys [db dataset]} features]
@@ -387,13 +389,14 @@ VALUES (?, ? , ?, ?, ?, ?, ?)"))
                      changelog-batch changelog-batch-size
                      make-flush-fn flush-fn]
   proj/Projector
-  (proj/init [this for-dataset]
+  (proj/init [this for-dataset collections]
     (let [inited (assoc this :dataset for-dataset)
           flush-fn (make-flush-fn inited)
           inited (assoc inited :flush-fn flush-fn)
           ;;_ (init db for-dataset) not needed if we only go through chunked-timeline
           ]
       inited))
+  (proj/new-collection [this collection parent-collection])
   (proj/flush [this]
     (flush-fn)
     this)
@@ -474,7 +477,7 @@ VALUES (?, ? , ?, ?, ?, ?, ?)"))
 
 (defn process-chunk* [config dataset chunk]
   (let [cache (create-cache (:db-config config) (:persistence config) dataset chunk)
-        timeline (proj/init (create config cache dataset) dataset)]
+        timeline (proj/init (create config cache dataset) dataset nil)]
     (doseq [f chunk]
       (condp = (:action f)
         :new (proj/new-feature timeline f)
@@ -489,11 +492,12 @@ VALUES (?, ? , ?, ?, ?, ?, ?)"))
 
 (defrecord ChunkedTimeline [config dataset db chunk make-process-fn process-fn]
   proj/Projector
-  (proj/init [this for-dataset]
+  (proj/init [this for-dataset collections]
     (let [inited (assoc this :dataset for-dataset)
           inited (assoc inited :process-fn (make-process-fn inited))
           _ (init db for-dataset)]
       inited))
+  (proj/new-collection [this collection parent-collection])
   (proj/flush [this]
     (process-chunk this)
     this)

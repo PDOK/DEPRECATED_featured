@@ -217,13 +217,14 @@
                              delete-batch delete-batch-size no-insert
                              make-flush-fn flush-fn proj-fn no-visualization ndims srid]
   proj/Projector
-  (proj/init [this for-dataset]
+  (proj/init [this for-dataset collections]
     (let [inited (assoc this :dataset for-dataset)
           flush-fn (make-flush-fn inited)
           ready (assoc inited :flush-fn flush-fn)]
       (when (not (gs-dataset-exists? ready))
         (gs-create-dataset ready))
       ready))
+  (proj/new-collection [this collection parent-collection])
   (proj/flush [this]
     (flush-fn)
     this)

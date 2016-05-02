@@ -10,8 +10,7 @@
             [clojure.core.async :as a]
             [clj-time [core :as t] [local :as tl] [coerce :as tc]]
             [clojure.string :as str]
-            [clojure.tools.logging :as log])
-  (:import  [pdok.featured.geoserver GeoserverProjector]))
+            [clojure.tools.logging :as log]))
 
 (def ^:private pdok-fields [:action :id :dataset :collection :validity :version :geometry :current-validity
                             :parent-id :parent-collection :parent-field :attributes :src])
@@ -117,16 +116,19 @@
       (assoc feature :current-version (pers/current-version persistence collection id)))
     feature))
 
-(defn project! [processor proj-fn feature]
+(defn project! [processor proj-fn & more]
   (doseq [p (:projectors processor)]
-    (proj-fn p feature)))
+    (apply proj-fn p more)))
 
 (defn doto-projectors! [processor action-fn]
   (doseq [p (:projectors processor)]
     (action-fn p)))
 
-(defn- process-new-feature [{:keys [persistence projectors] :as processor} feature]
-  (let [{:keys [collection id validity geometry attributes]} feature]
+(defn- process-new-feature [{:keys [persistence] :as processor} feature]
+  (let [{:keys [collection id parent-collection]} feature]
+    (when-not (pers/collection-exists? persistence collection parent-collection)
+      (pers/create-collection persistence collection parent-collection)
+      (project! processor proj/new-collection collection parent-collection))
     (when-not (pers/stream-exists? persistence collection id)
       (pers/create-stream persistence collection id
                           (:parent-collection feature) (:parent-id feature) (and (:parent-collection feature) (or (:parent-field feature) (:collection feature)))))
@@ -137,7 +139,7 @@
 (defn- process-nested-new-feature [processor feature]
   (process-new-feature processor (assoc feature :action :new)))
 
-(defn- process-change-feature [{:keys [persistence projectors] :as processor} feature]
+(defn- process-change-feature [{:keys [persistence] :as processor} feature]
   (let [enriched-feature (->> feature
                                   (with-current-version persistence))]
     (append-feature persistence enriched-feature)
@@ -148,7 +150,7 @@
   "Nested change is the same a nested new"
   (process-new-feature processor (assoc feature :action :change)))
 
-(defn- process-close-feature [{:keys [persistence projectors] :as processor} feature]
+(defn- process-close-feature [{:keys [persistence] :as processor} feature]
   (if (empty? (:attributes feature))
     (let [enriched-feature (->> feature (with-current-version persistence))]
       (append-feature persistence enriched-feature)
@@ -408,7 +410,7 @@
      :statistics (if statistics @statistics {})}))
 
 (defn add-projector [processor projector]
-  (let [initialized-projector (proj/init projector (:dataset processor))]
+  (let [initialized-projector (proj/init projector (:dataset processor) (pers/collections (:persistence processor)))]
     (update-in processor [:projectors] conj initialized-projector)))
 
 (defn create
@@ -417,7 +419,8 @@
   ([options dataset persistence & projectors]
    {:pre [(map? options) (string? dataset)]}
    (let [initialized-persistence (pers/init persistence dataset)
-         initialized-projectors (doall (map #(proj/init % dataset) (clojure.core/flatten projectors)))
+         initialized-projectors (doall (map #(proj/init % dataset (pers/collections initialized-persistence))
+                                            (clojure.core/flatten projectors)))
          batch-size (or (config/env :processor-batch-size) 10000)]
      (merge {:dataset dataset
              :check-validity-on-delete true

@@ -7,11 +7,17 @@
             [clojure.test :refer :all]
             [clojure.java.io :as io]))
 
-(defrecord MockedPersistence [streams streams-n state events-n]
+(defrecord MockedPersistence [streams streams-n state events-n collections]
   pers/ProcessorPersistence
-  (init [this for-dataset] (assoc this :initialized true))
+  (init [this for-dataset]
+    (vswap! collections conj [:col1 :parent1])
+    (assoc this :initialized true))
   (prepare [this features] this)
   (flush [this] this)
+  (collections [persistence] @collections)
+  (create-collection [persistence collection parent-collection] (vswap! collections conj [collection parent-collection]))
+  (collection-exists? [persistence collection parent-collection] (@collections [collection parent-collection]))
+  (child-collections [persistence parent-collection] nil)
   (stream-exists? [this collection id] (get @streams [collection id]))
   (create-stream [this collection id]
     (pers/create-stream this collection id nil nil nil))
@@ -31,9 +37,12 @@
     [])
   (close [this] (assoc this :closed true)))
 
-(defrecord MockedProjector [features-n changes-n]
+(defrecord MockedProjector [features-n changes-n collections]
   proj/Projector
-  (init [this for-dataset] (assoc this :initialized true))
+  (init [this for-dataset col]
+    (vreset! collections col)
+    (-> this (assoc :initialized true)))
+  (new-collection [this collection parent-collection] (vswap! collections conj [collection parent-collection]))
   (flush [this] this)
   (new-feature [_ feature]
     (swap! features-n inc))
@@ -41,10 +50,10 @@
     (swap! changes-n inc))
   (close [this] (assoc this :closed true)))
 
-(defn create-persistence [] (->MockedPersistence (atom {}) (atom 0) (atom {}) (atom 0)))
+(defn create-persistence [] (->MockedPersistence (atom {}) (atom 0) (atom {}) (atom 0) (volatile! #{})))
 
 (defn create-projectors [n]
-  (repeatedly n #(->MockedProjector (atom 0) (atom 0))))
+  (repeatedly n #(->MockedProjector (atom 0) (atom 0) (volatile! #{}))))
 
 (defn create-processor
   ([] (create-processor 1))
@@ -87,7 +96,8 @@
       (is (-> processor :persistence :initialized)))
     (testing "Initialized projectors?"
       (doseq [p (:projectors processor)]
-        (is (-> p :initialized))))))
+        (is (-> p :initialized))
+        (is (= @(:collections p) #{[:col1 :parent1]}))))))
 
 (deftest shutdown-processor
   (let [processor (shutdown (create-processor 2))]
@@ -107,7 +117,12 @@
 (deftest ok-new-feature
   (let [processor (create-processor)
         processed (consume* processor [valid-new-feature])]
-    (new-should-be-ok processor processed)))
+    (new-should-be-ok processor processed)
+    (testing "Emitted collections"
+      (is (= (pers/collections (:persistence processor)) #{[:col1 :parent1] ["collection-1" nil]}))
+      (doseq [p (:projectors processor)]
+        (is (= @(:collections p) #{[:col1 :parent1] ["collection-1" nil]}))
+        ))))
 
 (def still-valid-new-transformations
   [["no geometry" #(dissoc % :geometry)]

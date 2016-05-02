@@ -11,15 +11,18 @@
             [cognitect.transit :as transit]
             [clojure.core.async :as a
              :refer [>!! close! go chan]])
-  (:import [java.io ByteArrayOutputStream]))
+  (:import (clojure.lang PersistentQueue)))
 
 (declare prepare-caches prepare-childs-cache prepare-parent-cache)
 
 (defprotocol ProcessorPersistence
-  (init [this for-dataset])
-  (prepare [this features] "Called before processing this feature batch")
+  (init [persistence for-dataset])
+  (prepare [persistence features] "Called before processing this feature batch")
   (flush [persistence])
-  (child-collections [this parent-collection])
+  (collections [persistence])
+  (create-collection [persistence collection parent-collection])
+  (collection-exists? [persistence collection parent-collection])
+  (child-collections [persistence parent-collection])
   (stream-exists? [persistence collection id])
   (create-stream
     [persistence collection id]
@@ -110,18 +113,16 @@ If n nil => no limit, if collections nil => all collections")
       (pg/create-index db dc/*persistence-schema* dc/*persistence-collections*
                        :collection :parent_collection))))
 
-(defn collection-exists? [{:keys [db dataset]} collection parent-collection]
-  (j/with-db-connection [c db]
-    (let [results (j/query c [(str "SELECT id FROM " (qualified-persistence-collections dataset)
-                                   " WHERE "
-                                   (pg/map->where-clause {:collection collection
-                                                          :parent_collection parent-collection}))])]
-      (not (nil? (first results))))))
-
-(defn create-collection [{:keys [db dataset]} collection parent-collection]
+(defn jdbc-create-collection [{:keys [db dataset]} collection parent-collection]
   (let [sql (str "INSERT INTO " (qualified-persistence-collections dataset)
                  " (collection, parent_collection) VALUES (?, ?)")]
     (j/execute! db (list sql collection parent-collection))))
+
+(defn jdbc-all-collections [{:keys [db dataset]}]
+  (j/with-db-connection [c db]
+    (let [query (str "SELECT collection, parent_collection FROM " (qualified-persistence-collections dataset))
+          results (j/query c [query] :as-arrays? true)]
+      (drop 1 results))))
 
 (defn jdbc-child-collections [{:keys [db dataset]} parent-collection]
   (j/with-db-connection [c db]
@@ -294,12 +295,13 @@ If n nil => no limit, if collections nil => all collections")
         (prepare-childs-cache persistence collection ids true)
         (prepare-parent-cache persistence collection ids true)))))
 
-(defrecord CachedJdbcProcessorPersistence [db dataset collection-cache stream-batch stream-batch-size stream-cache
+(defrecord CachedJdbcProcessorPersistence [db dataset collections-cache stream-batch stream-batch-size stream-cache
                                          link-batch link-batch-size childs-cache parent-cache]
   ProcessorPersistence
   (init [this for-dataset]
     (let [inited (assoc this :dataset for-dataset)
-          _ (jdbc-init db for-dataset)]
+          _ (jdbc-init db for-dataset)
+          _ (vreset! collections-cache (into #{} (jdbc-all-collections inited)))]
       inited))
   (prepare [this features]
     (with-bench t (log/debug "Prepared cache in" t "ms")
@@ -313,6 +315,13 @@ If n nil => no limit, if collections nil => all collections")
      (vreset! childs-cache (cache/basic-cache-factory {}))
      (vreset! parent-cache (cache/basic-cache-factory {})))
     this)
+  (collections [_]
+    @collections-cache)
+  (create-collection [this collection parent-collection]
+    (jdbc-create-collection this collection parent-collection)
+    (vswap! collections-cache conj [collection parent-collection]))
+  (collection-exists? [_ collection parent-collection]
+    (@collections-cache [collection parent-collection]))
   (child-collections [this parent-collection]
     (jdbc-child-collections this parent-collection))
   (stream-exists? [this collection id]
@@ -320,17 +329,15 @@ If n nil => no limit, if collections nil => all collections")
   (create-stream [this collection id]
     (create-stream this collection id nil nil nil))
   (create-stream [this collection id parent-collection parent-id parent-field]
-    (let [cached-collection-exists? (cached collection-cache collection-exists? this)
-          childs-key-fn (fn [_ _ p-col p-id _] [p-col p-id])
+    (let [childs-key-fn (fn [_ _ p-col p-id _] [p-col p-id])
           childs-value-fn append-cached-child
           parent-key-fn (fn [collection id _ _ _] [collection id])
           parent-value-fn (fn [_ _ _ pc pid pf] [pc pid pf])
           batched-create (batched link-batch link-batch-size :batch-fn (partial jdbc-create-stream this))
           cache-batched-create (with-cache childs-cache batched-create childs-key-fn childs-value-fn)
           double-cache-batched (with-cache parent-cache cache-batched-create parent-key-fn parent-value-fn)]
-      (when-not (cached-collection-exists? collection parent-collection)
-        (create-collection this collection parent-collection)
-        (cached-collection-exists? :reload collection parent-collection))
+      (when-not (collection-exists? this collection parent-collection)
+        (create-collection this collection parent-collection))
       (double-cache-batched collection id parent-collection parent-id parent-field)))
   (append-to-stream [this version action collection id validity geometry attributes]
     ;(println "APPEND: " id)
@@ -371,15 +378,15 @@ If n nil => no limit, if collections nil => all collections")
 
 (defn make-cached-jdbc-processor-persistence [config]
   (let [db (:db-config config)
-        collection-cache (volatile! {})
+        collections-cache (volatile! #{})
         stream-batch-size (or (:stream-batch-size config) (:batch-size config) 10000)
-        stream-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
+        stream-batch (volatile! (PersistentQueue/EMPTY))
         stream-cache (volatile! (cache/basic-cache-factory {}))
         link-batch-size (or (:link-batch-size config) (:batch-size config) 10000)
-        link-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
+        link-batch (volatile! (PersistentQueue/EMPTY))
         childs-cache (volatile! (cache/basic-cache-factory {}))
         parent-cache (volatile! (cache/basic-cache-factory {}))]
-    (CachedJdbcProcessorPersistence. db "unknown-dataset" collection-cache stream-batch stream-batch-size stream-cache
+    (CachedJdbcProcessorPersistence. db "unknown-dataset" collections-cache stream-batch stream-batch-size stream-cache
                                      link-batch link-batch-size childs-cache parent-cache)))
 
 (defrecord NoStatePersistence []
