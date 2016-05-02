@@ -250,6 +250,8 @@
     (fn [e]
       (cond (and (instance? MapEntry e) (= :_validity (first e)))
             (MapEntry. :_validity (texify-validity (second e)))
+            (and (instance? MapEntry e) (= :_current_validity (first e)))
+            (MapEntry. :_current_validity (texify-validity (second e)))
             (instance? LocalDateTime e)
             (texify-moment e)
             (instance? LocalDate e)

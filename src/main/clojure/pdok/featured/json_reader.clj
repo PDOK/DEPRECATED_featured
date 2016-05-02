@@ -97,14 +97,14 @@
 
 (defn- evaluate-f [element]
   (let [[function params] element]
-      (case function
-        "~#moment"  (if params (apply parse-time params) (nilled 'org.joda.time.DateTime))
-        "~#date"    (if params (apply parse-date params) (nilled 'org.joda.time.LocalDate))
-        "~#int"     (if params (int (first params)) (nilled 'java.lang.Integer))
-        "~#boolean" (if params (boolean (first params)) (nilled 'java.lang.Boolean))
-        "~#double"  (if params (double (first params)) (nilled 'java.lang.Double))
-        element ; never fail just return element
-        ))
+    (case function
+      "~#moment"  (if params (apply parse-time params) (nilled 'org.joda.time.DateTime))
+      "~#date"    (if params (apply parse-date params) (nilled 'org.joda.time.LocalDate))
+      "~#int"     (if params (int (first params)) (nilled 'java.lang.Integer))
+      "~#boolean" (if params (boolean (first params)) (nilled 'java.lang.Boolean))
+      "~#double"  (if params (double (first params)) (nilled 'java.lang.Double))
+      element ; never fail just return element
+      ))
   )
 
 (defn- element-is-pdok-field? [element]
