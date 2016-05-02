@@ -278,13 +278,12 @@ VALUES (?, ? , ?, ?, ?, ?, ?)"))
        (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))))))
 
 (defn- load-current-feature-cache-sql [dataset n]
-  (str "WITH last_version AS (
-   SELECT collection, feature_id, feature,
-    ROW_NUMBER() OVER (PARTITION BY collection, feature_id ORDER BY version DESC, valid_from DESC) as rk
-    FROM " (qualified-timeline dataset) ")
-    SELECT * FROM last_version WHERE rk = 1
-     AND collection = ? AND feature_id in ("
-       (clojure.string/join "," (repeat n "?")) ")"))
+  (str "SELECT DISTINCT ON (feature_id)
+    collection, feature_id, feature
+    FROM " (qualified-timeline dataset)
+    " WHERE collection = ? AND feature_id in ("
+       (clojure.string/join "," (repeat n "?")) ")
+      ORDER BY feature_id ASC, version DESC, valid_from DESC"))
 
 (defn- load-current-feature-cache [db dataset collection ids]
   (try (j/with-db-connection [c db]
