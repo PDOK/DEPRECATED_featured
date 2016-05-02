@@ -232,13 +232,10 @@ If n nil => no limit, if collections nil => all collections")
   (when (seq ids)
     (try (let [results
                (j/with-db-connection [c db]
-                 (j/query c (apply vector (str "SELECT collection, feature_id, validity, action, version FROM (
- SELECT collection, feature_id, action, validity, version,
- row_number() OVER (PARTITION BY collection, feature_id ORDER BY id DESC) AS rn
- FROM " (qualified-feature-stream dataset)
- " WHERE collection = ? and feature_id in ("
- (clojure.string/join "," (repeat (count ids) "?"))
- ")) a WHERE rn = 1")
+                 (j/query c (apply vector (str "SELECT DISTINCT ON (feature_id)
+ collection, feature_id, validity, action, version FROM " (qualified-feature-stream dataset)
+ " WHERE collection = ? and feature_id in (" (clojure.string/join "," (repeat (count ids) "?")) ")
+   ORDER BY feature_id ASC, id DESC")
                                    collection ids) :as-arrays? true))]
            (map (fn [[collection id validity action version]] [[collection id]
                                                                       [validity (keyword action) version]] )
