@@ -95,7 +95,7 @@
                        " WHERE version = ?")]
         (try (j/execute! db (cons query versions-only) :multi? true :transaction? (:transaction? db))
              (catch SQLException e (j/print-sql-exception-chain e)))))
-    (when (seq versions-only)
+    (when (seq with-valid-from)
       (let [query (str "DELETE FROM " extract-schema "." table
                        " WHERE version = ? AND valid_from = ?")]
         (try (j/execute! db (cons query with-valid-from) :multi? true :transaction? (:transaction? db))
