@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [flush]))
 
 (defprotocol Projector
-  (init [persistence for-dataset collections])
+  (init [persistence for-dataset current-collections])
   (new-collection [persistence collection parent-collection])
   (flush [persistence])
   (new-feature [persistence feature])

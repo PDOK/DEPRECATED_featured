@@ -59,10 +59,11 @@
       (swap! extracts remove-extract-record record)))
 
 (defn- query [table selector]
-  (let [clauses (pg/map->where-clause selector)]
-  (j/query test-db [ (str "SELECT * FROM \"featured_regression_regression-set\"." table " "
-                          "WHERE 1 = 1 "
-                          "AND " clauses )])))
+  (when (pg/table-exists? test-db "featured_regression_regression-set" table)
+    (let [clauses (pg/map->where-clause selector)]
+      (j/query test-db [(str "SELECT * FROM \"featured_regression_regression-set\".\"" table "\" "
+                             "WHERE 1 = 1 "
+                             "AND " clauses)]))))
 
 (defn- update-changelog-counts [changelog-counts]
   (let [records (j/query test-db ["SELECT * FROM \"featured_regression_regression-set\".timeline_changelog"])]
@@ -161,7 +162,7 @@
   ([expected-counts changelog-counts] (test-timeline "col-1" "id-a" expected-counts changelog-counts))
   ([collection feature-id {:keys [timeline timeline-changelog]} changelog-counts]
    (testing "!>>> Timeline"
-     (is (= (:n timeline) (count (query "timeline" {:collection collection :feature_id feature-id}))))
+     (is (= (:n timeline) (count (query (str "timeline_" collection) {:feature_id feature-id}))))
      (test-timeline-changelog timeline-changelog changelog-counts))))
 
 (defn- test-timeline->extract [expected extracts]

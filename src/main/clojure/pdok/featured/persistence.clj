@@ -120,9 +120,10 @@ If n nil => no limit, if collections nil => all collections")
 
 (defn jdbc-all-collections [{:keys [db dataset]}]
   (j/with-db-connection [c db]
-    (let [query (str "SELECT collection, parent_collection FROM " (qualified-persistence-collections dataset))
-          results (j/query c [query] :as-arrays? true)]
-      (drop 1 results))))
+    (let [query (str "SELECT collection as name, parent_collection as \"parent-collection\" FROM "
+                     (qualified-persistence-collections dataset))
+          results (j/query c [query])]
+      results)))
 
 (defn jdbc-child-collections [{:keys [db dataset]} parent-collection]
   (j/with-db-connection [c db]
@@ -319,9 +320,9 @@ If n nil => no limit, if collections nil => all collections")
     @collections-cache)
   (create-collection [this collection parent-collection]
     (jdbc-create-collection this collection parent-collection)
-    (vswap! collections-cache conj [collection parent-collection]))
+    (vswap! collections-cache conj {:name collection :parent-collection parent-collection}))
   (collection-exists? [_ collection parent-collection]
-    (@collections-cache [collection parent-collection]))
+    (@collections-cache {:name collection :parent-collection parent-collection}))
   (child-collections [this parent-collection]
     (jdbc-child-collections this parent-collection))
   (stream-exists? [this collection id]

@@ -6,7 +6,8 @@
             [clojure.core.cache :as cache]
             [clojure.java.jdbc :as j]
             [clojure.string :as str]
-            [clojure.tools.logging :as log]))
+            [clojure.tools.logging :as log])
+  (:import (clojure.lang PersistentQueue)))
 
 (defn- remove-keys [map keys]
   (apply dissoc map keys))
@@ -217,7 +218,7 @@
                              delete-batch delete-batch-size no-insert
                              make-flush-fn flush-fn proj-fn no-visualization ndims srid]
   proj/Projector
-  (proj/init [this for-dataset collections]
+  (proj/init [this for-dataset current-collections]
     (let [inited (assoc this :dataset for-dataset)
           flush-fn (make-flush-fn inited)
           ready (assoc inited :flush-fn flush-fn)]
@@ -278,11 +279,11 @@
         dataset "unknown-dataset"
         cache (volatile! {})
         insert-batch-size (or (:insert-batch-size config) (:batch-size config) 10000)
-        insert-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
+        insert-batch (volatile! (PersistentQueue/EMPTY))
         update-batch-size (or (:update-batch-size config) (:batch-size config) 10000)
-        update-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
+        update-batch (volatile! (PersistentQueue/EMPTY))
         delete-batch-size (or (:delete-batch-size config) (:batch-size config) 10000)
-        delete-batch (volatile! (clojure.lang.PersistentQueue/EMPTY))
+        delete-batch (volatile! (PersistentQueue/EMPTY))
         no-insert (volatile! #{})
         ndims (or (:ndims config) 2)
         srid (or (:srid config) 28992)

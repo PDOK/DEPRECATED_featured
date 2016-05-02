@@ -68,7 +68,7 @@
 
 (defn timeline-for-dataset [dataset]
   (let [tl (timeline)]
-    (proj/init tl dataset nil)))
+    (proj/init tl dataset #{})))
 
 (def projections
   {:RD {:proj-fn pdok.featured.feature/as-rd

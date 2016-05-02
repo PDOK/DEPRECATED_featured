@@ -39,8 +39,8 @@
 
 (defrecord MockedProjector [features-n changes-n collections]
   proj/Projector
-  (init [this for-dataset col]
-    (vreset! collections col)
+  (init [this for-dataset current-collections]
+    (vreset! collections current-collections)
     (-> this (assoc :initialized true)))
   (new-collection [this collection parent-collection] (vswap! collections conj [collection parent-collection]))
   (flush [this] this)
