@@ -21,7 +21,6 @@
   (flush [persistence])
   (collections [persistence])
   (create-collection [persistence collection parent-collection])
-  (collection-exists? [persistence collection parent-collection])
   (child-collections [persistence parent-collection])
   (stream-exists? [persistence collection id])
   (create-stream
@@ -66,6 +65,13 @@ If n nil => no limit, if collections nil => all collections")
     (if (empty? path)
       [collection id]
       (take 2 (first path)))))
+
+(defn collection-exists?
+  ([persistence collection]
+    (let [collections (collections persistence)]
+      (seq (filter #(= (:name %) collection) collections))))
+  ([persistence collection parent-collection]
+   ((collections persistence) {:name collection :parent-collection parent-collection})))
 
 (defn schema [dataset]
   (str (name dc/*persistence-schema-prefix*) "_" dataset))
@@ -306,7 +312,9 @@ If n nil => no limit, if collections nil => all collections")
       inited))
   (prepare [this features]
     (with-bench t (log/debug "Prepared cache in" t "ms")
-      (prepare-caches this (map (juxt :collection :id) features)))
+      (prepare-caches this (map (juxt :collection :id) features))
+      (prepare-caches this (map (juxt :parent-collection :parent-id)
+                                (filter #(and (:parent-collection %1) (:parent-id %1)) features))))
     this)
   (flush [this]
     (flush-batch stream-batch (partial jdbc-insert this))
@@ -321,8 +329,6 @@ If n nil => no limit, if collections nil => all collections")
   (create-collection [this collection parent-collection]
     (jdbc-create-collection this collection parent-collection)
     (vswap! collections-cache conj {:name collection :parent-collection parent-collection}))
-  (collection-exists? [_ collection parent-collection]
-    (@collections-cache {:name collection :parent-collection parent-collection}))
   (child-collections [this parent-collection]
     (jdbc-child-collections this parent-collection))
   (stream-exists? [this collection id]

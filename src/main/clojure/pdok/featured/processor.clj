@@ -25,11 +25,17 @@
         new-reasons (conj current-reasons reason)]
     (-> feature (assoc :invalid? true) (assoc :invalid-reasons new-reasons))))
 
-(defn- apply-all-features-validation [{:keys [invalids]} feature]
-  (let [{:keys [collection id action validity geometry attributes]} feature]
+(defn- apply-all-features-validation [persistence {:keys [invalids]} feature]
+  (let [{:keys [collection id action validity geometry attributes]} feature
+        parent-set #{:parent-collection :parent-id}
+        parent-check (map #(contains? feature %) parent-set)]
     (cond-> feature
       (or (some str/blank? [collection id]) (and (not= action :delete) (nil? validity)))
       (make-invalid "All feature require: collection id validity")
+      (and (some true? parent-check) (not (every? true? parent-check)))
+      (make-invalid "Feature should contain both parent-collection and parent-id or none")
+      (and (every? true? parent-check) (not (pers/stream-exists? persistence (:parent-collection feature) (:parent-id feature))))
+      (make-invalid "Parent should exist")
       (@invalids [(:collection feature) (:id feature)])
       (make-invalid "Feature marked invalid")
       (@invalids [(:parent-collection feature) (:parent-id feature)])
@@ -84,23 +90,23 @@
         (condp contains? (:action feature)
           #{:new :nested-new :nested-change :nested-close}
           (->> feature
-               (apply-all-features-validation processor)
+               (apply-all-features-validation persistence processor)
                (apply-new-feature-requires-non-existing-stream-validation persistence))
           #{:change}
           (->> feature
-               (apply-all-features-validation processor)
+               (apply-all-features-validation persistence processor)
                (apply-non-new-feature-requires-existing-stream-validation persistence)
                (apply-closed-feature-cannot-be-changed-validation persistence)
                (apply-non-new-feature-current-validity-validation persistence))
           #{:close}
           (->> feature
-               (apply-all-features-validation processor)
+               (apply-all-features-validation persistence processor)
                (apply-closed-feature-cannot-be-changed-validation persistence)
                (apply-non-new-feature-requires-existing-stream-validation persistence)
                (apply-non-new-feature-current-validity-validation persistence))
           #{:delete}
           (cond->> feature
-            true (apply-all-features-validation processor)
+            true (apply-all-features-validation persistence processor)
             true (apply-non-new-feature-requires-existing-stream-validation persistence)
             (:check-validity-on-delete processor)
             (apply-non-new-feature-current-validity-validation persistence))

@@ -16,7 +16,6 @@
   (flush [this] this)
   (collections [persistence] @collections)
   (create-collection [persistence collection parent-collection] (vswap! collections conj [collection parent-collection]))
-  (collection-exists? [persistence collection parent-collection] (@collections [collection parent-collection]))
   (child-collections [persistence parent-collection] nil)
   (stream-exists? [this collection id] (get @streams [collection id]))
   (create-stream [this collection id]

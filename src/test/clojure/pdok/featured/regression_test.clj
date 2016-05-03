@@ -393,3 +393,15 @@
   (test-geoserver "pand" 1)
   (test-geoserver "pand$nummeraanduidingreeks" 0)
   (test-geoserver "pand$nummeraanduidingreeks$positie" 3))
+
+(defpermutatedtest same-double-new "same-double-new" results
+                   (is (= 2 (:n-processed (:stats results))))
+                   (is (= 1 (:n-errored (:stats results))))
+                   (test-persistence {:events 1 :features 1})
+                   (test-timeline {:timeline {:n 1}
+                                   :timeline-changelog {:n-new 1 :n-change 0 :n-close 0}}
+                                  (:changelog-counts results))
+                   (test-timeline->extract {:n-extracts 1
+                                            :n-valid-to 0}
+                                           (:extracts results))
+                   (test-geoserver 1))
