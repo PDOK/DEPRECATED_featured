@@ -404,7 +404,11 @@ If n nil => no limit, if collections nil => all collections")
     this)
   (flush [this]
     this)
-  (child-collections [this parent-collection]
+  (collections [persistence]
+    #{})
+  (create-collection [persistence collection parent-collection]
+    nil)
+  (child-collections [persistence parent-collection]
     nil)
   (stream-exists? [persistence collection id]
     false)
