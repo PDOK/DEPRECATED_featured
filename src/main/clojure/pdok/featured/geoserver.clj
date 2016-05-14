@@ -74,22 +74,23 @@
       (catch java.sql.SQLException e
         (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e))))))
 
-(defn- feature-to-sparse-record [proj-fn feature all-fields-constructor]
+(defn- feature-to-sparse-record [proj-fn feature all-fields-constructor import-nil-geometry?]
   ;; could use a valid-geometry? check?! For now not, as-jts return nil if invalid (for gml)
   (let [id (:id feature)
         version (:version feature)
         sparse-attributes (all-fields-constructor (:attributes feature))]
-    (when-let [geometry (proj-fn (-> feature (:geometry) (f/as-jts)))]
-      (let [geo-group (f/geometry-group (:geometry feature))
-            record (concat [id
-                            version
-                            (when (= :point geo-group)  geometry)
-                            (when (= :line geo-group)  geometry)
-                            (when (= :polygon geo-group)  geometry)
-                            geo-group]
-                           sparse-attributes
-                           [id])]
-        record))))
+    (let [geometry (proj-fn (-> feature (:geometry) (f/as-jts)))]
+      (when (or geometry import-nil-geometry?)
+        (let [geo-group (f/geometry-group (:geometry feature))
+              record (concat [id
+                              version
+                              (when (= :point geo-group) geometry)
+                              (when (= :line geo-group) geometry)
+                              (when (= :polygon geo-group) geometry)
+                              geo-group]
+                             sparse-attributes
+                             [id])]
+          record)))))
 
 (defn- feature-keys [feature]
   (let [geometry (:geometry feature)
@@ -129,7 +130,7 @@
        " WHERE NOT EXISTS (SELECT 1 FROM " (pg/quoted schema) "." (pg/quoted table) " WHERE _id = ?)" ))
 
 (defn- gs-add-feature
-  ([{:keys [db dataset]} proj-fn all-attributes-fn no-insert features]
+  ([{:keys [db dataset import-nil-geometry?]} proj-fn all-attributes-fn no-insert features]
    (try
      (let [filtered-features (filter #(not (@no-insert (:version %))) features)
            selector (juxt :collection)
@@ -137,7 +138,8 @@
         (doseq [[[collection] grouped-features] per-collection]
          (let [all-attributes (all-attributes-fn collection)
                records (filter (comp not nil?)
-                               (map #(feature-to-sparse-record proj-fn % (all-fields-constructor all-attributes)) grouped-features))]
+                               (map #(feature-to-sparse-record proj-fn % (all-fields-constructor all-attributes) import-nil-geometry?)
+                                    grouped-features))]
            (if (not (empty? records))
              (let [fields (concat [:_id :_version :_geometry_point :_geometry_line :_geometry_polygon :_geo_group]
                                   all-attributes)
@@ -216,7 +218,8 @@
 (defrecord GeoserverProjector [db dataset cache insert-batch insert-batch-size
                              update-batch update-batch-size
                              delete-batch delete-batch-size no-insert
-                             make-flush-fn flush-fn proj-fn no-visualization ndims srid]
+                             make-flush-fn flush-fn proj-fn no-visualization ndims srid
+                               import-nil-geometry?]
   proj/Projector
   (proj/init [this for-dataset current-collections]
     (let [inited (assoc this :dataset for-dataset)
@@ -289,8 +292,10 @@
         srid (or (:srid config) 28992)
         proj-fn (or (:proj-fn config) identity)
         no-visualization (:no-visualization config)
-        make-flush-fn (make-flush-all proj-fn cache insert-batch update-batch delete-batch no-insert)]
+        make-flush-fn (make-flush-all proj-fn cache insert-batch update-batch delete-batch no-insert)
+        import-nil-geometry? (:import-nil-geometry? config)]
     (->GeoserverProjector db dataset cache insert-batch insert-batch-size
                           update-batch update-batch-size
                           delete-batch delete-batch-size no-insert
-                          make-flush-fn (fn []) proj-fn no-visualization ndims srid)))
+                          make-flush-fn (fn []) proj-fn no-visualization ndims srid
+                          import-nil-geometry?)))

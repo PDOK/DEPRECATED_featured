@@ -130,7 +130,8 @@
 
 (defmulti geometry-group
   "returns :point, :line or :polygon"
-  (fn [obj] (lower-case (get obj "type"))))
+  (fn [obj] (when obj
+              (lower-case (get obj "type")))))
 
 (defmethod geometry-group :default [_] nil)
 
