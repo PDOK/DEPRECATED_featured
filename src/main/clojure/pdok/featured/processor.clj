@@ -10,7 +10,8 @@
             [clojure.core.async :as a]
             [clj-time [core :as t] [local :as tl] [coerce :as tc]]
             [clojure.string :as str]
-            [clojure.tools.logging :as log]))
+            [clojure.tools.logging :as log]
+            [pdok.featured.tiles :as tiles]))
 
 (def ^:private pdok-fields [:action :id :dataset :collection :validity :version :geometry :current-validity
                             :parent-id :parent-collection :parent-field :attributes :src])
@@ -350,13 +351,23 @@
     (pers/append-to-stream persistence version action collection id validity geometry attributes)
     feature))
 
+(defn- add-updated-tiles [statistics feature]
+  (if-let [tiles (tiles/nl (:geometry feature))]
+    (do (println tiles)
+        (swap! statistics update :updatedTiles #(clojure.set/union % tiles)))
+    )
+  )
+
 (defn- update-statistics [{:keys [statistics]} feature]
   (when statistics
     (swap! statistics update :n-processed inc)
     (when (:src feature) (swap! statistics update :n-src inc))
+    (when (:geometry feature) (add-updated-tiles statistics feature))
     (when (:invalid? feature)
       (swap! statistics update :n-errored inc)
-      (swap! statistics update :errored #(conj % (:id feature)))))
+      (swap! statistics update :errored #(conj % (:id feature))))
+    (println statistics)
+    )
   )
 
 (defn consume* [processor features]
@@ -435,5 +446,5 @@
              :projectors initialized-projectors
              :batch-size batch-size
              :invalids (volatile! #{})
-             :statistics (atom {:n-src 0 :n-processed 0 :n-errored 0 :errored '() :replayed 0})}
+             :statistics (atom {:n-src 0 :n-processed 0 :n-errored 0 :errored '() :replayed 0 :updatedTiles #{}})}
             options))))

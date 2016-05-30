@@ -85,7 +85,7 @@
       {#'e/*process-insert-extract* (partial inserted-features extracts)
        #'e/*process-delete-extract* (partial deleted-versions extracts)
        #'e/*initialized-collection?* (constantly true)}
-      {:stats (apply merge-with (fn [a b] (if (seq? a) (conj a b) (+ a b)))
+      {:stats (apply merge-with (fn [a b]  (if (set? a) (merge a b) (if (seq? a) (conj a b) (+ a b))))
             (map (fn [features]
                 (let [persistence (config/persistence)
                       projectors (conj (config/projectors persistence) (config/timeline persistence))
