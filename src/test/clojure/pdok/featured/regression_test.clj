@@ -42,7 +42,7 @@
         [meta features] (json-reader/features-from-stream stream)]
     [meta features]))
 
-(defn- inserted-features [extracts dataset dataset-version collection extract-type features]
+(defn- inserted-features [extracts dataset extract-type collection features]
   (doseq [f features]
     (let [record (vector (:_version f) (:_valid_from f) (:_valid_to f) f)]
       (swap! extracts conj record))))
@@ -54,7 +54,7 @@
                              (= valid-from (nth %1 1))) extracts))
       (into [] (remove #(= version (nth % 0)) extracts)))))
 
-(defn- deleted-versions [extracts dataset collection extract-type records]
+(defn- deleted-versions [extracts dataset extract-type collection records]
     (doseq [record records]
       (swap! extracts remove-extract-record record)))
 
