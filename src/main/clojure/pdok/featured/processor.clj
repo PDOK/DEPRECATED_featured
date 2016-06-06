@@ -353,8 +353,7 @@
 
 (defn- add-updated-tiles [statistics feature]
   (if-let [tiles (tiles/nl (:geometry feature))]
-    (do (println tiles)
-        (swap! statistics update :updatedTiles #(clojure.set/union % tiles)))
+    (swap! statistics update :updatedTiles #(clojure.set/union % tiles))
     )
   )
 
@@ -366,7 +365,6 @@
     (when (:invalid? feature)
       (swap! statistics update :n-errored inc)
       (swap! statistics update :errored #(conj % (:id feature))))
-    (println statistics)
     )
   )
 
