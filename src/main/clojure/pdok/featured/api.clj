@@ -42,7 +42,6 @@
 (def ProcessRequest
   "A schema for a JSON process request"
   {:dataset s/Str
-   (s/optional-key :datasetVersion) s/Num
    :file URI
    (s/optional-key :format) (s/enum "json" "zip")
    (s/optional-key :processingOptions) [{:collection s/Str
@@ -55,22 +54,19 @@
 (def ExtractRequest
   "A schema for a JSON extract request"
   {:dataset s/Str
-    (s/optional-key :datasetVersion) s/Num
    :extractType s/Str
    (s/optional-key :callback) URI})
 
 (def TemplateRequest
   "A schema for a JSON template request"
   {:dataset s/Str
-   (s/optional-key :datasetVersion) s/Num
    :extractType s/Str
    :templateName s/Str
    :template s/Str})
 
 (def FlushRequest
   "A schema for a JSON flush request"
-  {:dataset s/Str
-   (s/optional-key :datasetVersion) s/Num})
+  {:dataset s/Str})
 
 (defn- callbacker [uri run-stats]
   (http/post uri {:body (json/generate-string run-stats) :headers {"Content-Type" "application/json"}}))
@@ -103,7 +99,7 @@
 (defn- process* [stats callback-chan request]
   (log/info "Processsing: " request)
   (swap! stats assoc-in [:processing] request)
-  (let [dataset (config/versionize-datasetname (:dataset request) (:datasetVersion request))
+  (let [dataset (:dataset request)
         persistence (if (:no-state request) (persistence/make-no-state) (config/persistence))
         projectors (cond-> [(config/projectors persistence
                                                :projection (:projection request)
@@ -150,7 +146,6 @@
   (log/info "Processing extract: " request)
   (try
     (let [response (extracts/fill-extract (:dataset request)
-                                          (:datasetVersion request)
                                           (:extractType request))
           _ (log/info "response: " response)
           extract-stats (merge request response)]
@@ -166,7 +161,7 @@
         invalid (s/check TemplateRequest request)]
     (if invalid
       (r/status (r/response invalid) 400)
-      (r/response (if (template/add-or-update-template {:dataset-name (:dataset request)
+      (r/response (if (template/add-or-update-template {:dataset (:dataset request)
                                                         :extract-type (:extractType request)
                                                         :name (:templateName request)
                                                         :template (:template request)})
@@ -178,7 +173,7 @@
         invalid (s/check FlushRequest request)]
     (if invalid
       (r/status (r/response invalid) 400)
-      (r/response (extracts/flush-changelog (config/versionize-datasetname (:dataset request) (:datasetVersion request)))))))
+      (r/response (extracts/flush-changelog (:dataset request))))))
 
 
 (defn api-routes [process-chan extract-chan callback-chan stats]

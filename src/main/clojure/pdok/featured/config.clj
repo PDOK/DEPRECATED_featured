@@ -92,8 +92,3 @@
                                :no-visualization no-visualization
                                :import-nil-geometry? (env :import-nil-geometry)})]))
 
-(defn versionize-datasetname [dataset-name version]
-  "Add _v<version> to dataset-name in case a version is provided"
-  (if (nil? version)
-    dataset-name
-    (str dataset-name "_v" version)))

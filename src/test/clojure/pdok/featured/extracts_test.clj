@@ -24,19 +24,19 @@
 (def test-gml2extract-end-partial (slurp (io/resource "templates/test/gml2extract/partials/end.mustache")))
 
 (deftest test-two-rendered-features
-  (let [_ (template/add-or-update-template {:dataset-name "test"
+  (let [_ (template/add-or-update-template {:dataset "test"
                                             :extract-type "gml2extract"
                                             :name "dummy"
                                             :template test-gml2extract-dummy-template})
-        _ (template/add-or-update-template {:dataset-name "test"
+        _ (template/add-or-update-template {:dataset "test"
                                             :extract-type "gml2extract"
                                             :name "start"
                                             :template test-gml2extract-start-partial})
-        _ (template/add-or-update-template {:dataset-name "test"
+        _ (template/add-or-update-template {:dataset "test"
                                             :extract-type "gml2extract"
                                             :name "end"
                                             :template test-gml2extract-end-partial})
-        [error features] (features-for-extract "test" "dummy" "gml2extract" (two-features))
+        [error features] (features-for-extract "test" "gml2extract" "dummy"(two-features))
         rendered-feature (nth (first features) 3)]
     (is (= 2 (count features)))
     (is (= test-expected-rendered-feature rendered-feature))))
@@ -55,11 +55,11 @@
 (def test-indexed-section (slurp (io/resource "templates/test/elemat/indexedsection.mustache")))
 (def elem-at-expectedoutput "<imgeo-s:Pand><elem1>1111111111111111<hoek1>A</hoek1><hoek2>B</hoek2></elem1><elem2>9999999999999999<hoek3>C</hoek3></elem2></imgeo-s:Pand>")
 (deftest test-elem-at
-  (let [_ (template/add-or-update-template {:dataset-name "bgtmutatie"
+  (let [_ (template/add-or-update-template {:dataset "bgtmutatie"
                                             :extract-type "testing"
                                             :name "indexedsection"
                                             :template test-indexed-section})
-        [error features] (features-for-extract "bgtmutatie" "indexedsection" "testing" elem-at-inputdata)]
+        [error features] (features-for-extract "bgtmutatie" "testing" "indexedsection" elem-at-inputdata)]
   (is (= elem-at-expectedoutput (clojure.string/replace (nth (first features) 3) " " "")))))
 
 ;(write-xml-to-database "bgt" "bord" "D:\\data\\pdok\\bgt\\mutatie-leveringen\\bord\\973140-Bord-1.json" "D:\\projects\\featured\\src\\main\\resources\\pdok\\featured\\templates")
