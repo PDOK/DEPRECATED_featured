@@ -36,7 +36,7 @@
                                             :extract-type "gml2extract"
                                             :name "end"
                                             :template test-gml2extract-end-partial})
-        [error features] (features-for-extract "test" "gml2extract" "dummy"(two-features))
+        [error features] (features-for-extract "test" "dummy" "gml2extract" (two-features))
         rendered-feature (nth (first features) 3)]
     (is (= 2 (count features)))
     (is (= test-expected-rendered-feature rendered-feature))))
@@ -59,7 +59,7 @@
                                             :extract-type "testing"
                                             :name "indexedsection"
                                             :template test-indexed-section})
-        [error features] (features-for-extract "bgtmutatie" "testing" "indexedsection" elem-at-inputdata)]
+        [error features] (features-for-extract "bgtmutatie" "indexedsection" "testing" elem-at-inputdata)]
   (is (= elem-at-expectedoutput (clojure.string/replace (nth (first features) 3) " " "")))))
 
 ;(write-xml-to-database "bgt" "bord" "D:\\data\\pdok\\bgt\\mutatie-leveringen\\bord\\973140-Bord-1.json" "D:\\projects\\featured\\src\\main\\resources\\pdok\\featured\\templates")

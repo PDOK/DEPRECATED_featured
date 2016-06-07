@@ -17,7 +17,7 @@
 (def ^{:private true } extractset-table "extractmanagement.extractset")
 (def ^{:private true } extractset-area-table "extractmanagement.extractset_area")
 
-(defn features-for-extract [dataset extract-type feature-type features]
+(defn features-for-extract [dataset feature-type extract-type features]
   "Returns the rendered representation of the collection of features for a given feature-type inclusive tiles-set"
   (if (empty? features)
     [nil nil]
@@ -35,7 +35,7 @@
 
 (defn get-or-add-extractset [db dataset extract-type]
   "return id"
-  (let [query (str "select id, unique_label from " extractset-table " where unique_label = ? and extract_type = ?")]
+  (let [query (str "select id, name from " extractset-table " where name = ? and extract_type = ?")]
     (j/with-db-connection [c db]
       (let [result (j/query c [query dataset extract-type])]
         (if (empty? result)
@@ -47,7 +47,7 @@
             (get-or-add-extractset db dataset extract-type))
 
           {:extractset-id (:id (first result))
-           :unique-label (:unique_label (first result))})))))
+           :extractset-name (:name (first result))})))))
 
 (defn add-extractset-area [db extractset-id tiles]
   (let [query (str "select * from " extractset-area-table " where extractset_id = ? and area_id = ?")]
@@ -69,17 +69,17 @@
 (defn add-extract-records [db dataset extract-type rendered-features]
   "Inserts the xml-features and tile-set in an extract schema based on dataset, extract-type, version and feature-type,
    if schema or table doesn't exists it will be created."
-  (let [{:keys [extractset-id unique-label]} (get-or-add-extractset db dataset extract-type) ]
+  (let [{:keys [extractset-id extractset-name]} (get-or-add-extractset db dataset extract-type) ]
     (do
-      (jdbc-insert-extract db (str unique-label "_" extract-type) (map tranform-feature-for-db rendered-features))
+      (jdbc-insert-extract db (str extractset-name "_" extract-type) (map tranform-feature-for-db rendered-features))
       (add-metadata-extract-records db extractset-id rendered-features))
     (count rendered-features)))
 
 
-(defn transform-and-add-extract [extracts-db dataset extract-type feature-type features]
+(defn transform-and-add-extract [extracts-db dataset feature-type extract-type features]
     (let [[error features-for-extract] (features-for-extract dataset
-                                                             extract-type
                                                              feature-type
+                                                             extract-type
                                                              features)]
     (if (nil? error)
       (if (nil? features-for-extract)
@@ -103,7 +103,7 @@
         (try (j/execute! db (cons query with-valid-from) :multi? true :transaction? (:transaction? db))
              (catch SQLException e (j/print-sql-exception-chain e)))))))
 
-(defn- delete-extracts-with-version [db dataset extract-type feature-type versions]
+(defn- delete-extracts-with-version [db dataset feature-type extract-type versions]
   (let [table (str dataset "_" extract-type "_" feature-type)]
     (jdbc-delete-versions db table versions)))
 
@@ -136,7 +136,7 @@
 (def ^:dynamic *process-delete-extract* (partial delete-extracts-with-version config/extracts-db))
 (def ^:dynamic *initialized-collection?* m/registered?)
 
-(defn- create-extract* [dataset extract-type collection fn-timeline-query]
+(defn- create-extract* [dataset collection extract-type fn-timeline-query]
   (let [batch-size 10000
         tl (config/timeline-for-dataset dataset)
         rc (fn-timeline-query tl collection)
@@ -145,9 +145,9 @@
     (loop [i 1
            records (a/<!! parts)]
       (when records
-        (*process-insert-extract* dataset extract-type collection
+        (*process-insert-extract* dataset collection extract-type
                                   (filter (complement nil?) (map changelog->change-inserts records)))
-        (*process-delete-extract* dataset extract-type collection
+        (*process-delete-extract* dataset collection extract-type
                                   (filter (complement nil?) (map changelog->deletes records)))
         (if (= 0 (mod i 10))
           (log/info "Creating extracts" (str dataset "-" extract-type "-" collection) "processed:" (* i batch-size)))
@@ -159,7 +159,7 @@
       {:status "error" :msg "missing template(s)" :collections collections}
       (do
         (doseq [collection collections]
-          (create-extract*  dataset extract-type collection fn-timeline-query))
+          (create-extract* dataset collection extract-type fn-timeline-query))
         {:status "ok" :collections collections})))
 
 (defn fill-extract [dataset extract-type & more]

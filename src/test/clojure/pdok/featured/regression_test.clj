@@ -54,7 +54,7 @@
                              (= valid-from (nth %1 1))) extracts))
       (into [] (remove #(= version (nth % 0)) extracts)))))
 
-(defn- deleted-versions [extracts dataset extract-type collection records]
+(defn- deleted-versions [extracts dataset collection extract-type records]
     (doseq [record records]
       (swap! extracts remove-extract-record record)))
 
