@@ -351,21 +351,14 @@
     (pers/append-to-stream persistence version action collection id validity geometry attributes)
     feature))
 
-(defn- add-updated-tiles [statistics feature]
-  (if-let [tiles (tiles/nl (:geometry feature))]
-    (swap! statistics update :updatedTiles #(clojure.set/union % tiles))
-    )
-  )
-
 (defn- update-statistics [{:keys [statistics]} feature]
   (when statistics
     (swap! statistics update :n-processed inc)
     (when (:src feature) (swap! statistics update :n-src inc))
-    (when (:geometry feature) (add-updated-tiles statistics feature))
+    (when (:geometry feature) (swap! statistics update :updated-tiles #(clojure.set/union % (tiles/nl (:geometry feature)))))
     (when (:invalid? feature)
       (swap! statistics update :n-errored inc)
-      (swap! statistics update :errored #(conj % (:id feature))))
-    )
+      (swap! statistics update :errored #(conj % (:id feature)))))
   )
 
 (defn consume* [processor features]
@@ -444,5 +437,5 @@
              :projectors initialized-projectors
              :batch-size batch-size
              :invalids (volatile! #{})
-             :statistics (atom {:n-src 0 :n-processed 0 :n-errored 0 :errored '() :replayed 0 :updatedTiles #{}})}
+             :statistics (atom {:n-src 0 :n-processed 0 :n-errored 0 :errored '() :replayed 0 :updated-tiles #{}})}
             options))))
