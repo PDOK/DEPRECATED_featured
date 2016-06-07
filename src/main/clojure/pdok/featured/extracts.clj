@@ -35,16 +35,15 @@
 
 (defn get-or-add-extractset [db dataset extract-type]
   "return id"
-  (let [dataset-unversioned (first (clojure.string/split dataset #"_v"))
-        query (str "select id, unique_label from " extractset-table " where dataset = ? and extract_type = ?")]
+  (let [query (str "select id, unique_label from " extractset-table " where unique_label = ? and extract_type = ?")]
     (j/with-db-connection [c db]
-      (let [result (j/query c [query dataset-unversioned extract-type])]
+      (let [result (j/query c [query dataset extract-type])]
         (if (empty? result)
           (do
-            (j/query c [(str "SELECT " extract-schema ".add_extractset(?,?,?)")
-                        dataset-unversioned
+            (j/query c [(str "SELECT " extract-schema ".add_extractset(?,?)")
+                        dataset
                         extract-type
-                        dataset])
+                        ])
             (get-or-add-extractset db dataset extract-type))
 
           {:extractset-id (:id (first result))
@@ -72,7 +71,7 @@
    if schema or table doesn't exists it will be created."
   (let [{:keys [extractset-id unique-label]} (get-or-add-extractset db dataset extract-type) ]
     (do
-      (jdbc-insert-extract db unique-label (map tranform-feature-for-db rendered-features))
+      (jdbc-insert-extract db (str unique-label "_" extract-type) (map tranform-feature-for-db rendered-features))
       (add-metadata-extract-records db extractset-id rendered-features))
     (count rendered-features)))
 
