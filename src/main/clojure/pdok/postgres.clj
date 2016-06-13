@@ -192,15 +192,25 @@
   (j/db-do-commands db
                     (apply j/create-table-ddl (str (-> schema name quoted) "." (-> table name quoted)) fields)))
 
-(defn create-index [db schema table & columns]
+
+(defn- create-index* [db schema table index-name index-type & columns]
   (let [column-names (map name columns)
-        index-name (str (name table) (clojure.string/join "" column-names) "_idx")
         quoted-columns (clojure.string/join "," (map quoted column-names))]
     (try
       (j/db-do-commands db (str "CREATE INDEX " (quoted index-name)
                                 " ON "  (-> schema name quoted) "." (-> table name quoted)
-                                " USING btree (" quoted-columns ")" ))
-      (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
+                                " USING " index-type " (" quoted-columns ")" ))
+      (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
+  )
+
+(defn create-index [db schema table & columns]
+  (let [index-name (str (name table) (clojure.string/join "" (map name columns)) "_idx")]
+    (apply create-index* db schema table index-name "btree" columns)))
+
+(defn create-geo-index [db schema table & columns]
+  (let [index-name (str (name table) "_geo_idx")]
+    (apply create-index* db schema table index-name "gist" columns)))
+
 
 (defn- db-constraint [schema table geo-column constraint-name constraint constraint-pred]
   (let [schema-name-quoted (-> schema name quoted)

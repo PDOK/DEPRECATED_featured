@@ -48,6 +48,7 @@
                 [:_geo_group "varchar (20)"])
 
       (pg/create-index db dataset table "_id")
+      (pg/create-geo-index db dataset table :_geometry_point :_geometry_line :_geometry_polygon)
       (pg/add-geo-constraints db dataset table :_geometry_point ndims srid)
       (pg/add-geo-constraints db dataset table :_geometry_line ndims srid)
       (pg/add-geo-constraints db dataset table :_geometry_polygon ndims srid)
