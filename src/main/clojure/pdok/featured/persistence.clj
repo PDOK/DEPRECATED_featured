@@ -104,6 +104,7 @@ If n nil => no limit, if collections nil => all collections")
       (pg/create-table db dc/*persistence-schema* dc/*persistence-feature-stream*
                        [:id "bigserial" :primary :key]
                        [:version "uuid"]
+                       [:previous_version "uuid"]
                        [:action "varchar(12)"]
                        [:collection "varchar(255)"]
                        [:feature_id "varchar(50)"]
@@ -145,7 +146,7 @@ If n nil => no limit, if collections nil => all collections")
                  :id (:feature_id record)
                  :action (keyword (:action record))
                  :version (:version record)
-                 :current-version (:prev_version record)
+                 :current-version (:previous_version record)
                  :validity (:validity record)
                  :geometry (pg/from-json (:geometry record))
                  :attributes (pg/from-json (:attributes record)))
@@ -154,16 +155,31 @@ If n nil => no limit, if collections nil => all collections")
             (:parent_id record) (assoc! :parent-id (:parent_id record)))]
     (>!! c (persistent! f))))
 
-(defn jdbc-get-last-n [{:keys [db dataset]} n collections]
-  (let [query (str "SELECT lastn.*,
-  lag(version) OVER (PARTITION BY collection, feature_id ORDER BY id ASC) prev_version
-  FROM (SELECT fs.id,
+(defn jdbc-count-records [{:keys [db dataset]} collections]
+  (let [query (str "SELECT count(*) as cnt FROM "
+                   (qualified-feature-stream dataset) " fs JOIN"
+                   (qualified-features dataset) " f ON fs.collection = f.collection AND
+                    fs.feature_id = f.feature_id"
+                   (when (seq collections) (str " AND fs.collection in ("
+                                                (clojure.string/join "," (repeat (count collections) "?"))
+                                                ")")))
+        result (j/with-db-connection [c db]
+                                  (j/query c (if-not collections [query] (concat [query] collections))))]
+    (:cnt (first result))))
+
+(defn jdbc-get-last-n [{:keys [db dataset] :as pers} n collections]
+  (let [n-records (when n (log/debug "Counting rows for" dataset collections)
+                          (jdbc-count-records pers collections))
+        offset (when n (if (> n n-records) 0 (- n-records n)))
+        _ (when offset (log/debug "using offset" offset))
+        query (str "SELECT fs.id,
        fs.collection,
        fs.feature_id,
        fs.action,
        f.parent_collection,
        f.parent_id,
        fs.version,
+       fs.previous_version,
        fs.validity,
        fs.attributes,
        fs.geometry
@@ -173,9 +189,8 @@ If n nil => no limit, if collections nil => all collections")
   (when (seq collections) (str " AND fs.collection in ("
                                (clojure.string/join "," (repeat (count collections) "?"))
                                ")"))
-"  ORDER BY fs.id DESC"
-  (when n (str " LIMIT " n))
-  ") AS lastn ORDER BY id ASC")
+  " ORDER BY id ASC"
+  (when n (str " OFFSET " offset)))
         result-chan (chan)]
     (a/thread
       (j/with-db-connection [c db]
@@ -231,7 +246,7 @@ If n nil => no limit, if collections nil => all collections")
      (try (j/with-db-connection [c db]
             (apply
              (partial j/insert! c (qualified-feature-stream dataset) :transaction? (:transaction? db)
-                      [:version :action :collection :feature_id :validity :geometry :attributes])
+                      [:version :previous_version :action :collection :feature_id :validity :geometry :attributes])
              entries))
           (catch java.sql.SQLException e
             (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))))
@@ -348,11 +363,12 @@ If n nil => no limit, if collections nil => all collections")
       (double-cache-batched collection id parent-collection parent-id parent-field)))
   (append-to-stream [this version action collection id validity geometry attributes]
     ;(println "APPEND: " id)
-    (let [key-fn   (fn [_ _ collection id _ _ _] [collection id])
-          value-fn (fn [_ version action _ _ validity _ _] [validity action version])
+    (let [key-fn   (fn [_ _ _ collection id _ _ _] [collection id])
+          value-fn (fn [_ version _ action _ _ validity _ _] [validity action version])
+          previous-version (current-version this collection id)
           batched-insert (batched stream-batch stream-batch-size :batch-fn (partial jdbc-insert this))
           cache-batched-insert (with-cache stream-cache batched-insert key-fn value-fn)]
-      (cache-batched-insert version action collection id validity geometry attributes)))
+      (cache-batched-insert version previous-version action collection id validity geometry attributes)))
   (current-validity [this collection id]
     (get (current-state this collection id) 0))
   (last-action [this collection id]
