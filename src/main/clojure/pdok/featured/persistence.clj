@@ -38,6 +38,7 @@
   (get-last-n [persistence n collections]
     "Returns channel with n last stream entries for all collections in collections
 If n nil => no limit, if collections nil => all collections")
+  (enrich-with-parent-info [persistence features] "returns features enriched with parent info (collection and id)")
   (close [persistence]))
 
 (defn collection-tree [persistence root]
@@ -149,10 +150,7 @@ If n nil => no limit, if collections nil => all collections")
                  :current-version (:previous_version record)
                  :validity (:validity record)
                  :geometry (pg/from-json (:geometry record))
-                 :attributes (pg/from-json (:attributes record)))
-        f (cond-> f
-            (:parent_collection record) (assoc! :parent-collection (:parent_collection record))
-            (:parent_id record) (assoc! :parent-id (:parent_id record)))]
+                 :attributes (pg/from-json (:attributes record)))]
     (>!! c (persistent! f))))
 
 (defn jdbc-count-records [{:keys [db dataset]} collections]
@@ -176,17 +174,13 @@ If n nil => no limit, if collections nil => all collections")
        fs.collection,
        fs.feature_id,
        fs.action,
-       f.parent_collection,
-       f.parent_id,
        fs.version,
        fs.previous_version,
        fs.validity,
        fs.attributes,
        fs.geometry
-  FROM " (qualified-feature-stream dataset) " fs
-  JOIN " (qualified-features dataset) " f ON fs.collection = f.collection AND
-			     fs.feature_id = f.feature_id"
-  (when (seq collections) (str " AND fs.collection in ("
+  FROM " (qualified-feature-stream dataset) " fs "
+  (when (seq collections) (str " WHERE fs.collection in ("
                                (clojure.string/join "," (repeat (count collections) "?"))
                                ")"))
   " ORDER BY id ASC"
@@ -201,6 +195,27 @@ If n nil => no limit, if collections nil => all collections")
                    :row-fn (partial record->feature result-chan))
           (close! result-chan))))
     result-chan))
+
+(defn enrich-query [dataset n-features]
+  (str "SELECT feature_id, parent_collection, parent_id FROM "
+       (qualified-features dataset) " WHERE collection = ? AND feature_id in ("
+       (clojure.string/join "," (repeat n-features "?")) ")"))
+
+(defn jdbc-enrich-with-parent-info [{:keys [db dataset]} features]
+  (let [enrich-data (volatile! {})
+        per-collection (group-by :collection features)]
+    (doseq [[collection grouped-features] per-collection]
+      (j/with-db-connection [c db]
+        (let [result (j/query c (concat [(enrich-query dataset (count grouped-features)) collection] (map :id grouped-features)))]
+          (vswap! enrich-data merge (reduce (fn [acc val] (assoc acc [collection (:feature_id val)] val)) {} result)))))
+    (map (fn [feature]
+           (let [{:keys [parent_collection parent_id]} (get @enrich-data [(:collection feature) (:id feature)])]
+             (if (and parent_collection parent_id)
+               (-> feature
+                   (assoc :parent-collection parent_collection)
+                   (assoc :parent-id parent_id))
+               feature)))
+         features)))
 
 (defn- jdbc-create-stream
   ([{:keys [db dataset]} entries]
@@ -396,6 +411,8 @@ If n nil => no limit, if collections nil => all collections")
         q-result)))
   (get-last-n [this n collections]
     (jdbc-get-last-n this n collections))
+  (enrich-with-parent-info [this features]
+    (jdbc-enrich-with-parent-info this features))
   (close [this]
     (flush this)))
 

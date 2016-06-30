@@ -395,17 +395,18 @@
         parts (a/pipe features (a/chan 1 (partition-all batch-size)))]
     (loop [part (a/<!! parts)]
       (when (seq part)
-        (pers/flush persistence)
-        (pers/prepare persistence part)
-        (doseq [f part]
-          (condp = (:action f)
-            :new (project! processor proj/new-feature f)
-            :change (project! processor proj/change-feature f)
-            :close (project! processor proj/close-feature f)
-            :delete (project! processor proj/delete-feature f))
-          (swap! statistics update :replayed inc))
-        (doto-projectors! processor proj/flush)
-        (recur (a/<!! parts))))))
+        (let [enriched-part (pers/enrich-with-parent-info persistence part)]
+          (pers/flush persistence)
+          (pers/prepare persistence enriched-part)
+          (doseq [f enriched-part]
+            (condp = (:action f)
+              :new (project! processor proj/new-feature f)
+              :change (project! processor proj/change-feature f)
+              :close (project! processor proj/close-feature f)
+              :delete (project! processor proj/delete-feature f))
+            (swap! statistics update :replayed inc))
+          (doto-projectors! processor proj/flush)
+          (recur (a/<!! parts)))))))
 
 (defn shutdown [{:keys [persistence projectors statistics] :as processor}]
   "Shutdown feature store. Make sure all data is processed and persisted"
