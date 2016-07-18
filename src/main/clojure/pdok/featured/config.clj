@@ -62,8 +62,8 @@
   ([]
    (timeline (persistence)))
   ([persistence]
-   (timeline/create-chunked {:chunk-size (or (env :processor-batch-size) 10000)
-                             :db-config processor-db
+   (timeline/create-chunked {:chunk-size  (read-string (or (env :processor-batch-size) "10000"))
+                             :db-config   processor-db
                              :persistence persistence})))
 
 (defn timeline-for-dataset [dataset]
@@ -91,4 +91,9 @@
                                :srid srid
                                :no-visualization no-visualization
                                :import-nil-geometry? (env :import-nil-geometry)})]))
+
+(defn create-workers [factory-f]
+  (let [n-workers (read-string (or (env :n-workers) "2"))]
+    (dorun (for [i (range 0 n-workers)]
+             (factory-f i)))))
 

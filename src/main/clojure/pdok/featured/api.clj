@@ -23,12 +23,15 @@
             [ring.util.response :as r]
             [schema.core :as s])
   (:import [com.fasterxml.jackson.core JsonGenerator]
-           [java.util.zip ZipFile ZipEntry]))
+           (clojure.lang PersistentQueue)
+           (org.joda.time DateTime)
+           (schema.utils ValidationError)
+           (java.io File)))
 
 (extend-protocol cheshire.generate/JSONable
-  org.joda.time.DateTime
+  DateTime
   (to-json [t ^JsonGenerator jg] (.writeString jg (str t)))
-  schema.utils.ValidationError
+  ValidationError
   (to-json [t ^JsonGenerator jg] (.writeString jg (pr-str t))))
 
 (defn uri [str]
@@ -81,7 +84,7 @@
 (defn download-file [uri zipped?]
   "returns [file err]"
   (try
-    (let [tmp (java.io.File/createTempFile "featured" (if zipped? ".zip" ".json"))
+    (let [tmp (File/createTempFile "featured" (if zipped? ".zip" ".json"))
           in (io/input-stream uri)]
       (log/info "Downloading" uri)
       (io/copy in tmp)
@@ -96,9 +99,10 @@
     (catch Exception e
       [nil (:cause e)])))
 
-(defn- process* [stats callback-chan request]
+(defn- process* [worker-id stats callback-chan request]
   (log/info "Processsing: " request)
-  (swap! stats assoc-in [:processing] request)
+  (swap! stats assoc-in [:processing worker-id] request)
+  (swap! stats update-in [:queued] pop)
   (let [dataset (:dataset request)
         persistence (if (:no-state request) (persistence/make-no-state) (config/persistence))
         projectors (cond-> [(config/projectors persistence
@@ -110,7 +114,7 @@
         [file err] (download-file (:file request) zipped?)]
     (if-not file
       (do
-        (swap! stats assoc-in [:processing] nil)
+        (swap! stats assoc-in [:processing worker-id] nil)
         (stats-on-callback callback-chan request
                            (assoc request :error
                                   (if err err "Somethin went wrong downloading"))))
@@ -123,7 +127,7 @@
                 processor (shutdown processor)
                 run-stats (assoc (:statistics processor) :request request)]
             (swap! stats update-in [:processed] #(conj % run-stats))
-            (swap! stats assoc-in [:processing] nil)
+            (swap! stats assoc-in [:processing worker-id] nil)
             (stats-on-callback callback-chan request run-stats)))
         (catch Exception e
           (let [ _ (log/error e)
@@ -131,19 +135,22 @@
                 error-stats (assoc request :error (str e))]
             (log/warn e error-stats)
             (swap! stats update-in [:errored] #(conj % error-stats))
-            (swap! stats assoc-in [:processing] nil)
+            (swap! stats assoc-in [:processing worker-id] nil)
             (stats-on-callback callback-chan request error-stats)))
         (finally (io/delete-file file))))))
 
-(defn- process-request [schema request-chan http-req]
+(defn- process-request [stats schema queue-id request-chan http-req]
   (let [request (:body http-req)
         invalid (s/check schema request)]
     (if invalid
       (r/status (r/response invalid) 400)
-      (do (go (>! request-chan request)) (r/response {:result :ok})))))
+      (if (a/offer! request-chan request)
+        (do (swap! stats update-in [queue-id] #(conj % request)) (r/response {:result :ok}))
+        (r/status (r/response {:error "queue full"}) 429)))))
 
-(defn- extract* [callback-chan request]
+(defn- extract* [stats callback-chan request]
   (log/info "Processing extract: " request)
+  (swap! stats update-in [:extract-queue] pop)
   (try
     (let [response (extracts/fill-extract (:dataset request)
                                           (:extractType request))
@@ -176,15 +183,15 @@
       (r/response (extracts/flush-changelog (:dataset request))))))
 
 
-(defn api-routes [process-chan extract-chan callback-chan stats]
+(defn api-routes [process-chan extract-chan stats]
   (defroutes api-routes
     (context "/api" []
              (GET "/info" [] (r/response {:version (slurp (clojure.java.io/resource "version"))}))
              (GET "/ping" [] (r/response {:pong (tl/local-now)}))
              (POST "/ping" [] (fn [r] (log/info "!ping pong!" (:body r)) (r/response {:pong (tl/local-now)})))
              (GET "/stats" [] (r/response @stats))
-             (POST "/process" [] (partial process-request ProcessRequest process-chan))
-             (POST "/extract" [] (partial process-request ExtractRequest extract-chan))
+             (POST "/process" [] (partial process-request stats ProcessRequest :queued process-chan))
+             (POST "/extract" [] (partial process-request stats ExtractRequest :extract-queue extract-chan))
              (POST "/extract/flush-changelog" [] (fn [r] (r/response (flush-extract-changelog r))))
              (POST "/template" [] (fn [r] (r/response (template-request r)))))
     (route/not-found "NOT FOUND")))
@@ -198,17 +205,26 @@
         (log/error e)
         {:status 400 :body (.getMessage e)}))))
 
+(defn create-workers [stats callback-chan process-chan]
+  (let [factory-fn (fn [worker-id]
+                     (swap! stats assoc-in [:processing worker-id] nil)
+                     (log/info "Creating worker " worker-id)
+                     (go (while true (process* worker-id stats callback-chan (<! process-chan)))))]
+    (config/create-workers factory-fn)))
+
 (defn rest-handler [& more]
-  (let [pc (chan)
-        ec (chan)
+  (let [pc (chan 1000)
+        ec (chan 100)
         cc (chan 10)
-        stats (atom {:processing nil
-                     :processed []
-                     :errored []})]
-    (go (while true (process* stats cc (<! pc))))
-    (go (while true (extract* cc (<! ec))))
+        stats (atom {:processing {}
+                     :processed  []
+                     :queued     (PersistentQueue/EMPTY)
+                     :extract-queue (PersistentQueue/EMPTY)
+                     :errored    []})]
+    (create-workers stats cc pc)
+    (go (while true (extract* stats cc (<! ec))))
     (go (while true (apply callbacker (<! cc))))
-    (-> (api-routes pc ec cc stats)
+    (-> (api-routes pc ec stats)
         (wrap-json-body {:keywords? true :bigdecimals? true})
         (wrap-json-response)
         (wrap-defaults api-defaults)
