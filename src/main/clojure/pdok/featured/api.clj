@@ -126,7 +126,6 @@
                 _ (dorun (consume processor features))
                 processor (shutdown processor)
                 run-stats (assoc (:statistics processor) :request request)]
-            (swap! stats update-in [:processed] #(conj % run-stats))
             (swap! stats assoc-in [:processing worker-id] nil)
             (stats-on-callback callback-chan request run-stats)))
         (catch Exception e
@@ -134,7 +133,6 @@
                 processor (shutdown processor)
                 error-stats (assoc request :error (str e))]
             (log/warn e error-stats)
-            (swap! stats update-in [:errored] #(conj % error-stats))
             (swap! stats assoc-in [:processing worker-id] nil)
             (stats-on-callback callback-chan request error-stats)))
         (finally (io/delete-file file))))))
@@ -217,10 +215,8 @@
         ec (chan 100)
         cc (chan 10)
         stats (atom {:processing {}
-                     :processed  []
                      :queued     (PersistentQueue/EMPTY)
-                     :extract-queue (PersistentQueue/EMPTY)
-                     :errored    []})]
+                     :extract-queue (PersistentQueue/EMPTY)})]
     (create-workers stats cc pc)
     (go (while true (extract* stats cc (<! ec))))
     (go (while true (apply callbacker (<! cc))))
