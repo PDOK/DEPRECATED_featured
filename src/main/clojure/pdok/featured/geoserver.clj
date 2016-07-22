@@ -1,6 +1,7 @@
 (ns pdok.featured.geoserver
   (:require [pdok.featured.projectors :as proj]
             [pdok.cache :refer :all]
+            [pdok.util :refer [checked]]
             [pdok.featured.feature :as f :refer [as-jts]]
             [pdok.postgres :as pg]
             [clojure.core.cache :as cache]
@@ -65,7 +66,7 @@
                                                              "_geometry_line"
                                                              "_geometry_polygon"
                                                              "_geo_group"])) columns)
-        attributes (map #(:column_name %) no-defaults)]
+        attributes (reduce (fn [acc c] (conj acc c)) #{} (map #(:column_name %) no-defaults))]
     attributes))
 
 (defn- gs-add-attribute [{:keys [db dataset]} collection attribute-name attribute-type]
@@ -241,12 +242,14 @@
             batched-add-feature
             (batched insert-batch insert-batch-size flush-fn)]
         (do (when (not (cached-collection-exists? collection))
-              (gs-create-collection this ndims srid collection)
+              (checked (gs-create-collection this ndims srid collection)
+                       (gs-collection-exists? this collection))
               (cached-collection-exists? :reload collection))
             (let [current-attributes (cached-collection-attributes collection)
-                  new-attributes (filter #(not (some #{(first %)} current-attributes)) attributes)]
-              (doseq [a new-attributes]
-                (gs-add-attribute this collection (first a) (-> a second type)))
+                  new-attributes (filter #(not (get current-attributes (first %))) attributes)]
+              (doseq [[attr-key attr-value] new-attributes]
+                (checked (gs-add-attribute this collection attr-key (type attr-value))
+                         (get (gs-collection-attributes this collection) attr-key)))
               (when (not-empty new-attributes) (cached-collection-attributes :reload collection)))
             (batched-add-feature feature)))))
   (proj/change-feature [this feature]
@@ -255,9 +258,10 @@
             cached-collection-attributes (cached cache gs-collection-attributes this)
             batched-update-feature (batched update-batch update-batch-size flush-fn)]
         (let [current-attributes (cached-collection-attributes collection)
-              new-attributes (filter #(not (some #{(first %)} current-attributes)) attributes)]
-          (doseq [a new-attributes]
-            (gs-add-attribute this collection (first a) (-> a second type)))
+              new-attributes (filter #(not (get current-attributes (first %))) attributes)]
+          (doseq [[attr-key attr-value] new-attributes]
+            (checked (gs-add-attribute this collection attr-key (type attr-value))
+                     (get (gs-collection-attributes this collection) attr-key)))
           (when (not-empty new-attributes) (cached-collection-attributes :reload collection)))
         (batched-update-feature feature))))
   (proj/close-feature [this feature]
