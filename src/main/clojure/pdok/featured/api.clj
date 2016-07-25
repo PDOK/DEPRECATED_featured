@@ -72,7 +72,10 @@
   {:dataset s/Str})
 
 (defn- callbacker [uri run-stats]
-  (http/post uri {:body (json/generate-string run-stats) :headers {"Content-Type" "application/json"}}))
+  (try
+    (http/post uri {:body (json/generate-string run-stats)
+                    :headers {"Content-Type" "application/json"}})
+    (catch Exception e (log/error "Callback error" e))))
 
 (defn- stats-on-callback [callback-chan request stats]
   (when (:callback request)
