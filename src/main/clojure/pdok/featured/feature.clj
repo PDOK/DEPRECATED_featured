@@ -12,7 +12,7 @@
            [pdok.featured.xslt TransformXSLT]
            [pdok.featured.converters Transformer]
            [com.vividsolutions.jts.geom Geometry]
-           [com.vividsolutions.jts.io WKTWriter]))
+           [com.vividsolutions.jts.io WKTWriter WKTReader]))
 
 (def lower-case
   (fnil str/lower-case ""))
@@ -70,6 +70,7 @@
       nil)))
 
 (def wkt-writer (WKTWriter.))
+(def wkt-reader (WKTReader.))
 
 (defn jts-as-wkt [jts]
   (if-not (nil? jts)
@@ -79,6 +80,8 @@
 (defmethod valid-geometry? :default [_] nil)
 (defmethod valid-geometry? "gml" [obj]
   (if (get obj "gml") true false))
+(defmethod valid-geometry? "wkt" [obj]
+  (if (get obj "wkt") true false))
 
 (defmethod valid-geometry? "jts" [obj]
   true)
@@ -92,6 +95,7 @@
 (defmethod as-jts :default [_] nil)
 
 (def gml->jts-cache (atom (cache/lu-cache-factory {} :threshold 30000)))
+
 (defmethod as-jts "gml" [obj]
  (when-let [gml (get obj "gml")]
    (if (cache/has? @gml->jts-cache gml)
@@ -102,6 +106,13 @@
 
 (defmethod as-jts "jts" [obj]
   (get obj "jts"))
+
+(defmethod as-jts "wkt" [obj]
+  (let [jts (.read ^WKTReader wkt-reader ^String (get obj "wkt"))]
+    (when-let [srid (get obj "srid")]
+      ; srid should be an integer, but it might be a string
+      (doto jts (.setSRID (if (string? srid) (Integer/parseInt srid) srid))))
+    jts))
 
 (defn as-rd [^Geometry geometry]
   (when geometry
@@ -169,4 +180,9 @@
 
 (defmethod geometry-group "jts" [obj]
   (let [type (.getGeometryType ^Geometry (get obj "jts"))]
+    (geometry-group* jts-point-types jts-line-types type)))
+
+(defmethod geometry-group "wkt" [obj]
+  (let [jts (as-jts obj)
+        type (.getGeometryType ^Geometry jts)]
     (geometry-group* jts-point-types jts-line-types type)))
