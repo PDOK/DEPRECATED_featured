@@ -3,7 +3,7 @@
   (:require [pdok.cache :refer :all]
             [pdok.featured.dynamic-config :as dc]
             [pdok.postgres :as pg]
-            [pdok.util :refer [with-bench] :as util]
+            [pdok.util :refer [with-bench checked] :as util]
             [pdok.featured.projectors :as proj]
             [pdok.featured.persistence :as pers]
             [pdok.featured.tiles :as tiles]
@@ -37,35 +37,38 @@
 
 (defn- init [db dataset]
   (when-not (pg/schema-exists? db (schema dataset))
-    (pg/create-schema db (schema dataset)))
+    (checked (pg/create-schema db (schema dataset))
+             (pg/schema-exists? db (schema dataset))))
   (with-bindings {#'dc/*timeline-schema* (schema dataset)}
     (when-not (pg/table-exists? db dc/*timeline-schema* dc/*timeline-changelog*)
-      (pg/create-table db dc/*timeline-schema* dc/*timeline-changelog*
-                       [:id "serial" :primary :key]
-                       [:collection "varchar(255)"]
-                       [:feature_id "varchar(100)"]
-                       [:old_version "uuid"]
-                       [:version "uuid"]
-                       [:valid_from "timestamp without time zone"]
-                       [:action "varchar(12)"]
-                       )
-      (pg/create-index db dc/*timeline-schema* dc/*timeline-changelog* :version :action)
-      (pg/create-index db dc/*timeline-schema* dc/*timeline-changelog* :collection))))
+      (checked (do (pg/create-table db dc/*timeline-schema* dc/*timeline-changelog*
+                                    [:id "serial" :primary :key]
+                                    [:collection "varchar(255)"]
+                                    [:feature_id "varchar(100)"]
+                                    [:old_version "uuid"]
+                                    [:version "uuid"]
+                                    [:valid_from "timestamp without time zone"]
+                                    [:action "varchar(12)"]
+                                    )
+                   (pg/create-index db dc/*timeline-schema* dc/*timeline-changelog* :version :action)
+                   (pg/create-index db dc/*timeline-schema* dc/*timeline-changelog* :collection))
+               (pg/table-exists? db dc/*timeline-schema* dc/*timeline-changelog*)))))
 
 (defn- init-collection [db dataset collection]
   (let [table-name (str (name dc/*timeline-table*) "_" collection)]
     (with-bindings {#'dc/*timeline-schema* (schema dataset)}
       (when-not (pg/table-exists? db dc/*timeline-schema* table-name)
-        (pg/create-table db dc/*timeline-schema* table-name
-                         [:id "serial" :primary :key]
-                         [:feature_id "varchar(100)"]
-                         [:version "uuid"]
-                         [:valid_from "timestamp without time zone"]
-                         [:valid_to "timestamp without time zone"]
-                         [:feature "text"]
-                         [:tiles "integer[]"])
-        (pg/create-index db dc/*timeline-schema* table-name :feature_id)
-        (pg/create-index db dc/*timeline-schema* table-name :version)))))
+        (checked (do (pg/create-table db dc/*timeline-schema* table-name
+                                      [:id "serial" :primary :key]
+                                      [:feature_id "varchar(100)"]
+                                      [:version "uuid"]
+                                      [:valid_from "timestamp without time zone"]
+                                      [:valid_to "timestamp without time zone"]
+                                      [:feature "text"]
+                                      [:tiles "integer[]"])
+                     (pg/create-index db dc/*timeline-schema* table-name :feature_id)
+                     (pg/create-index db dc/*timeline-schema* table-name :version))
+                 (pg/table-exists? db dc/*timeline-schema* table-name))))))
 
 (defn- execute-query [timeline query]
   (try (j/with-db-connection [c (:db timeline)]
