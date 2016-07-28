@@ -228,7 +228,8 @@
           flush-fn (make-flush-fn inited)
           ready (assoc inited :flush-fn flush-fn)]
       (when (not (gs-dataset-exists? ready))
-        (gs-create-dataset ready))
+        (checked (gs-create-dataset ready)
+                 (gs-dataset-exists? ready)))
       ready))
   (proj/new-collection [this collection parent-collection])
   (proj/flush [this]
