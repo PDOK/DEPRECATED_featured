@@ -213,20 +213,21 @@
                      (go (while true (process* worker-id stats callback-chan (<! process-chan)))))]
     (config/create-workers factory-fn)))
 
-(defn rest-handler [& more]
-  (let [pc (chan 1000)
-        ec (chan 100)
-        cc (chan 10)
-        stats (atom {:processing {}
-                     :queued     (PersistentQueue/EMPTY)
-                     :extract-queue (PersistentQueue/EMPTY)})]
-    (create-workers stats cc pc)
-    (go (while true (extract* stats cc (<! ec))))
-    (go (while true (apply callbacker (<! cc))))
-    (-> (api-routes pc ec stats)
-        (wrap-json-body {:keywords? true :bigdecimals? true})
-        (wrap-json-response)
-        (wrap-defaults api-defaults)
-        (wrap-exception-handling))))
+(def process-chan (chan 1000))
+(def extract-chan (chan 100))
+(def callback-chan (chan 10))
+(def stats  (atom {:processing {}
+                   :queued     (PersistentQueue/EMPTY)
+                   :extract-queue (PersistentQueue/EMPTY)}))
 
-(def app (routes (rest-handler)))
+(defn init! []
+  (create-workers stats callback-chan process-chan)
+  (go (while true (extract* stats callback-chan (<! extract-chan))))
+  (go (while true (apply callbacker (<! callback-chan)))))
+
+(def app (-> (api-routes process-chan extract-chan stats)
+             (wrap-json-body {:keywords? true :bigdecimals? true})
+             (wrap-json-response)
+             (wrap-defaults api-defaults)
+             (wrap-exception-handling)
+             (routes)))
