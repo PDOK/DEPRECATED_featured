@@ -331,7 +331,8 @@
   (test-timeline->extract {:n-extracts 3
                            :n-valid-to 2}
                           (:extracts results))
-  (test-geoserver 1))
+  (test-geoserver "col-1" 1)
+  (test-geoserver "col-1$nested" 1))
 
 (defpermutatedtest new_double_nested-delete-new_double_nested-change_double_nested "new_double_nested-delete-new_double_nested-change_double_nested" results
   (is (= (+ 3 3 3 5) (:n-processed (:stats results))))
@@ -405,3 +406,17 @@
                                             :n-valid-to 0}
                                            (:extracts results))
                    (test-geoserver 1))
+
+(defpermutatedtest new-nested_close-parent "new_nested-close_parent" results
+                   (is (= 4 (:n-processed (:stats results))))
+                   (is (= 0 (:n-errored (:stats results))))
+                   (test-persistence {:events 2 :features 1})
+                   (test-persistence "col-1$nested" {:events 2 :features 1})
+                   (test-timeline {:timeline {:n 1}
+                                   :timeline-changelog {:n-new 1 :n-change 1 :n-close 2}}
+                                  (:changelog-counts results))
+                   (test-timeline->extract {:n-extracts 1
+                                            :n-valid-to 1}
+                                           (:extracts results))
+                   (test-geoserver "col-1" 0)
+                   (test-geoserver "col-1$nested" 0))

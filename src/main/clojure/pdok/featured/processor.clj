@@ -227,17 +227,19 @@
 
 (defn- meta-close-childs [features]
   "{:action :close-childs _ :collection _ :parent-collection _ :parent-id _ :validity _"
-  (letfn [(meta [f]
-            {:action :close-childs
-             :collection (:collection f)
-             :parent-collection (:parent-collection f)
-             :parent-id (:parent-id f)
-             :validity (:validity f)})]
-    (distinct (map meta features))))
+  (distinct (map (fn [f] {:action :close-childs
+                          :parent-collection (:parent-collection f)
+                          :parent-id (:parent-id f)
+                          :collection (:collection f)
+                          :validity (:validity f)}) features)))
 
 (defn- flatten [processor feature]
-  (if (= :delete (:action feature))
-    (list feature (meta-delete-childs feature))
+  (condp = (:action feature)
+    :delete (list feature (meta-delete-childs feature))
+    :close (list feature {:action :close-childs
+                          :parent-collection (:collection feature)
+                          :parent-id (:id feature)
+                          :validity (:validity feature)})
     (let [attributes (:attributes feature)
           nested (nested-features attributes)
           without-nested (apply dissoc attributes (map #(first %) nested))
@@ -285,10 +287,12 @@
 (defn- close-childs [processor meta-record]
   (let [{:keys [collection parent-collection parent-id validity]} meta-record
         persistence (:persistence processor)
-        ids (pers/childs persistence parent-collection parent-id collection)
+        col-ids (if collection
+                  (pers/childs persistence parent-collection parent-id collection)
+                  (pers/childs persistence parent-collection parent-id))
         closed (doall (mapcat
-                       (fn [[_ id]] (close-child processor parent-collection parent-id
-                                                collection id validity)) ids))]
+                       (fn [[col id]] (close-child processor parent-collection parent-id
+                                                col id validity)) col-ids))]
      closed))
 
 (defn- delete-child* [processor collection id]
