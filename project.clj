@@ -18,7 +18,7 @@
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [cheshire "5.5.0"]
                  [clj-time "0.11.0"]
-                 [com.cognitect/transit-clj "0.8.269"]
+                 [com.cognitect/transit-clj "0.8.288"]
                  [com.fasterxml.jackson.core/jackson-core "2.6.0"]
                  [com.fasterxml.uuid/java-uuid-generator "3.1.3"
                   :exclusions [[log4j]]]
@@ -48,7 +48,8 @@
                  [ring/ring-json "0.3.1"]
                  [xalan/xalan "2.7.2"]
                  [nl.pdok/gml3-jts "0.1.6"]
-                 [nl.pdok/rdnaptrans-java "1.1.0"]]
+                 [nl.pdok/rdnaptrans-java "1.1.0"]
+                 [nl.pdok/featured-shared "1.0-rc1"]]
   :plugins [[lein-ring "0.9.6" ]
             [lein-filegen "0.1.0-SNAPSHOT"]]
   :ring {:handler pdok.featured.api/app

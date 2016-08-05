@@ -9,6 +9,7 @@
             [clojure.java.io :as io]
             [clojure.tools.logging :as log])
   (:import [nl.pdok.gml3.impl GMLMultiVersionParserImpl]
+           [pdok.featured NilAttribute]
            [pdok.featured.xslt TransformXSLT]
            [pdok.featured.converters Transformer]
            [com.vividsolutions.jts.geom Geometry]
@@ -17,43 +18,8 @@
 (def lower-case
   (fnil str/lower-case ""))
 
-(def memoized-resolve (memoize resolve))
-
-(deftype NilAttribute [symbol]
-  Object
-  (toString [_] nil)
-  clojure.lang.IEditableCollection
-  (asTransient [this] this)
-  clojure.lang.ITransientAssociative
-  (conj [this _] this)
-  (persistent [v] v)
-  (assoc [this _ _] this)
-  (valAt [_ _] symbol)
-  (valAt [_ _ _] symbol)
-  j/ISQLValue
-  (sql-value [v] nil)
-  clojure.lang.IMeta
-  (meta [_] {:type (memoized-resolve symbol)})
-  clojure.lang.Seqable
-   (seq [_] nil)
-  )
-
-(defn nilled [class]
-  (->NilAttribute class))
-
-(def nil-attribute-writer
-  (transit/write-handler
-   "x"
-   (fn [^NilAttribute v] (str (.symbol v)))
-   (fn [^NilAttribute v] (str (.symbol v)))))
-
-(def nil-attribute-reader
-  (transit/read-handler
-   (fn [v]
-     (->NilAttribute (symbol v)))))
-
-(pg/register-transit-write-handler pdok.featured.feature.NilAttribute nil-attribute-writer)
-(pg/register-transit-read-handler "x" nil-attribute-reader)
+(defn nilled [clazz]
+  (NilAttribute. clazz))
 
 (def xslt-simple-gml (io/resource "pdok/featured/xslt/imgeo2simple-gml.xsl"))
 

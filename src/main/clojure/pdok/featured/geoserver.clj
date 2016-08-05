@@ -69,10 +69,10 @@
         attributes (reduce (fn [acc c] (conj acc c)) #{} (map #(:column_name %) no-defaults))]
     attributes))
 
-(defn- gs-add-attribute [{:keys [db dataset]} collection attribute-name attribute-type]
+(defn- gs-add-attribute [{:keys [db dataset]} collection attribute-name attribute-value]
   (let [table collection]
     (try
-      (pg/add-column db dataset table attribute-name attribute-type)
+      (pg/add-column db dataset table attribute-name attribute-value)
       (catch java.sql.SQLException e
         (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e))))))
 
@@ -249,7 +249,7 @@
             (let [current-attributes (cached-collection-attributes collection)
                   new-attributes (filter #(not (get current-attributes (first %))) attributes)]
               (doseq [[attr-key attr-value] new-attributes]
-                (checked (gs-add-attribute this collection attr-key (type attr-value))
+                (checked (gs-add-attribute this collection attr-key attr-value)
                          (get (gs-collection-attributes this collection) attr-key)))
               (when (not-empty new-attributes) (cached-collection-attributes :reload collection)))
             (batched-add-feature feature)))))

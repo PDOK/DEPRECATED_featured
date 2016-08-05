@@ -20,7 +20,7 @@
     (mustache-proxy k (f obj))
     (if (and (map? obj) (or (contains? obj k) (contains? obj (name k))))
       (let [value (get obj k (get obj (name k)))]
-        (if (or (= (class value) pdok.featured.feature.NilAttribute) (= value nil))
+        (if (or (= (class value) pdok.featured.NilAttribute) (= value nil))
           nil
           (mustache-proxy k value))))))
 

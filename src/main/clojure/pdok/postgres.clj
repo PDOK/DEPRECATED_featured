@@ -2,67 +2,24 @@
   (:require [clojure.java.jdbc :as j]
             [clj-time [coerce :as tc]]
             [cognitect.transit :as transit])
-  (:import [com.vividsolutions.jts.geom Geometry]
-           [com.vividsolutions.jts.io WKTWriter]
+  (:import [com.vividsolutions.jts.io WKTWriter]
            [java.io ByteArrayOutputStream ByteArrayInputStream]
            [java.util Calendar TimeZone]
-           [org.joda.time DateTimeZone LocalDate LocalDateTime]))
+           [org.joda.time DateTimeZone LocalDate LocalDateTime]
+           (pdok.featured HandlerMaps)))
 
 (defn dbspec->url [{:keys [subprotocol subname user password]}]
   (str "jdbc:" subprotocol ":" subname "?user=" user "&password=" password))
 
 (def wkt-writer (WKTWriter.))
 
-(def joda-time-writer
-  (transit/write-handler
-   (constantly "lm")
-   (fn [v] (.getTime ^java.util.Date (tc/to-date v)))
-   (fn [v] (.toString ^java.lang.Long (.getTime ^java.util.Date (tc/to-date v))))))
-
-(def joda-time-reader
-  (transit/read-handler #(-> % (tc/from-long) (tc/to-local-date-time))))
-
-(def joda-local-date-writer
-  (transit/write-handler
-   (constantly "ld")
-   (fn [v] (.getTime ^java.util.Date (tc/to-date v)))
-   (fn [v] (.toString ^java.lang.Long (.getTime ^java.util.Date (tc/to-date v))))))
-
-(def joda-local-date-reader
-  (transit/read-handler #(tc/to-local-date (tc/from-long %))))
-
-(def int-writer
-  (transit/write-handler
-   (constantly "I")
-   identity
-   str))
-
-(def int-reader
-  (transit/read-handler #(Integer. ^java.lang.String %)))
-
-(def transit-write-handlers (atom {}))
-(def transit-read-handlers (atom {}))
-
-(defn register-transit-write-handler [type handler]
-  (swap! transit-write-handlers assoc type handler))
-
-(defn register-transit-read-handler [prefix handler]
-  (swap! transit-read-handlers assoc prefix handler))
-
-(register-transit-write-handler org.joda.time.DateTime joda-time-writer)
-(register-transit-write-handler org.joda.time.LocalDateTime joda-time-writer)
-(register-transit-read-handler "lm" joda-time-reader)
-
-(register-transit-write-handler org.joda.time.LocalDate joda-local-date-writer)
-(register-transit-read-handler "ld" joda-local-date-reader)
-
-(register-transit-write-handler java.lang.Integer int-writer)
-(register-transit-read-handler "I" int-reader)
+(def transit-readers (transit/read-handler-map HandlerMaps/readers))
+(def transit-writers (transit/write-handler-map HandlerMaps/writers))
 
 (defn to-json [obj]
   (let [out (ByteArrayOutputStream. 1024)
         writer (transit/writer out :json
-                       {:handlers @transit-write-handlers})]
+                               {:handlers transit-writers})]
     (transit/write writer obj)
     (.toString out))
   )
@@ -70,9 +27,9 @@
 (defn from-json [str]
   (if (clojure.string/blank? str)
     nil
-    (let [in (ByteArrayInputStream. (.getBytes ^java.lang.String  str))
+    (let [in (ByteArrayInputStream. (.getBytes ^java.lang.String str))
           reader (transit/reader in :json
-                                 {:handlers @transit-read-handlers})]
+                                 {:handlers transit-readers})]
       (transit/read reader))))
 
 (def utcCal (Calendar/getInstance (TimeZone/getTimeZone "UTC")))
@@ -92,7 +49,17 @@
   clojure.lang.IPersistentMap
   (sql-value [v] (to-json v)))
 
+
+(deftype NilType [clazz]
+  j/ISQLValue
+  (sql-value [_] nil)
+  clojure.lang.IMeta
+  (meta [_] {:type clazz}))
+
 (extend-protocol j/ISQLParameter
+  pdok.featured.NilAttribute
+  (set-parameter [^pdok.featured.NilAttribute v ^java.sql.PreparedStatement s ^long i]
+    (j/set-parameter (NilType. (.-clazz v)) s i))
   org.joda.time.LocalDateTime
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
     (.setTimestamp s i (j/sql-value v) utcCal))
@@ -152,19 +119,21 @@
   (result-set-read-column [v _ _]
     (into [] (.getArray v))))
 
-(defn clj-to-pg-type [clj-type]
-  (condp = clj-type
-    nil "text"
-    clojure.lang.Keyword "text"
-    clojure.lang.IPersistentMap "text"
-    org.joda.time.DateTime "timestamp with time zone"
-    org.joda.time.LocalDateTime "timestamp without time zone"
-    org.joda.time.LocalDate "date"
-    java.lang.Integer "integer"
-    java.lang.Double "double precision"
-    java.lang.Boolean "boolean"
-    java.util.UUID "uuid"
-    "text"))
+(defn clj-to-pg-type [clj-value]
+  (let [clj-type (type clj-value)]
+    (condp = clj-type
+      nil "text"
+      pdok.featured.NilAttribute (clj-to-pg-type (NilType. (.-clazz clj-value)))
+      clojure.lang.Keyword "text"
+      clojure.lang.IPersistentMap "text"
+      org.joda.time.DateTime "timestamp with time zone"
+      org.joda.time.LocalDateTime "timestamp without time zone"
+      org.joda.time.LocalDate "date"
+      java.lang.Integer "integer"
+      java.lang.Double "double precision"
+      java.lang.Boolean "boolean"
+      java.util.UUID "uuid"
+      "text")))
 
 (def quoted (j/quoted \"))
 
@@ -249,9 +218,9 @@ FROM information_schema.columns
   AND table_name   = ?" schema table])]
       results)))
 
-(defn add-column [db schema collection column-name column-type]
+(defn add-column [db schema collection column-name column-value]
   (let [template "ALTER TABLE %s.%s ADD %s %s NULL;"
-        clj-type (clj-to-pg-type column-type)
+        clj-type (clj-to-pg-type column-value)
         cmd (format template (-> schema name quoted) (-> collection name quoted) (-> column-name name quoted) clj-type)]
     (j/db-do-commands db cmd)))
 
