@@ -163,10 +163,8 @@ If n nil => no limit, if collections nil => all collections")
 
 (defn jdbc-count-records [{:keys [db dataset]} collections]
   (let [query (str "SELECT count(*) as cnt FROM "
-                   (qualified-feature-stream dataset) " fs JOIN"
-                   (qualified-features dataset) " f ON fs.collection = f.collection AND
-                    fs.feature_id = f.feature_id"
-                   (when (seq collections) (str " AND fs.collection in ("
+                   (qualified-feature-stream dataset) " fs"
+                   (when (seq collections) (str " WHERE fs.collection in ("
                                                 (clojure.string/join "," (repeat (count collections) "?"))
                                                 ")")))
         result (j/with-db-connection [c db]
