@@ -3,6 +3,7 @@
              [api :as api]
              [config :as config]
              [json-reader :refer [features-from-stream file-stream]]
+             [data-fixes :as fixes]
              [processor :as processor :refer [consume shutdown]]
              [persistence :as pers]
              [timeline :as tl]
@@ -69,6 +70,18 @@
 (defn implementation-version []
   (-> ^java.lang.Class (eval 'pdok.featured.core) .getPackage .getImplementationVersion))
 
+(defn execute-fix [options]
+  (let [perform? (:perform options)
+        dataset (:dataset options)
+        fix (:fix options)
+        fix-fn (condp = fix
+                 "close-childs" fixes/close-childs
+                 (fn [_ _] (println fix "not found")))]
+    (if perform? (log/warn "PERFORMING FIX") (log/info "TEST RUN"))
+    (let [processor (processor/create dataset (config/persistence))]
+      (fix-fn processor perform?)
+      (processor/shutdown processor))))
+
 (defn -main [& args]
 ;  (println "ENV-test" (config/env :pdok-test))
   (let [{:keys [options arguments summary]} (parse-opts args cli-options)]
@@ -77,16 +90,20 @@
         (exit 0 summary)
       (:version options)
         (exit 0 (implementation-version))
+      (:fix options)
+        (if (not (:dataset options))
+          (exit 1 "fix requires dataset")
+          (execute-fix options))
       (:replay options)
         (if (not (:dataset options))
-          (exit 0 "replaying requires dataset")
+          (exit 1 "replaying requires dataset")
           (replay options))
       (:clear-timeline-changelog options)
         (if (not (:dataset options))
-          (exit 0 "clearing changelog requires dataset")
+          (exit 1 "clearing changelog requires dataset")
           (tl/delete-changelog (config/timeline-for-dataset (:dataset options))))
       (not (or (seq arguments) (:std-in options)))
-        (exit 0 "json-file or std-in required")
+        (exit 1 "json-file or std-in required")
       :else
         (let [files (if (:std-in options)
                       [*in*]
@@ -104,6 +121,8 @@
    ["-r" "--replay [N/root-collection]" "Replay last N events or all events from root-collection tree from persistence to projectors"]
    [nil "--clear-timeline-changelog" "Clear timeline changelog for dataset"]
    [nil "--single-processor" "One processor for all files, reads meta data of first file only."]
+   [nil "--fix FIXNAME" "Execute fix"]
+   [nil "--perform" "Perform fix in combination with --fix" ]
    ["-h" "--help"]
    ["-v" "--version"]])
 

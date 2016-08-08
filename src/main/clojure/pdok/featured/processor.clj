@@ -427,9 +427,9 @@
     (update-in processor [:projectors] conj initialized-projector)))
 
 (defn create
-  ([dataset persistence] (create persistence dataset []))
-  ([dataset persistence projectors] (apply create {} dataset persistence projectors))
-  ([options dataset persistence & projectors]
+  ([dataset persistence] (create dataset persistence []))
+  ([dataset persistence projectors] (create {} dataset persistence projectors))
+  ([options dataset persistence projectors]
    {:pre [(map? options) (string? dataset)]}
    (let [initialized-persistence (pers/init persistence dataset)
          initialized-projectors (doall (map #(proj/init % dataset (pers/collections initialized-persistence))

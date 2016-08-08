@@ -39,6 +39,7 @@
     "Returns channel with n last stream entries for all collections in collections
 If n nil => no limit, if collections nil => all collections")
   (enrich-with-parent-info [persistence features] "returns features enriched with parent info (collection and id)")
+  (streams [persistence collection] "returns channel with all stream ids in collection")
   (close [persistence]))
 
 (defn collection-tree [persistence root]
@@ -201,6 +202,19 @@ If n nil => no limit, if collections nil => all collections")
           (close! result-chan))))
     result-chan))
 
+(defn jdbc-streams [{:keys [db dataset]} collection]
+  (let [query (str "SELECT feature_id FROM " (qualified-features dataset)
+                   " WHERE collection = ? ORDER by id ASC")
+        result-chan (chan)]
+    (a/thread
+      (j/with-db-connection [c db]
+        (let [statement (j/prepare-statement
+                          (doto (j/get-connection c) (.setAutoCommit false))
+                          query :fetch-size 10000)]
+          (j/query c [statement collection] :row-fn #(>!! result-chan (:feature_id %)))
+          (close! result-chan))))
+    result-chan))
+
 (defn enrich-query [dataset n-features]
   (str "SELECT feature_id, parent_collection, parent_id FROM "
        (qualified-features dataset) " WHERE collection = ? AND feature_id in ("
@@ -262,7 +276,7 @@ If n nil => no limit, if collections nil => all collections")
 
 (defn- jdbc-insert
   ([{:keys [db dataset]} entries]
-   (with-bench t (log/debug "Inserted events in" t "ms")
+   (with-bench t (log/debug "Inserted" (count entries) "events in" t "ms")
      (try (j/with-db-connection [c db]
             (apply
              (partial j/insert! c (qualified-feature-stream dataset) :transaction? (:transaction? db)
@@ -418,6 +432,8 @@ If n nil => no limit, if collections nil => all collections")
     (jdbc-get-last-n this n collections))
   (enrich-with-parent-info [this features]
     (jdbc-enrich-with-parent-info this features))
+  (streams [this collection]
+    (jdbc-streams this collection))
   (close [this]
     (flush this)))
 
