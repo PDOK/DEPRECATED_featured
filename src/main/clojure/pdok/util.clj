@@ -21,6 +21,12 @@
         (catch Exception e#
          (when (not ~on-error-check) (throw e#)))))
 
+(defn partitioned [f n coll]
+  "executes f with max n elemenents from coll"
+  (let [parts (partition-all n coll)
+        results (map f parts)]
+    (mapcat identity results)))
+
 (defmacro with-bench
   "Evaluates expr, followed by bench-out (setting t to time it took in ms) and returning expr"
   [t bench-out & expr]

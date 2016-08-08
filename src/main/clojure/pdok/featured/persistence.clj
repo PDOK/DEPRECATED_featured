@@ -3,7 +3,7 @@
   (:require [pdok.cache :refer :all]
             [pdok.featured.dynamic-config :as dc]
             [pdok.postgres :as pg]
-            [pdok.util :refer [with-bench checked]]
+            [pdok.util :refer [with-bench checked partitioned]]
             [clojure.core.cache :as cache]
             [clojure.java.jdbc :as j]
             [clojure.tools.logging :as log]
@@ -14,6 +14,8 @@
   (:import (clojure.lang PersistentQueue)))
 
 (declare prepare-caches prepare-childs-cache prepare-parent-cache)
+
+(def ^Integer jdbc-collection-partition-size 30000)
 
 (defprotocol ProcessorPersistence
   (init [persistence for-dataset])
@@ -207,12 +209,15 @@ If n nil => no limit, if collections nil => all collections")
                    " WHERE collection = ? ORDER by id ASC")
         result-chan (chan)]
     (a/thread
-      (j/with-db-connection [c db]
-        (let [statement (j/prepare-statement
-                          (doto (j/get-connection c) (.setAutoCommit false))
-                          query :fetch-size 10000)]
-          (j/query c [statement collection] :row-fn #(>!! result-chan (:feature_id %)))
-          (close! result-chan))))
+      (try
+        (j/with-db-connection [c db]
+                              (let [statement (j/prepare-statement
+                                                (doto (j/get-connection c) (.setAutoCommit false))
+                                                query :fetch-size 10000)]
+                                (j/query c [statement collection] :row-fn #(>!! result-chan (:feature_id %)))
+                                (close! result-chan)))
+        (catch java.sql.SQLException e
+          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
     result-chan))
 
 (defn enrich-query [dataset n-features]
@@ -247,32 +252,40 @@ If n nil => no limit, if collections nil => all collections")
             (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))))
 
 (defn- jdbc-load-childs-cache [{:keys [db dataset]} parent-collection parent-ids]
-  (try (j/with-db-connection [c db]
-         (let [results
-               (j/query c (apply vector (str "SELECT parent_id, collection, feature_id FROM " (qualified-features dataset)
-                                " WHERE parent_collection = ? AND parent_id in ("
-                                (clojure.string/join "," (repeat (count parent-ids) "?")) ")")
-                                 parent-collection parent-ids))
-               per-id (group-by :parent_id results)
-               for-cache (map (fn [[parent-id values]]
-                                [[parent-collection parent-id]
-                                 (map (juxt :collection :feature_id) values)]) per-id)]
-           for-cache))
-       (catch java.sql.SQLException e
-          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
+  (partitioned
+    (fn [ids]
+      (try (j/with-db-connection [c db]
+                                 (let [results
+                                       (j/query c (apply vector (str "SELECT parent_id, collection, feature_id FROM " (qualified-features dataset)
+                                                                     " WHERE parent_collection = ? AND parent_id in ("
+                                                                     (clojure.string/join "," (repeat (count ids) "?")) ")")
+                                                         parent-collection ids))
+                                       per-id (group-by :parent_id results)
+                                       for-cache (map (fn [[parent-id values]]
+                                                        [[parent-collection parent-id]
+                                                         (map (juxt :collection :feature_id) values)]) per-id)]
+                                   for-cache))
+           (catch java.sql.SQLException e
+             (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
+    jdbc-collection-partition-size parent-ids))
 
 (defn- jdbc-load-parent-cache [{:keys [db dataset]} collection ids]
-  (j/with-db-connection [c db]
-    (let [results
-          (j/query c (apply vector (str "SELECT feature_id, parent_collection, parent_id, parent_field FROM "
-                           (qualified-features dataset)
-                           " WHERE collection = ? AND feature_id in ("
-                           (clojure.string/join "," (repeat (count ids) "?")) ")")
-                            collection ids) :as-arrays? true)
-          for-cache (map (fn [[feature-id parent-collection parent-id parent-field]]
-                           [[collection feature-id] [parent-collection parent-id parent-field]])
-                         (drop 1 results))]
-      for-cache)))
+  (partitioned
+    (fn [ids-part]
+      (try (j/with-db-connection [c db]
+                                 (let [results
+                                       (j/query c (apply vector (str "SELECT feature_id, parent_collection, parent_id, parent_field FROM "
+                                                                     (qualified-features dataset)
+                                                                     " WHERE collection = ? AND feature_id in ("
+                                                                     (clojure.string/join "," (repeat (count ids-part) "?")) ")")
+                                                         collection ids-part) :as-arrays? true)
+                                       for-cache (map (fn [[feature-id parent-collection parent-id parent-field]]
+                                                        [[collection feature-id] [parent-collection parent-id parent-field]])
+                                                      (drop 1 results))]
+                                   for-cache))
+           (catch java.sql.SQLException e
+             (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
+    jdbc-collection-partition-size ids))
 
 (defn- jdbc-insert
   ([{:keys [db dataset]} entries]
@@ -286,20 +299,22 @@ If n nil => no limit, if collections nil => all collections")
             (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))))
 
 (defn- jdbc-load-cache [{:keys [db dataset]} collection ids]
-  (when (seq ids)
-    (try (let [results
-               (j/with-db-connection [c db]
-                 (j/query c (apply vector (str "SELECT DISTINCT ON (feature_id)
+  (partitioned
+    (fn [ids-part]
+      (when (seq ids)
+        (try (let [results
+                   (j/with-db-connection [c db]
+                                         (j/query c (apply vector (str "SELECT DISTINCT ON (feature_id)
  collection, feature_id, validity, action, version FROM " (qualified-feature-stream dataset)
- " WHERE collection = ? and feature_id in (" (clojure.string/join "," (repeat (count ids) "?")) ")
+                                                                       " WHERE collection = ? and feature_id in (" (clojure.string/join "," (repeat (count ids-part) "?")) ")
    ORDER BY feature_id ASC, id DESC")
-                                   collection ids) :as-arrays? true))]
-           (map (fn [[collection id validity action version]] [[collection id]
-                                                                      [validity (keyword action) version]] )
-                (drop 1 results))
-           )
-         (catch java.sql.SQLException e
-           (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))))))
+                                                           collection ids-part) :as-arrays? true))]
+               (map (fn [[collection id validity action version]] [[collection id]
+                                                                   [validity (keyword action) version]])
+                    (drop 1 results)))
+             (catch java.sql.SQLException e
+               (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))))))
+    jdbc-collection-partition-size ids))
 
 (defn filter-deleted [persistence childs]
   (filter (fn [[col id]] (not= :delete (last-action persistence col id)))
@@ -315,6 +330,7 @@ If n nil => no limit, if collections nil => all collections")
       (cached collection id)))
 
 (defn prepare-childs-cache [{:keys [db dataset] :as persistence} collection ids recur?]
+  ;(log/trace "Preparing child cache")
   (when (and (not (nil? collection)) (seq ids))
     (when-let [not-nil-ids (seq (filter (complement nil?) ids))]
       (let [{:keys [db stream-cache childs-cache]} persistence
@@ -329,6 +345,7 @@ If n nil => no limit, if collections nil => all collections")
               (prepare-childs-cache persistence collection new-ids true))))))))
 
 (defn prepare-parent-cache [{:keys [db dataset] :as persistence} collection ids recur?]
+  ;(log/trace "Preparing parent cache")
   (when (and (not (nil? dataset)) (not (nil? collection)) (seq ids))
     (when-let [not-nil-ids (seq (filter (complement nil?) ids))]
       (let [{:keys [db stream-cache parent-cache]} persistence
@@ -343,10 +360,13 @@ If n nil => no limit, if collections nil => all collections")
               (prepare-parent-cache persistence collection new-ids true))))))))
 
 (defn prepare-caches [persistence collection-id]
+  ;(log/trace "Start prepare caches")
   (let [{:keys [db stream-cache childs-cache parent-cache]} persistence
         per-collection (group-by #(subvec % 0 1) collection-id)]
     (doseq [[[collection] grouped] per-collection]
+      ;(log/trace "Prepare cache for" collection)
       (let [ids (filter (complement nil?) (map #(nth % 1) grouped))]
+        ;(log/trace "Load cache")
         (apply-to-cache stream-cache (jdbc-load-cache persistence collection ids))
         (prepare-childs-cache persistence collection ids true)
         (prepare-parent-cache persistence collection ids true)))))

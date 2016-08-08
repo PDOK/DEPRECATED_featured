@@ -42,7 +42,7 @@
                  [log4j/log4j "1.2.17"]
                  [org.slf4j/slf4j-api "1.7.12"]
                  [org.slf4j/slf4j-log4j12 "1.7.12"]
-                 [postgresql "9.3-1102.jdbc41"]
+                 [org.postgresql/postgresql "9.4.1209.jre7"]
                  [prismatic/schema "0.4.3"]
                  [ring/ring-defaults "0.1.5"]
                  [ring/ring-json "0.3.1"]
