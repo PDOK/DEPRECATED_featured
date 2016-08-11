@@ -7,11 +7,10 @@
             [clojure.core.cache :as cache]
             [clojure.java.jdbc :as j]
             [clojure.tools.logging :as log]
-            [clj-time [coerce :as tc]]
-            [cognitect.transit :as transit]
             [clojure.core.async :as a
              :refer [>!! close! go chan]])
-  (:import (clojure.lang PersistentQueue)))
+  (:import (clojure.lang PersistentQueue)
+           (java.sql SQLException)))
 
 (declare prepare-caches prepare-childs-cache prepare-parent-cache)
 
@@ -214,8 +213,9 @@ If n nil => no limit, if collections nil => all collections")
                                                 query :fetch-size 10000)]
                                 (j/query c [statement collection] :row-fn #(>!! result-chan (:feature_id %)))
                                 (close! result-chan)))
-        (catch java.sql.SQLException e
-          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
+        (catch SQLException e
+          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+          (throw e))))
     result-chan))
 
 (defn enrich-query [dataset n-features]
@@ -246,8 +246,9 @@ If n nil => no limit, if collections nil => all collections")
             (apply ( partial j/insert! c (qualified-features dataset) :transaction? (:transaction? db)
                              [:collection :feature_id :parent_collection :parent_id :parent_field])
                    entries))
-          (catch java.sql.SQLException e
-            (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))))
+          (catch SQLException e
+            (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+            (throw e))))))
 
 (defn- jdbc-load-childs-cache [{:keys [db dataset]} parent-collection parent-ids]
   (partitioned
@@ -263,8 +264,9 @@ If n nil => no limit, if collections nil => all collections")
                                                         [[parent-collection parent-id]
                                                          (map (juxt :collection :feature_id) values)]) per-id)]
                                    for-cache))
-           (catch java.sql.SQLException e
-             (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
+           (catch SQLException e
+             (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+             (throw e))))
     jdbc-collection-partition-size parent-ids))
 
 (defn- jdbc-load-parent-cache [{:keys [db dataset]} collection ids]
@@ -281,8 +283,9 @@ If n nil => no limit, if collections nil => all collections")
                                                         [[collection feature-id] [parent-collection parent-id parent-field]])
                                                       (drop 1 results))]
                                    for-cache))
-           (catch java.sql.SQLException e
-             (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))
+           (catch SQLException e
+             (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+             (throw e))))
     jdbc-collection-partition-size ids))
 
 (defn- jdbc-insert
@@ -293,8 +296,9 @@ If n nil => no limit, if collections nil => all collections")
              (partial j/insert! c (qualified-feature-stream dataset) :transaction? (:transaction? db)
                       [:version :previous_version :action :collection :feature_id :validity :geometry :attributes])
              entries))
-          (catch java.sql.SQLException e
-            (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e)))))))
+          (catch SQLException e
+            (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+            (throw e))))))
 
 (defn- jdbc-load-cache [{:keys [db dataset]} collection ids]
   (partitioned
@@ -310,8 +314,9 @@ If n nil => no limit, if collections nil => all collections")
                (map (fn [[collection id validity action version]] [[collection id]
                                                                    [validity (keyword action) version]])
                     (drop 1 results)))
-             (catch java.sql.SQLException e
-               (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))))))
+             (catch SQLException e
+               (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+               (throw e)))))
     jdbc-collection-partition-size ids))
 
 (defn filter-deleted [persistence childs]

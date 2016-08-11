@@ -5,7 +5,6 @@
             [pdok.featured.mustache :as m]
             [pdok.featured.timeline :as timeline]
             [pdok.featured.template :as template]
-            [pdok.cache :as cache]
             [clojure.tools.logging :as log]
             [clojure.core.async :as a
              :refer [>! <! >!! <!! go chan]])
@@ -31,7 +30,9 @@
           query (str "INSERT INTO " qualified-table
                      " (feature_type, version, valid_from, valid_to, publication, tiles, xml) VALUES (?, ?, ?, ?, ?, ?, ?)")]
       (try (j/execute! db (cons query entries) :multi? true :transaction? (:transaction? db))
-           (catch SQLException e (j/print-sql-exception-chain e))))))
+           (catch SQLException e
+             (log/with-logs ['pdok.featured.extracts :error :error] (j/print-sql-exception-chain e))
+             (throw e))))))
 
 (defn get-or-add-extractset [db dataset extract-type]
   "return id"
@@ -96,12 +97,16 @@
       (let [query (str "DELETE FROM " extract-schema "." table
                        " WHERE version = ?")]
         (try (j/execute! db (cons query versions-only) :multi? true :transaction? (:transaction? db))
-             (catch SQLException e (j/print-sql-exception-chain e)))))
+             (catch SQLException e
+               (log/with-logs ['pdok.featured.extracts :error :error] (j/print-sql-exception-chain e))
+               (throw e)))))
     (when (seq with-valid-from)
       (let [query (str "DELETE FROM " extract-schema "." table
                        " WHERE version = ? AND valid_from = ?")]
         (try (j/execute! db (cons query with-valid-from) :multi? true :transaction? (:transaction? db))
-             (catch SQLException e (j/print-sql-exception-chain e)))))))
+             (catch SQLException e
+               (log/with-logs ['pdok.featured.extracts :error :error] (j/print-sql-exception-chain e))
+               (throw e)))))))
 
 (defn- delete-extracts-with-version [db dataset feature-type extract-type versions]
   (let [table (str dataset "_" extract-type "_" feature-type)]
@@ -109,7 +114,7 @@
 
 (defn flush-changelog [dataset]
   (do
-   (log/info "Delete changelog request voor dataset: " dataset)
+   (log/info "Delete changelog request for dataset: " dataset)
    (timeline/delete-changelog (config/timeline-for-dataset dataset))))
 
 (defn file-to-features [path dataset]
