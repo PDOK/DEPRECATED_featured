@@ -176,9 +176,9 @@
   (let [index-name (str (name table) (clojure.string/join "" (map name columns)) "_idx")]
     (apply create-index* db schema table index-name "btree" columns)))
 
-(defn create-geo-index [db schema table & columns]
-  (let [index-name (str (name table) "_geo_idx")]
-    (apply create-index* db schema table index-name "gist" columns)))
+(defn create-geo-index [db schema table & column]
+  (let [index-name (str (name table) (name column) "_sidx")]
+    (apply create-index* db schema table index-name "gist" column)))
 
 
 (defn- db-constraint [schema table geo-column constraint-name constraint constraint-pred]
@@ -187,21 +187,10 @@
         geo-column-quoted (-> geo-column name quoted)]
   (str "ALTER TABLE " schema-name-quoted "." table-name-quoted " ADD CONSTRAINT " constraint-name " CHECK (" geo-column-quoted " IS NULL OR " constraint "(" geo-column-quoted ")" constraint-pred ")")))
 
-(def geo-constraints
-  {:_geometry_point "'MULTIPOINT'::text, 'POINT'::text, 'MULTIPOINTM'::text, 'POINTM'::text"
-   :_geometry_line "'MULTILINESTRING'::text, 'LINESTRING'::text, 'MULTILINESTRINGM'::text, 'LINESTRINGM'::text"
-   :_geometry_polygon "'MULTIPOLYGON'::text, 'POLYGON'::text, 'CIRCULARSTRING'::text, 'COMPOUNDCURVE'::text, 'MULTICURVE'::text, 'CURVEPOLYGON'::text, 'MULTISURFACE'::text, 'GEOMETRY'::text, 'GEOMETRYCOLLECTION'::text, 'POLYGONM'::text, 'MULTIPOLYGONM'::text, 'CIRCULARSTRINGM'::text, 'COMPOUNDCURVEM'::text, 'MULTICURVEM'::text, 'CURVEPOLYGONM'::text, 'MULTISURFACEM'::text, 'GEOMETRYCOLLECTIONM'::text"})
-
-(defn add-geo-constraints [db schema table geometry-column ndims srid]
-  (let [column-name (-> geometry-column name)
-        cndims (db-constraint schema table geometry-column (str "enforce_dims_" column-name) "public.st_ndims" (str "= " ndims))
-        csrid (db-constraint schema table geometry-column (str "enforce_srid_" column-name) "public.st_srid" (str  "= " srid))
-        cgeotype (db-constraint schema table geometry-column (str "enforce_geotype_" column-name) "public.geometrytype" (str "IN (" (-> column-name keyword geo-constraints) ")" ) )
-        constraints (vector cndims csrid cgeotype)]
+(defn create-geometry-columns [db schema table column]
   (try
-    (doseq [c constraints]
-      (j/db-do-commands db c))
-    (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
+    (j/query db [(str "SELECT public.AddGeometryColumn (" (-> schema name quoted) "," (-> table name quoted) ", " (-> column name quoted) ")")])
+    (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
 
 (defn populate-geometry-columns [db schema table]
   (try
