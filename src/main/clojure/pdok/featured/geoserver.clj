@@ -37,21 +37,19 @@
 
 (defn- gs-create-collection [{:keys [db dataset]} ndims srid collection]
   "Create table with default fields"
-  (let [table collection]
+  (let [table collection
+        geometries [:_geometry_point :_geometry_line :_geometry_polygon]]
 
-      (pg/create-table db dataset table
-                [:gid "serial" :primary :key]
-                [:_id "text"]
-                [:_version "uuid"]
-                [:_geo_group "text"])
+    (pg/create-table db dataset table
+                     [:gid "serial" :primary :key]
+                     [:_id "text"]
+                     [:_version "uuid"]
+                     [:_geo_group "text"])
 
-      (pg/create-index db dataset table "_id")
-      (pg/create-geometry-columns db dataset table :_geometry_point)
-      (pg/create-geometry-columns db dataset table :_geometry_line)
-      (pg/create-geometry-columns db dataset table :_geometry_polygon)
-      (pg/create-geo-index db dataset table :_geometry_point)
-      (pg/create-geo-index db dataset table :_geometry_line)
-      (pg/create-geo-index db dataset table :_geometry_polygon)))
+    (pg/create-index db dataset table "_id")
+    (doseq [geometry geometries]
+      ((partial pg/create-geometry-column db dataset table ndims srid) geometry)
+      ((partial pg/create-geo-index db dataset table) geometry))))
 
 (defn- gs-collection-attributes [{:keys [db dataset]} collection]
   ;(println "attributes")

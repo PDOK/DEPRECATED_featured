@@ -162,27 +162,26 @@
                     (apply j/create-table-ddl (str (-> schema name quoted) "." (-> table name quoted)) fields)))
 
 
-(defn- create-index* [db schema table index-name index-type & columns]
+(defn- create-index* [db schema table index-type & columns]
   (let [column-names (map name columns)
-        quoted-columns (clojure.string/join "," (map quoted column-names))]
+        quoted-columns (clojure.string/join "," (map quoted column-names))
+        index-name (str (name table) (clojure.string/join "" (map name columns)) (or (index-type {:gist "_sidx"}) "_idx"))]
     (try
       (j/db-do-commands db (str "CREATE INDEX " (quoted index-name)
                                 " ON "  (-> schema name quoted) "." (-> table name quoted)
-                                " USING " index-type " (" quoted-columns ")" ))
+                                " USING " (name index-type) " (" quoted-columns ")" ))
       (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
   )
 
 (defn create-index [db schema table & columns]
-  (let [index-name (str (name table) (clojure.string/join "" (map name columns)) "_idx")]
-    (apply create-index* db schema table index-name "btree" columns)))
+  (apply create-index* db schema table :btree columns))
 
-(defn create-geo-index [db schema table & column]
-  (let [index-name (str (name table) (name column) "_sidx")]
-    (apply create-index* db schema table index-name "gist" column)))
+(defn create-geo-index [db schema table & columns]
+  (apply create-index* db schema table :gist columns))
 
-(defn create-geometry-columns [db schema table column]
+(defn create-geometry-column [db schema table ndims srid column]
   (try
-    (j/query db [(str "SELECT public.AddGeometryColumn (" (-> schema name quoted) "," (-> table name quoted) ", " (-> column name quoted) ")")])
+    (j/query db [(str "SELECT public.AddGeometryColumn ('" schema "', '" table "', '" (-> column name) "', " srid ", 'GEOMETRY', " ndims ")")])
     (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
 
 (defn table-columns [db schema table]
