@@ -180,21 +180,9 @@
   (let [index-name (str (name table) (name column) "_sidx")]
     (apply create-index* db schema table index-name "gist" column)))
 
-
-(defn- db-constraint [schema table geo-column constraint-name constraint constraint-pred]
-  (let [schema-name-quoted (-> schema name quoted)
-        table-name-quoted (-> table name quoted)
-        geo-column-quoted (-> geo-column name quoted)]
-  (str "ALTER TABLE " schema-name-quoted "." table-name-quoted " ADD CONSTRAINT " constraint-name " CHECK (" geo-column-quoted " IS NULL OR " constraint "(" geo-column-quoted ")" constraint-pred ")")))
-
 (defn create-geometry-columns [db schema table column]
   (try
     (j/query db [(str "SELECT public.AddGeometryColumn (" (-> schema name quoted) "," (-> table name quoted) ", " (-> column name quoted) ")")])
-    (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
-
-(defn populate-geometry-columns [db schema table]
-  (try
-    (j/query db [(str "SELECT public.populate_geometry_columns (( SELECT '" (-> schema name quoted) "."  (-> table name quoted) "'::regclass::oid ))")])
     (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
 
 (defn table-columns [db schema table]
