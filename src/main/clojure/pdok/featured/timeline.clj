@@ -9,7 +9,6 @@
             [pdok.featured.tiles :as tiles]
             [clojure.java.jdbc :as j]
             [clojure.core.cache :as cache]
-            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [clojure.zip :as zip]
             [clj-time.core :as t]
@@ -76,7 +75,8 @@
                results (map (fn [[f]] (pg/from-json f)) (drop 1 results))]
            results))
        (catch SQLException e
-          (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
+         (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
+         (throw e))))
 
 (defn current
   ([{:keys [dataset] :as timeline} collection]
@@ -129,14 +129,16 @@
   (try
     (j/delete! db (qualified-changelog dataset) [])
   (catch SQLException e
-    (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
+    (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
+    (throw e))))
 
 (defn collections-in-changelog [{:keys [db dataset]}]
   (let [sql (str "SELECT DISTINCT collection FROM " (qualified-changelog dataset)) ]
     (try
       (flatten (drop 1 (j/query db [sql] :as-arrays? true)))
        (catch SQLException e
-         (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))))))
+         (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
+         (throw e)))))
 
 
 (defn- init-root
@@ -277,7 +279,8 @@ VALUES (?, ?, ?, ?, ?, ?)"))
                records (map transform-fn collection-features)]
            (j/execute! db (cons (new-current-sql dataset collection) records) :multi? true :transaction? (:transaction? db)))))
      (catch SQLException e
-       (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))))))
+       (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
+       (throw e)))))
 
 (defn- load-current-feature-cache-sql [dataset collection n]
   (str "SELECT DISTINCT ON (feature_id)
@@ -296,7 +299,8 @@ VALUES (?, ?, ?, ?, ?, ?)"))
                (map (fn [[fid f]] [[collection fid] (pg/from-json f)] ) (drop 1 results))]
            for-cache))
        (catch SQLException e
-          (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
+         (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
+         (throw e))))
 
 (defn- delete-version-sql [dataset collection]
   (str "DELETE FROM " (qualified-timeline dataset collection)
@@ -317,12 +321,14 @@ VALUES (?, ?, ?, ?, ?, ?)"))
           (try
             (j/execute! db (cons (delete-version-sql dataset collection) versions-only) :multi? true :transaction? (:transaction? db))
             (catch SQLException e
-              (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
+              (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
+              (throw e))))
         (when (seq with-valid-from)
           (try
             (j/execute! db (cons (delete-version-with-valid-from-sql dataset collection) with-valid-from) :multi? true :transaction? (:transaction? db))
             (catch SQLException e
-              (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))))))
+              (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
+              (throw e))))))))
 
 (defn- append-to-changelog-sql [dataset]
   (str "INSERT INTO " (qualified-changelog dataset)
@@ -339,7 +345,8 @@ VALUES (?, ?, ?, ?, ?, ?)"))
           records (map transform-fn log-entries)]
       (j/execute! db (cons (append-to-changelog-sql dataset) records) :multi? true :transaction? (:transaction? db)))
     (catch SQLException e
-      (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e)))))
+      (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
+      (throw e))))
 
 (defn- feature-key [feature]
   [(:collection feature) (:id feature)])
