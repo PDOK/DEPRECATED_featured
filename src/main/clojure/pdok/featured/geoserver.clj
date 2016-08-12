@@ -40,19 +40,17 @@
 
       (pg/create-table db dataset table
                 [:gid "serial" :primary :key]
-                [:_id "varchar(100)"]
+                [:_id "text"]
                 [:_version "uuid"]
-                [:_geometry_point "geometry"]
-                [:_geometry_line "geometry"]
-                [:_geometry_polygon "geometry"]
-                [:_geo_group "varchar (20)"])
+                [:_geo_group "text"])
 
       (pg/create-index db dataset table "_id")
-      (pg/create-geo-index db dataset table :_geometry_point :_geometry_line :_geometry_polygon)
-      (pg/add-geo-constraints db dataset table :_geometry_point ndims srid)
-      (pg/add-geo-constraints db dataset table :_geometry_line ndims srid)
-      (pg/add-geo-constraints db dataset table :_geometry_polygon ndims srid)
-      (pg/populate-geometry-columns db dataset table)))
+      (pg/create-geometry-columns db dataset table :_geometry_point)
+      (pg/create-geometry-columns db dataset table :_geometry_line)
+      (pg/create-geometry-columns db dataset table :_geometry_polygon)
+      (pg/create-geo-index db dataset table :_geometry_point)
+      (pg/create-geo-index db dataset table :_geometry_line)
+      (pg/create-geo-index db dataset table :_geometry_polygon)))
 
 (defn- gs-collection-attributes [{:keys [db dataset]} collection]
   ;(println "attributes")
