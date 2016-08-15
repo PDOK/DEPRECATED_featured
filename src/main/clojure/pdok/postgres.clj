@@ -1,7 +1,8 @@
 (ns pdok.postgres
   (:require [clojure.java.jdbc :as j]
             [clj-time [coerce :as tc]]
-            [cognitect.transit :as transit])
+            [cognitect.transit :as transit]
+            [clojure.tools.logging :as log])
   (:import [com.vividsolutions.jts.io WKTWriter]
            [java.io ByteArrayOutputStream ByteArrayInputStream]
            [java.util Calendar TimeZone]
@@ -170,7 +171,9 @@
       (j/db-do-commands db (str "CREATE INDEX " (quoted index-name)
                                 " ON "  (-> schema name quoted) "." (-> table name quoted)
                                 " USING " (name index-type) " (" quoted-columns ")" ))
-      (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
+      (catch java.sql.SQLException e
+        (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+        (throw e))))
   )
 
 (defn create-index [db schema table & columns]
@@ -182,7 +185,9 @@
 (defn create-geometry-column [db schema table ndims srid column]
   (try
     (j/query db [(str "SELECT public.AddGeometryColumn ('" schema "', '" table "', '" (-> column name) "', " srid ", 'GEOMETRY', " ndims ")")])
-    (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
+    (catch java.sql.SQLException e
+      (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+      (throw e))))
 
 (defn table-columns [db schema table]
   "Get table columns"
