@@ -12,10 +12,9 @@
   (:gen-class)
   (:import (java.sql SQLException)))
 
-
-(def ^{:private true } extract-schema "extractmanagement")
-(def ^{:private true } extractset-table "extractmanagement.extractset")
-(def ^{:private true } extractset-area-table "extractmanagement.extractset_area")
+(def ^{:private true } extract-schema (:schema config/extracts-db))
+(def ^{:private true } extractset-table (str extract-schema ".extractset"))
+(def ^{:private true } extractset-area-table (str extract-schema ".extractset_area"))
 
 (defn features-for-extract [dataset feature-type extract-type features]
   "Returns the rendered representation of the collection of features for a given feature-type inclusive tiles-set"

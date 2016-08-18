@@ -48,11 +48,12 @@
               :password (or (env :data-database-password) "postgres")
               :transaction? true})
 
-(def extracts-db {:subprotocol "postgresql"
-                  :subname (or (env :extracts-database-url) "//localhost:5432/pdok")
-                  :user (or (env :extracts-database-user) "postgres")
-                  :password (or (env :extracts-database-password) "postgres")
-                  :transaction? true})
+(def extracts-db {:subprotocol  "postgresql"
+                  :subname      (or (env :extracts-database-url) "//localhost:5432/pdok")
+                  :user         (or (env :extracts-database-user) "postgres")
+                  :password     (or (env :extracts-database-password) "postgres")
+                  :transaction? true
+                  :schema       (or (env :extracts-schema) "extractmanagement")})
 
 (defn persistence []
   (pers/make-cached-jdbc-processor-persistence
