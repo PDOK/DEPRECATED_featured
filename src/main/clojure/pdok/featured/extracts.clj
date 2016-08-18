@@ -7,7 +7,8 @@
             [pdok.featured.template :as template]
             [clojure.tools.logging :as log]
             [clojure.core.async :as a
-             :refer [>! <! >!! <!! go chan]])
+             :refer [>! <! >!! <!! go chan]]
+            [clojure.string :as str])
   (:gen-class)
   (:import (java.sql SQLException)))
 
@@ -85,8 +86,12 @@
     (if (nil? error)
       (if (nil? features-for-extract)
         {:status "ok" :count 0}
-        {:status "ok" :count (add-extract-records extracts-db dataset extract-type features-for-extract)})
-      {:status "error" :msg error :count 0})))
+        (let [n-inserted-records (add-extract-records extracts-db dataset extract-type features-for-extract)]
+          (log/info "Extract records inserted: " n-inserted-records (str/join "-" (list dataset feature-type extract-type)))
+          {:status "ok" :count n-inserted-records}))
+      (do
+        (log/error "Error creating extracts" error)
+        {:status "error" :msg error :count 0}))))
 
 
 (defn- jdbc-delete-versions [db table versions]
@@ -156,7 +161,8 @@
                                   (filter (complement nil?) (map changelog->deletes records)))
         (if (= 0 (mod i 10))
           (log/info "Creating extracts" (str dataset "-" extract-type "-" collection) "processed:" (* i batch-size)))
-        (recur (inc i) (a/<!! parts))))))
+        (recur (inc i) (a/<!! parts))))
+    (log/info "Finished extract" (str dataset "-" extract-type "-" collection))))
 
 (defn- create-extract [dataset extract-type fn-timeline-query collections]
    (if-not (every? *initialized-collection?* (map (partial template/template-key dataset extract-type)
