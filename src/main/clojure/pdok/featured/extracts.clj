@@ -86,7 +86,7 @@
       (if (nil? features-for-extract)
         {:status "ok" :count 0}
         (let [n-inserted-records (add-extract-records extracts-db dataset extract-type features-for-extract)]
-          (log/info "Extract records inserted: " n-inserted-records (str/join "-" (list dataset feature-type extract-type)))
+          (log/debug "Extract records inserted: " n-inserted-records (str/join "-" (list dataset feature-type extract-type)))
           {:status "ok" :count n-inserted-records}))
       (do
         (log/error "Error creating extracts" error)
