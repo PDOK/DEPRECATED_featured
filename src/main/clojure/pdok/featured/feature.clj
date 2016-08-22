@@ -13,7 +13,8 @@
            [pdok.featured.xslt TransformXSLT]
            [pdok.featured.converters Transformer]
            [com.vividsolutions.jts.geom Geometry]
-           [com.vividsolutions.jts.io WKTWriter WKTReader]))
+           [com.vividsolutions.jts.io WKTWriter WKTReader]
+           (org.joda.time LocalDateTime)))
 
 (def lower-case
   (fnil str/lower-case ""))
@@ -152,3 +153,32 @@
   (let [jts (as-jts obj)
         type (.getGeometryType ^Geometry jts)]
     (geometry-group* jts-point-types jts-line-types type)))
+
+(defmulti as-stufgeo-field clojure.core/type)
+(defmethod as-stufgeo-field LocalDateTime [tijdstipregistratie]
+  (.toString tijdstipregistratie "yyyyMMddHHmmss"))
+(defmethod as-stufgeo-field :default [_] nil)
+
+(defn- map-replace [content & replacements]
+  (let [replacement-list (partition 2 replacements)]
+    (reduce #(apply str/replace %1 %2) content replacement-list)))
+
+(defmulti as-stufgeo-gml (fn [obj] (lower-case (get obj "type"))))
+(defmethod as-stufgeo-gml "gml" [obj]
+  (when (get obj "gml")
+    (map-replace (as-gml obj) #"(<gml:Curve .+</gml:Curve>)" "<imgeo:lijn>$1</imgeo:lijn>"
+                 #"(<gml:LineString .+</gml:LineString>)" "<imgeo:lijn>$1</imgeo:lijn>"
+                 #"(<gml:Surface .+</gml:Surface>)" "<imgeo:vlak>$1</imgeo:vlak>"
+                 #"(<gml:MultiSurface .+</gml:MultiSurface>)" "<imgeo:multiVlak>$1</imgeo:multiVlak>"
+                 #"(<gml:Point .+</gml:Point>)" "<imgeo:punt>$1</imgeo:punt>"
+                 #"(<gml:MultiPoint .+</gml:MultiPoint>)" "<imgeo:multiPunt>$1</imgeo:multiPunt>"
+                 #"<gml:Polygon (.+?)>(.+)</gml:Polygon>"
+                 "<imgeo:vlak><gml:Surface $1><gml:patches><gml:PolygonPatch>$2</gml:PolygonPatch></gml:patches></gml:Surface></imgeo:vlak>")))
+(defmethod as-stufgeo-gml :default [_] nil)
+
+(defmulti as-stufgeo-gml-lc (fn [obj] (lower-case (get obj "type"))))
+(defmethod as-stufgeo-gml-lc "gml" [obj]
+  (when (get obj "gml")
+    (map-replace (as-stufgeo-gml obj) #"(<imgeo:multiVlak>.+</imgeo:multiVlak>)" "<imgeo:multivlak>$1</imgeo:multivlak>"
+                 #"(<imgeo:multiPunt>.+</imgeo:multiPunt>)" "<imgeo:multipunt>$1</imgeo:multipunt>")))
+(defmethod as-stufgeo-gml-lc :default [_] nil)
