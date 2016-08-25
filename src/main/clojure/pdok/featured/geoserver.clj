@@ -4,11 +4,11 @@
             [pdok.util :refer [checked]]
             [pdok.featured.feature :as f :refer [as-jts]]
             [pdok.postgres :as pg]
-            [clojure.core.cache :as cache]
             [clojure.java.jdbc :as j]
             [clojure.string :as str]
             [clojure.tools.logging :as log])
-  (:import (clojure.lang PersistentQueue)))
+  (:import (clojure.lang PersistentQueue)
+           (java.sql SQLException)))
 
 (defn- remove-keys [map keys]
   (apply dissoc map keys))
@@ -69,8 +69,9 @@
   (let [table collection]
     (try
       (pg/add-column db dataset table attribute-name attribute-value)
-      (catch java.sql.SQLException e
-        (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e))))))
+      (catch SQLException e
+        (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e))
+        (throw e)))))
 
 (defn- feature-to-sparse-record [proj-fn feature all-fields-constructor import-nil-geometry?]
   ;; could use a valid-geometry? check?! For now not, as-jts return nil if invalid (for gml)
@@ -143,8 +144,9 @@
                                   all-attributes)
                    sql (gs-insert-sql dataset collection fields)]
                (j/execute! db (cons sql records) :multi? true :transaction? (:transaction? db)))))))
-     (catch java.sql.SQLException e
-       (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e))))))
+     (catch SQLException e
+       (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e))
+       (throw e)))))
 
 
 (defn- gs-update-sql [schema table columns]
@@ -157,8 +159,9 @@
     (let [table collection
           sql (gs-update-sql dataset table (map name columns))]
       (j/execute! db (cons sql update-vals) :multi? true :transaction? (:transaction? db)))
-    (catch java.sql.SQLException e
-      (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e)))))
+    (catch SQLException e
+      (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e))
+      (throw e))))
 
 (defn- gs-update-feature [{:keys [db dataset] :as gs} proj-fn features]
     (let [selector (juxt :collection)
@@ -187,8 +190,9 @@
               sql (gs-delete-sql dataset table)
               ids (map #(vector (:id %1) (:current-version %1)) collection-features)]
           (j/execute! db (cons sql ids) :multi? true :transaction? (:transaction? db)))))
-    (catch java.sql.SQLException e
-      (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e)))))
+    (catch SQLException e
+      (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e))
+      (throw e))))
 
 (defn- make-flush-all [proj-fn cache insert-batch update-batch delete-batch no-insert]
   "Used for flushing all batches, so entry order is alway new change close"

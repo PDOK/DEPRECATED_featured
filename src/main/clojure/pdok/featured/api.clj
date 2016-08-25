@@ -1,12 +1,11 @@
 (ns pdok.featured.api
   (:require [cheshire.core :as json]
-            [clj-time [core :as t] [local :as tl]]
+            [clj-time [local :as tl]]
             [clojure.tools.logging :as log]
             [clojure.core.async :as a
              :refer [>! <! >!! <!! go chan buffer close! thread
                      alts! alts!! timeout]]
             [clojure.java.io :as io]
-            [clojure.string :as string]
             [compojure.core :refer :all]
             [compojure.route :as route]
             [org.httpkit.client :as http]
@@ -120,7 +119,7 @@
         (swap! stats assoc-in [:processing worker-id] nil)
         (stats-on-callback callback-chan request
                            (assoc request :error
-                                  (if err err "Somethin went wrong downloading"))))
+                                  (if err err "Something went wrong downloading"))))
       (try
         (with-open [in (io/input-stream file)]
           (let [_ (log/info "processing file: " (:file request))
@@ -132,8 +131,7 @@
             (swap! stats assoc-in [:processing worker-id] nil)
             (stats-on-callback callback-chan request run-stats)))
         (catch Exception e
-          (let [ _ (log/error e)
-                processor (shutdown processor)
+          (let [_ (shutdown processor)
                 error-stats (assoc request :error (str e))]
             (log/warn e error-stats)
             (swap! stats assoc-in [:processing worker-id] nil)
@@ -181,7 +179,10 @@
         invalid (s/check FlushRequest request)]
     (if invalid
       (r/status (r/response invalid) 400)
-      (r/response (extracts/flush-changelog (:dataset request))))))
+      (try
+        (r/response (extracts/flush-changelog (:dataset request)))
+        (catch Exception e
+          (r/status (r/response {:error (str e)}) 500))))))
 
 
 (defn api-routes [process-chan extract-chan stats]
