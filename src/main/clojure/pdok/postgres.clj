@@ -1,7 +1,8 @@
 (ns pdok.postgres
   (:require [clojure.java.jdbc :as j]
             [clj-time [coerce :as tc]]
-            [cognitect.transit :as transit])
+            [cognitect.transit :as transit]
+            [clojure.tools.logging :as log])
   (:import [com.vividsolutions.jts.io WKTWriter]
            [java.io ByteArrayOutputStream ByteArrayInputStream]
            [java.util Calendar TimeZone]
@@ -162,51 +163,31 @@
                     (apply j/create-table-ddl (str (-> schema name quoted) "." (-> table name quoted)) fields)))
 
 
-(defn- create-index* [db schema table index-name index-type & columns]
+(defn- create-index* [db schema table index-type & columns]
   (let [column-names (map name columns)
-        quoted-columns (clojure.string/join "," (map quoted column-names))]
+        quoted-columns (clojure.string/join "," (map quoted column-names))
+        index-name (str (name table) (clojure.string/join "" (map name columns)) (or (index-type {:gist "_sidx"}) "_idx"))]
     (try
       (j/db-do-commands db (str "CREATE INDEX " (quoted index-name)
                                 " ON "  (-> schema name quoted) "." (-> table name quoted)
-                                " USING " index-type " (" quoted-columns ")" ))
-      (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
+                                " USING " (name index-type) " (" quoted-columns ")" ))
+      (catch java.sql.SQLException e
+        (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+        (throw e))))
   )
 
 (defn create-index [db schema table & columns]
-  (let [index-name (str (name table) (clojure.string/join "" (map name columns)) "_idx")]
-    (apply create-index* db schema table index-name "btree" columns)))
+  (apply create-index* db schema table :btree columns))
 
 (defn create-geo-index [db schema table & columns]
-  (let [index-name (str (name table) "_geo_idx")]
-    (apply create-index* db schema table index-name "gist" columns)))
+  (apply create-index* db schema table :gist columns))
 
-
-(defn- db-constraint [schema table geo-column constraint-name constraint constraint-pred]
-  (let [schema-name-quoted (-> schema name quoted)
-        table-name-quoted (-> table name quoted)
-        geo-column-quoted (-> geo-column name quoted)]
-  (str "ALTER TABLE " schema-name-quoted "." table-name-quoted " ADD CONSTRAINT " constraint-name " CHECK (" geo-column-quoted " IS NULL OR " constraint "(" geo-column-quoted ")" constraint-pred ")")))
-
-(def geo-constraints
-  {:_geometry_point "'MULTIPOINT'::text, 'POINT'::text, 'MULTIPOINTM'::text, 'POINTM'::text"
-   :_geometry_line "'MULTILINESTRING'::text, 'LINESTRING'::text, 'MULTILINESTRINGM'::text, 'LINESTRINGM'::text"
-   :_geometry_polygon "'MULTIPOLYGON'::text, 'POLYGON'::text, 'CIRCULARSTRING'::text, 'COMPOUNDCURVE'::text, 'MULTICURVE'::text, 'CURVEPOLYGON'::text, 'MULTISURFACE'::text, 'GEOMETRY'::text, 'GEOMETRYCOLLECTION'::text, 'POLYGONM'::text, 'MULTIPOLYGONM'::text, 'CIRCULARSTRINGM'::text, 'COMPOUNDCURVEM'::text, 'MULTICURVEM'::text, 'CURVEPOLYGONM'::text, 'MULTISURFACEM'::text, 'GEOMETRYCOLLECTIONM'::text"})
-
-(defn add-geo-constraints [db schema table geometry-column ndims srid]
-  (let [column-name (-> geometry-column name)
-        cndims (db-constraint schema table geometry-column (str "enforce_dims_" column-name) "public.st_ndims" (str "= " ndims))
-        csrid (db-constraint schema table geometry-column (str "enforce_srid_" column-name) "public.st_srid" (str  "= " srid))
-        cgeotype (db-constraint schema table geometry-column (str "enforce_geotype_" column-name) "public.geometrytype" (str "IN (" (-> column-name keyword geo-constraints) ")" ) )
-        constraints (vector cndims csrid cgeotype)]
+(defn create-geometry-column [db schema table ndims srid column]
   (try
-    (doseq [c constraints]
-      (j/db-do-commands db c))
-    (catch java.sql.SQLException e (j/print-sql-exception-chain e)))))
-
-(defn populate-geometry-columns [db schema table]
-  (try
-    (j/query db [(str "SELECT public.populate_geometry_columns (( SELECT '" (-> schema name quoted) "."  (-> table name quoted) "'::regclass::oid ))")])
-    (catch java.sql.SQLException e (j/print-sql-exception-chain e))))
+    (j/query db [(str "SELECT public.AddGeometryColumn ('" schema "', '" table "', '" (-> column name) "', " srid ", 'GEOMETRY', " ndims ")")])
+    (catch java.sql.SQLException e
+      (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+      (throw e))))
 
 (defn table-columns [db schema table]
   "Get table columns"
