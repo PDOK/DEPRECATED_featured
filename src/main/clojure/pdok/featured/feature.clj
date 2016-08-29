@@ -176,6 +176,9 @@
                  "<imgeo:vlak><gml:Surface $1><gml:patches><gml:PolygonPatch>$2</gml:PolygonPatch></gml:patches></gml:Surface></imgeo:vlak>")))
 (defmethod as-stufgeo-gml :default [_] nil)
 
+; The StUF-Geo XSD contains a bug in the "Overig bouwwerk" BGT type. While all other types use camelCase field names in
+; the GML part, Overig bouwwerk uses lowercase. As a workaround, this is a separate Mustache function for Overig
+; bouwwerk that adds the lowercase bug after applying the regular GML transformation.
 (defmulti as-stufgeo-gml-lc (fn [obj] (lower-case (get obj "type"))))
 (defmethod as-stufgeo-gml-lc "gml" [obj]
   (when (get obj "gml")
