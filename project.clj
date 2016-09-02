@@ -33,12 +33,7 @@
                  [org.clojure/tools.cli "0.3.1"]
                  [org.clojure/tools.logging "0.3.1"]
                  [org.clojure/tools.trace "0.7.8"]
-                 [org.codehaus.woodstox/woodstox-core-asl "4.4.1"]
-                 [org.geotools/gt-epsg-extension "13.0"]
                  [org.geotools/gt-shapefile "13.0"]
-                 [org.geotools/gt-xml "13.0"]
-                 [com.vividsolutions/jts "1.13"
-                  :exclusions [[jts]]]
                  [log4j/log4j "1.2.17"]
                  [org.slf4j/slf4j-api "1.7.12"]
                  [org.slf4j/slf4j-log4j12 "1.7.12"]
@@ -46,10 +41,7 @@
                  [prismatic/schema "0.4.3"]
                  [ring/ring-defaults "0.1.5"]
                  [ring/ring-json "0.3.1"]
-                 [xalan/xalan "2.7.2"]
-                 [nl.pdok/gml3-jts "0.1.6"]
-                 [nl.pdok/rdnaptrans-java "1.1.0"]
-                 [nl.pdok/featured-shared "1.0-rc1"]]
+                 [nl.pdok/featured-shared "1.0-rc3"]]
   :plugins [[lein-ring "0.9.6" ]
             [lein-filegen "0.1.0-SNAPSHOT"]]
   :ring {:handler pdok.featured.api/app
@@ -57,8 +49,7 @@
          :uberwar-name ~uberwar-name}
   :main ^:skip-aot pdok.featured.core
   :source-paths ["src/main/clojure"]
-  :java-source-paths ["src/main/java"]
-  :resource-paths ["config" "src/main/resources"]
+  :resource-paths ["config"]
   :test-paths ["src/test/clojure"]
   :test-selectors {:default (fn [m] (not (or (:performance m) (:regression m))))
                    :regression :regression

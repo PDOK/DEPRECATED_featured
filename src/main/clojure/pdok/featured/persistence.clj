@@ -4,6 +4,7 @@
             [pdok.featured.dynamic-config :as dc]
             [pdok.postgres :as pg]
             [pdok.util :refer [with-bench checked partitioned]]
+            [pdok.transit :as transit]
             [clojure.core.cache :as cache]
             [clojure.java.jdbc :as j]
             [clojure.tools.logging :as log]
@@ -156,8 +157,8 @@ If n nil => no limit, if collections nil => all collections")
                  :version (:version record)
                  :current-version (:previous_version record)
                  :validity (:validity record)
-                 :geometry (pg/from-json (:geometry record))
-                 :attributes (pg/from-json (:attributes record)))]
+                 :geometry (transit/from-json (:geometry record))
+                 :attributes (transit/from-json (:attributes record)))]
     (>!! c (persistent! f))))
 
 (defn jdbc-count-records [{:keys [db dataset]} collections]

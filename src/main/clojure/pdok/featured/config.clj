@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            clojure.stacktrace
             [pdok.featured
              [projectors :as proj]
              [persistence :as pers]
