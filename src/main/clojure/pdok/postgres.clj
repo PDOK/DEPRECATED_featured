@@ -120,6 +120,11 @@
   (result-set-read-column [v _ _]
     (into [] (.getArray v))))
 
+(defn- geo-or-text [clj-value]
+  (if (-> clj-value meta :geo-attr true?)
+    "geometry(Geometry,28992)"
+    "text"))
+
 (defn clj-to-pg-type [clj-value]
   (let [clj-type (type clj-value)]
     (condp = clj-type
@@ -134,7 +139,7 @@
       java.lang.Double "double precision"
       java.lang.Boolean "boolean"
       java.util.UUID "uuid"
-      "text")))
+      (geo-or-text clj-value))))
 
 (def quoted (j/quoted \"))
 

@@ -66,7 +66,9 @@
  (when-let [gml (get obj "gml")]
    (if (cache/has? @gml->jts-cache gml)
      (cache/lookup @gml->jts-cache gml)
-     (let [jts (gml3-as-jts gml)
+     (let [_ (println "jts")
+           _ (println obj)
+           jts (gml3-as-jts gml)
            _ (swap! gml->jts-cache #(cache/miss % gml jts))]
        jts))))
 

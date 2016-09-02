@@ -1,5 +1,5 @@
 (ns pdok.featured.core-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.te¬st :refer :all]
             [pdok.featured.core :refer :all]))
 
 (deftest a-test

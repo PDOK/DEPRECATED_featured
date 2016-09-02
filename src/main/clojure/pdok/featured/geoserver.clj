@@ -3,6 +3,7 @@
             [pdok.cache :refer :all]
             [pdok.util :refer [checked]]
             [pdok.featured.feature :as f :refer [as-jts]]
+            [pdok.featured.geo-attribute :as ga]
             [pdok.postgres :as pg]
             [clojure.java.jdbc :as j]
             [clojure.string :as str]
@@ -116,8 +117,14 @@
        true (conj! (:current-version feature))
        true (persistent!))))
 
+(defn- transform-and-get [col attribute]
+  (let [value (get col attribute)]
+    (if (-> value meta :geo-attr)
+      (f/as-jts value)
+      value)))
+
 (defn- all-fields-constructor [attributes]
-  (if (empty? attributes) (constantly nil) (apply juxt (map #(fn [col] (get col %)) attributes))))
+  (if (empty? attributes) (constantly nil) (apply juxt (map #(fn [col] (transform-and-get col %)) attributes))))
 
 (defn- geo-column [geo-group]
    (str "_geometry_" (name geo-group)))
