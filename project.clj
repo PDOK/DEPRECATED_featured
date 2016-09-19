@@ -49,7 +49,7 @@
          :uberwar-name ~uberwar-name}
   :main ^:skip-aot pdok.featured.core
   :source-paths ["src/main/clojure"]
-  :resource-paths ["config"]
+  :resource-paths ["config" "src/main/resources"]
   :test-paths ["src/test/clojure"]
   :test-selectors {:default (fn [m] (not (or (:performance m) (:regression m))))
                    :regression :regression
