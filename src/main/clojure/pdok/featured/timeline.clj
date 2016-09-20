@@ -7,6 +7,7 @@
             [pdok.featured.projectors :as proj]
             [pdok.featured.persistence :as pers]
             [pdok.featured.tiles :as tiles]
+            [pdok.transit :as transit]
             [clojure.java.jdbc :as j]
             [clojure.core.cache :as cache]
             [clojure.tools.logging :as log]
@@ -72,7 +73,7 @@
 (defn- execute-query [timeline query]
   (try (j/with-db-connection [c (:db timeline)]
          (let [results (j/query c [query] :as-arrays? true)
-               results (map (fn [[f]] (pg/from-json f)) (drop 1 results))]
+               results (map (fn [[f]] (transit/from-json f)) (drop 1 results))]
            results))
        (catch SQLException e
          (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
@@ -107,7 +108,7 @@
 
 (defn- upgrade-changelog [changelog]
   (-> changelog
-      (update-in [:feature] pg/from-json)
+      (update-in [:feature] transit/from-json)
       (update-in [:action] keyword)))
 
 (defn changed-features [{:keys [dataset] :as timeline} collection]
@@ -275,7 +276,7 @@ VALUES (?, ?, ?, ?, ?, ?)"))
      (let [per-collection (group-by :_collection features)]
        (doseq [[collection collection-features] per-collection]
          (let [transform-fn (juxt :_id :_version
-                                  :_valid_from :_valid_to pg/to-json :_tiles)
+                                  :_valid_from :_valid_to transit/to-json :_tiles)
                records (map transform-fn collection-features)]
            (j/execute! db (cons (new-current-sql dataset collection) records) :multi? true :transaction? (:transaction? db)))))
      (catch SQLException e
@@ -296,7 +297,7 @@ VALUES (?, ?, ?, ?, ?, ?)"))
                (j/query c (apply vector (load-current-feature-cache-sql dataset collection (count ids))
                                   ids) :as-arrays? true)
                for-cache
-               (map (fn [[fid f]] [[collection fid] (pg/from-json f)] ) (drop 1 results))]
+               (map (fn [[fid f]] [[collection fid] (transit/from-json f)] ) (drop 1 results))]
            for-cache))
        (catch SQLException e
          (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))

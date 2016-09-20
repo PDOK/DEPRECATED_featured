@@ -108,7 +108,8 @@
           #{:delete}
           (cond->> feature
             true (apply-all-features-validation persistence processor)
-            true (apply-non-new-feature-requires-existing-stream-validation persistence)
+            (:check-existence-on-delete processor)
+            (apply-non-new-feature-requires-existing-stream-validation persistence)
             (:check-validity-on-delete processor)
             (apply-non-new-feature-current-validity-validation persistence))
           feature
@@ -442,6 +443,7 @@
          batch-size (or (config/env :processor-batch-size) 10000)]
      (merge {:dataset dataset
              :check-validity-on-delete true
+             :check-existence-on-delete false
              :disable-validation false
              :persistence initialized-persistence
              :projectors initialized-projectors

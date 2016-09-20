@@ -1,37 +1,16 @@
 (ns pdok.postgres
   (:require [clojure.java.jdbc :as j]
             [clj-time [coerce :as tc]]
-            [cognitect.transit :as transit]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [pdok.transit :as transit])
   (:import [com.vividsolutions.jts.io WKTWriter]
-           [java.io ByteArrayOutputStream ByteArrayInputStream]
            [java.util Calendar TimeZone]
-           [org.joda.time DateTimeZone LocalDate LocalDateTime]
-           (pdok.featured HandlerMaps)))
+           [org.joda.time DateTimeZone LocalDate LocalDateTime]))
 
 (defn dbspec->url [{:keys [subprotocol subname user password]}]
   (str "jdbc:" subprotocol ":" subname "?user=" user "&password=" password))
 
 (def wkt-writer (WKTWriter.))
-
-(def transit-readers (transit/read-handler-map HandlerMaps/readers))
-(def transit-writers (transit/write-handler-map HandlerMaps/writers))
-
-(defn to-json [obj]
-  (let [out (ByteArrayOutputStream. 1024)
-        writer (transit/writer out :json
-                               {:handlers transit-writers})]
-    (transit/write writer obj)
-    (.toString out))
-  )
-
-(defn from-json [str]
-  (if (clojure.string/blank? str)
-    nil
-    (let [in (ByteArrayInputStream. (.getBytes ^java.lang.String str))
-          reader (transit/reader in :json
-                                 {:handlers transit-readers})]
-      (transit/read reader))))
 
 (def utcCal (Calendar/getInstance (TimeZone/getTimeZone "UTC")))
 (def nlZone (DateTimeZone/getDefault)) ;; used for reading datetimes, because postgres returns Z values
@@ -48,7 +27,7 @@
   clojure.lang.Keyword
   (sql-value [v] (name v))
   clojure.lang.IPersistentMap
-  (sql-value [v] (to-json v)))
+  (sql-value [v] (transit/to-json v)))
 
 
 (deftype NilType [clazz]
