@@ -43,13 +43,6 @@
   (when-not (clojure.string/blank? datestring)
     (tc/to-local-date (tf/parse date-formatter datestring))))
 
-(defn parse-geo-attr
-  "Parses a geo-attribute to internal geo-representation"
-  [format geometry]
-  (with-meta
-    (hash-map "type" format format geometry)
-    {:geo-attr true}))
-
 (defn clojurify [s]
   (keyword (cond->
                (clojure.string/replace s #"_" "-")
@@ -110,7 +103,7 @@
       "~#int"     (if params (int (first params)) (nilled java.lang.Integer))
       "~#boolean" (if params (boolean (first params)) (nilled java.lang.Boolean))
       "~#double"  (if params (double (first params)) (nilled java.lang.Double))
-      "~#geo-attr" (if params (apply parse-geo-attr params) (nilled java.lang.String))
+      "~#geo-attr" (if params (with-meta (first params) {:geo-attr true}) (nilled java.lang.String))
       element ; never fail just return element
       ))
   )
