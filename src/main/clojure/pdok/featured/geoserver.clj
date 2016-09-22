@@ -261,7 +261,7 @@
         (let [current-attributes (cached-collection-attributes collection)
               new-attributes (filter #(not (get current-attributes (first %))) attributes)]
           (doseq [[attr-key attr-value] new-attributes]
-            (checked (gs-add-attribute this collection attr-key (type attr-value))
+            (checked (gs-add-attribute this collection attr-key attr-value)
                      (get (gs-collection-attributes this collection) attr-key)))
           (when (not-empty new-attributes) (cached-collection-attributes :reload collection)))
         (batched-update-feature feature))))
