@@ -1,6 +1,5 @@
 (ns pdok.featured.json-reader
   (:require [pdok.featured.feature :refer [nilled as-jts]]
-            [pdok.featured.geo-attribute :as ga]
             [cheshire [core :as json] [factory :as jfac] [parse :as jparse]]
             [clj-time [format :as tf] [coerce :as tc]]
             [clojure.walk :refer [postwalk]])
@@ -43,6 +42,13 @@
   [datestring]
   (when-not (clojure.string/blank? datestring)
     (tc/to-local-date (tf/parse date-formatter datestring))))
+
+(defn parse-geo-attr
+  "Parses a geo-attribute to internal geo-representation"
+  [format geometry]
+  (with-meta
+    (hash-map "type" format format geometry)
+    {:geo-attr true}))
 
 (defn clojurify [s]
   (keyword (cond->
@@ -97,18 +103,14 @@
        (-> element first (clojure.string/starts-with? "~#"))))
 
 (defn- evaluate-f [element]
-  (let [[function params] element
-        _ (println params)]
+  (let [[function params] element]
     (case function
       "~#moment"  (if params (apply parse-time params) (nilled org.joda.time.DateTime))
       "~#date"    (if params (apply parse-date params) (nilled org.joda.time.LocalDate))
       "~#int"     (if params (int (first params)) (nilled java.lang.Integer))
       "~#boolean" (if params (boolean (first params)) (nilled java.lang.Boolean))
       "~#double"  (if params (double (first params)) (nilled java.lang.Double))
-      "~#geo-attr" (if params (with-meta
-                                (hash-map "type" (first params) (first params) (second params))
-                                {:geo-attr true})
-                              (nilled java.lang.String))
+      "~#geo-attr" (if params (apply parse-geo-attr params) (nilled java.lang.String))
       element ; never fail just return element
       ))
   )

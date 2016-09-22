@@ -3,13 +3,13 @@
             [pdok.cache :refer :all]
             [pdok.util :refer [checked]]
             [pdok.featured.feature :as f :refer [as-jts]]
-            [pdok.featured.geo-attribute :as ga]
             [pdok.postgres :as pg]
             [clojure.java.jdbc :as j]
             [clojure.string :as str]
             [clojure.tools.logging :as log])
   (:import (clojure.lang PersistentQueue)
-           (java.sql SQLException)))
+           (java.sql SQLException)
+           (pdok.postgres NilType)))
 
 (defn- remove-keys [map keys]
   (apply dissoc map keys))
@@ -21,6 +21,24 @@
       (conj! target x)
       (recur (conj! target x) (first xs) (rest xs)))))
 
+(defn clj-to-pg-type [clj-value]
+  (let [clj-type (if (-> clj-value meta :geo-attr true?)
+                    :geo-attr
+                    (type clj-value))]
+    (condp = clj-type
+      nil "text"
+      pdok.featured.NilAttribute (clj-to-pg-type (NilType. (.-clazz clj-value)))
+      clojure.lang.Keyword "text"
+      clojure.lang.IPersistentMap "text"
+      org.joda.time.DateTime "timestamp with time zone"
+      org.joda.time.LocalDateTime "timestamp without time zone"
+      org.joda.time.LocalDate "date"
+      java.lang.Integer "integer"
+      java.lang.Double "double precision"
+      java.lang.Boolean "boolean"
+      java.util.UUID "uuid"
+      :geo-attr "geometry"
+      "text")))
 
 (defn do-visualization? [options]
   (if (some #{"visualization"} options) true))
@@ -66,10 +84,13 @@
         attributes (reduce (fn [acc c] (conj acc c)) #{} (map #(:column_name %) no-defaults))]
     attributes))
 
-(defn- gs-add-attribute [{:keys [db dataset]} collection attribute-name attribute-value]
-  (let [table collection]
+(defn- gs-add-attribute [{:keys [db dataset]} collection attribute-name attribute-value ndims srid]
+  (let [table collection
+        pg-type (clj-to-pg-type attribute-value)]
     (try
-      (pg/add-column db dataset table attribute-name attribute-value)
+      (if (= "geometry" pg-type)
+        (pg/create-geometry-column db dataset collection ndims srid attribute-name)
+        (pg/add-column db dataset table attribute-name pg-type))
       (catch SQLException e
         (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e))
         (throw e)))))
@@ -256,7 +277,7 @@
             (let [current-attributes (cached-collection-attributes collection)
                   new-attributes (filter #(not (get current-attributes (first %))) attributes)]
               (doseq [[attr-key attr-value] new-attributes]
-                (checked (gs-add-attribute this collection attr-key attr-value)
+                (checked (gs-add-attribute this collection attr-key attr-value ndims srid )
                          (get (gs-collection-attributes this collection) attr-key)))
               (when (not-empty new-attributes) (cached-collection-attributes :reload collection)))
             (batched-add-feature feature)))))
@@ -268,7 +289,7 @@
         (let [current-attributes (cached-collection-attributes collection)
               new-attributes (filter #(not (get current-attributes (first %))) attributes)]
           (doseq [[attr-key attr-value] new-attributes]
-            (checked (gs-add-attribute this collection attr-key (type attr-value))
+            (checked (gs-add-attribute this collection attr-key (type attr-value) ndims srid )
                      (get (gs-collection-attributes this collection) attr-key)))
           (when (not-empty new-attributes) (cached-collection-attributes :reload collection)))
         (batched-update-feature feature))))

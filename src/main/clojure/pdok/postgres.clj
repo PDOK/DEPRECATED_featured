@@ -99,27 +99,6 @@
   (result-set-read-column [v _ _]
     (into [] (.getArray v))))
 
-(defn- geo-or-text [clj-value]
-  (if (-> clj-value meta :geo-attr true?)
-    "geometry(Geometry,28992)"
-    "text"))
-
-(defn clj-to-pg-type [clj-value]
-  (let [clj-type (type clj-value)]
-    (condp = clj-type
-      nil "text"
-      pdok.featured.NilAttribute (clj-to-pg-type (NilType. (.-clazz clj-value)))
-      clojure.lang.Keyword "text"
-      clojure.lang.IPersistentMap "text"
-      org.joda.time.DateTime "timestamp with time zone"
-      org.joda.time.LocalDateTime "timestamp without time zone"
-      org.joda.time.LocalDate "date"
-      java.lang.Integer "integer"
-      java.lang.Double "double precision"
-      java.lang.Boolean "boolean"
-      java.util.UUID "uuid"
-      (geo-or-text clj-value))))
-
 (def quoted (j/quoted \"))
 
 (defn schema-exists? [db schema]
@@ -183,10 +162,9 @@ FROM information_schema.columns
   AND table_name   = ?" schema table])]
       results)))
 
-(defn add-column [db schema collection column-name column-value]
+(defn add-column [db schema collection column-name pg-type]
   (let [template "ALTER TABLE %s.%s ADD %s %s NULL;"
-        clj-type (clj-to-pg-type column-value)
-        cmd (format template (-> schema name quoted) (-> collection name quoted) (-> column-name name quoted) clj-type)]
+        cmd (format template (-> schema name quoted) (-> collection name quoted) (-> column-name name quoted) pg-type)]
     (j/db-do-commands db cmd)))
 
 (defn kv->clause [[k v]]
