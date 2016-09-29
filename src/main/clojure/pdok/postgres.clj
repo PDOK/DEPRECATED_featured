@@ -5,7 +5,8 @@
             [pdok.transit :as transit])
   (:import [com.vividsolutions.jts.io WKTWriter]
            [java.util Calendar TimeZone]
-           [org.joda.time DateTimeZone LocalDate LocalDateTime]))
+           [org.joda.time DateTimeZone LocalDate LocalDateTime]
+           (pdok.featured NilAttribute)))
 
 (defn dbspec->url [{:keys [subprotocol subname user password]}]
   (str "jdbc:" subprotocol ":" subname "?user=" user "&password=" password))
@@ -103,7 +104,7 @@
   (let [clj-type (type clj-value)]
     (condp = clj-type
       nil "text"
-      pdok.featured.NilAttribute (clj-to-pg-type (NilType. (.-clazz clj-value)))
+      NilAttribute (clj-to-pg-type (NilType. (.-clazz ^NilAttribute clj-value)))
       clojure.lang.Keyword "text"
       clojure.lang.IPersistentMap "text"
       org.joda.time.DateTime "timestamp with time zone"
