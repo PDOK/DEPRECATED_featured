@@ -4,7 +4,8 @@
    [clj-time [format :as tf] [coerce :as tc]]
     [clojure.walk :refer [postwalk]])
   (:import (com.fasterxml.jackson.core JsonFactory JsonFactory$Feature
-                                       JsonParser$Feature JsonParser JsonToken)))
+                                       JsonParser$Feature JsonParser JsonToken)
+           (org.joda.time DateTime)))
 
 (def ^:private pdok-field-replacements
   {"_action" :action "_collection" :collection "_id" :id "_validity" :validity
@@ -31,13 +32,14 @@
 
 (def ^{:private true} date-formatter (tf/formatter "yyyy-MM-dd"))
 
-(defn- parse-time
+(defn parse-time
   "Parses an ISO8601 date timestring to local date time"
   [datetimestring]
   (when-not (clojure.string/blank? datetimestring)
-    (tc/to-local-date-time (tf/parse date-time-formatter datetimestring))))
+    (as-> datetimestring v
+          (tf/parse-local date-time-formatter v))))
 
-(defn- parse-date
+(defn parse-date
   "Parses a date string to local date"
   [datestring]
   (when-not (clojure.string/blank? datestring)
