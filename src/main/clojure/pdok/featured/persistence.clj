@@ -40,6 +40,9 @@
   (get-last-n [persistence n collections]
     "Returns channel with n last stream entries for all collections in collections
 If n nil => no limit, if collections nil => all collections")
+  (get-range [persistence start end collections]
+    "Returns channel with entries in range from start (inclusive) to end (inclusive)
+     for all collections in collections. Start and end are the ids in feature-stream")
   (enrich-with-parent-info [persistence features] "returns features enriched with parent info (collection and id)")
   (streams [persistence collection] "returns channel with all stream ids in collection")
   (close [persistence]))
@@ -203,6 +206,27 @@ If n nil => no limit, if collections nil => all collections")
                    :row-fn (partial record->feature result-chan))
           (close! result-chan))))
     result-chan))
+
+(defn jdbc-get-range [{:keys [db dataset]} start end collections]
+  (let [query (str "SELECT fs.id, fs.collection, fs.feature_id, fs.action, fs.version,
+                    fs.previous_version, fs.validity, fs.attributes, fs.geometry
+                    FROM " (qualified-feature-stream dataset) " fs
+                    WHERE fs.id BETWEEN " start " AND " end
+                    (when (seq collections) (str " AND fs.collection in ("
+                               (clojure.string/join "," (repeat (count collections) "?"))
+                               ")"))
+                   " ORDER BY id ASC")
+        result-chan (chan)]
+    (a/thread
+      (j/with-db-connection [c db]
+                            (let [statement (j/prepare-statement
+                                              (doto (j/get-connection c) (.setAutoCommit false))
+                                              query :fetch-size 10000)]
+                              (j/query c (if-not collections [statement] (concat [statement] collections))
+                                       :row-fn (partial record->feature result-chan))
+                              (close! result-chan))))
+    result-chan))
+
 
 (defn jdbc-streams [{:keys [db dataset]} collection]
   (let [query (str "SELECT feature_id FROM " (qualified-features dataset)
@@ -456,6 +480,8 @@ If n nil => no limit, if collections nil => all collections")
         q-result)))
   (get-last-n [this n collections]
     (jdbc-get-last-n this n collections))
+  (get-range[this start end collections]
+    (jdbc-get-range this start end collections))
   (enrich-with-parent-info [this features]
     (jdbc-enrich-with-parent-info this features))
   (streams [this collection]
