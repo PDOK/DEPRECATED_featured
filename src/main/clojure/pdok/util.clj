@@ -38,5 +38,8 @@
      ret#))
 
 (defn as-ga [geometry]
-  (let [type (get geometry "type")]
-    (GeometryAttribute. type (get geometry type))))
+  (let [type (get geometry "type")
+        ga (GeometryAttribute. type (get geometry type))]
+    (if-let [tiles (:nl-tiles geometry)]
+      (.setTiles ga tiles))
+    ga))
