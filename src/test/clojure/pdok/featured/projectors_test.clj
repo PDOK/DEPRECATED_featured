@@ -2,7 +2,8 @@
   (:refer-clojure :exclude [flush])
   (:require [clojure.test :refer :all]
             [pdok.featured.tiles :as tiles]
-            [pdok.featured.projectors :refer :all]))
+            [pdok.featured.projectors :refer :all]
+            [pdok.util :as util]))
 
 
 (def test-gml
@@ -25,7 +26,7 @@
 )
 
 (deftest test-nl-tiles-with-geometry
-  (is (= #{49821 49864} (tiles/nl (:geometry test-feature-with-geometry)))))
+  (is (= #{49821 49864} (-> test-feature-with-geometry :geometry util/as-geometry-attribute tiles/nl))))
 
 (deftest test-nl-tiles-without-geometry
-  (is (= nil (tiles/nl (:geometry test-feature-without-geometry)))))
+  (is (= nil (-> test-feature-without-geometry :geometry util/as-geometry-attribute tiles/nl))))

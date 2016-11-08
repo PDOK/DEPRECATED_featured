@@ -4,7 +4,8 @@
             [clj-time [format :as tf] [coerce :as tc]]
             [clojure.walk :refer [postwalk]])
   (:import (com.fasterxml.jackson.core JsonFactory JsonFactory$Feature
-                                       JsonParser$Feature JsonParser JsonToken)))
+                                       JsonParser$Feature JsonParser JsonToken)
+           (pdok.featured GeometryAttribute)))
 
 (def ^:private pdok-field-replacements
   {"_action" :action "_collection" :collection "_id" :id "_validity" :validity
@@ -95,6 +96,9 @@
        (string? (first element))
        (-> element first (clojure.string/starts-with? "~#"))))
 
+(defn- geometry-atrribute [type geometry]
+  (GeometryAttribute. type geometry))
+
 (defn- evaluate-f [element]
   (let [[function params] element]
     (case function
@@ -103,7 +107,7 @@
       "~#int"     (if params (int (first params)) (nilled java.lang.Integer))
       "~#boolean" (if params (boolean (first params)) (nilled java.lang.Boolean))
       "~#double"  (if params (double (first params)) (nilled java.lang.Double))
-      "~#geo-attr" (if params (with-meta (first params) {:geo-attr true}) (nilled java.lang.String))
+      "~#geo-attr" (if params (apply geometry-atrribute params) (nilled pdok.featured.GeometryAttribute))
       element ; never fail just return element
       ))
   )

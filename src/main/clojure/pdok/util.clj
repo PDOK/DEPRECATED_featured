@@ -1,5 +1,6 @@
 (ns pdok.util
-  (:import com.fasterxml.uuid.UUIDComparator))
+  (:import [pdok.featured GeometryAttribute]
+           [com.fasterxml.uuid UUIDComparator]))
 
 (def ^:private uuid-comparator (UUIDComparator.))
 
@@ -35,3 +36,7 @@
          ~t (/ (double (- (. System (nanoTime)) start#)) 1000000.0)]
      ~bench-out
      ret#))
+
+(defn as-ga [geometry]
+  (let [type (get geometry "type")]
+    (GeometryAttribute. type (get geometry type))))

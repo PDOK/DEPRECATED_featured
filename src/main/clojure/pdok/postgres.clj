@@ -2,7 +2,8 @@
   (:require [clojure.java.jdbc :as j]
             [clj-time [coerce :as tc]]
             [clojure.tools.logging :as log]
-            [pdok.transit :as transit])
+            [pdok.transit :as transit]
+            [pdok.featured.feature :as f])
   (:import [com.vividsolutions.jts.io WKTWriter]
            [java.util Calendar TimeZone]
            [org.joda.time DateTimeZone LocalDate LocalDateTime]))
@@ -22,13 +23,14 @@
   (sql-value [v] (tc/to-sql-time v))
   org.joda.time.LocalDate
   (sql-value [v] (tc/to-sql-date v))
+  pdok.featured.GeometryAttribute
+  (sql-value [v] (-> v f/as-jts j/sql-value))
   com.vividsolutions.jts.geom.Geometry
   (sql-value [v] (str "SRID=" (.getSRID v) ";" (.write ^WKTWriter wkt-writer v)))
   clojure.lang.Keyword
   (sql-value [v] (name v))
   clojure.lang.IPersistentMap
   (sql-value [v] (transit/to-json v)))
-
 
 (deftype NilType [clazz]
   j/ISQLValue
@@ -47,6 +49,9 @@
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
     (.setDate s i (j/sql-value v) utcCal))
   java.util.UUID
+  (set-parameter [v ^java.sql.PreparedStatement s ^long i]
+    (.setObject s i (j/sql-value v) java.sql.Types/OTHER))
+  pdok.featured.GeometryAttribute
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
     (.setObject s i (j/sql-value v) java.sql.Types/OTHER))
   com.vividsolutions.jts.geom.Geometry
