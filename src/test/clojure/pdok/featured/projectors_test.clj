@@ -26,7 +26,7 @@
 )
 
 (deftest test-nl-tiles-with-geometry
-  (is (= #{49821 49864} (-> test-feature-with-geometry :geometry util/as-geometry-attribute tiles/nl))))
+  (is (= #{49821 49864} (-> test-feature-with-geometry :geometry util/as-ga tiles/nl))))
 
 (deftest test-nl-tiles-without-geometry
-  (is (= nil (-> test-feature-without-geometry :geometry util/as-geometry-attribute tiles/nl))))
+  (is (= nil (-> test-feature-without-geometry :geometry util/as-ga tiles/nl))))
