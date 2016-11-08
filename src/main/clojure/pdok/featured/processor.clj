@@ -195,13 +195,9 @@
     (project! processor proj/delete-feature enriched-feature)
     enriched-feature))
 
-(defn nested? [attribute]
-  (and (map? attribute)
-       (-> attribute meta :geo-attr false?)))
-
 (defn- nested-features [attributes]
   (letfn [( flat-multi [[key values]] (map #(vector key %) values))]
-    (let [single-features (filter #(nested? (second %)) attributes)
+    (let [single-features (filter #(map? (second %)) attributes)
           multi-features (filter #(sequential? (second %)) attributes)]
       (concat single-features (mapcat flat-multi multi-features)))))
 
