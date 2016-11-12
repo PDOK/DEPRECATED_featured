@@ -6,7 +6,8 @@
             [pdok.featured.feature :as f])
   (:import [com.vividsolutions.jts.io WKTWriter]
            [java.util Calendar TimeZone]
-           [org.joda.time DateTimeZone LocalDate LocalDateTime]))
+           [org.joda.time DateTimeZone LocalDate LocalDateTime]
+           (pdok.featured NilAttribute)))
 
 (defn dbspec->url [{:keys [subprotocol subname user password]}]
   (str "jdbc:" subprotocol ":" subname "?user=" user "&password=" password))
@@ -140,7 +141,7 @@
                                 " ON "  (-> schema name quoted) "." (-> table name quoted)
                                 " USING " (name index-type) " (" quoted-columns ")" ))
       (catch java.sql.SQLException e
-        (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+        (log/with-logs ['pdok.postgres :error :error] (j/print-sql-exception-chain e))
         (throw e))))
   )
 
@@ -154,7 +155,7 @@
   (try
     (j/query db [(str "SELECT public.AddGeometryColumn ('" schema "', '" table "', '" (-> column name) "', " srid ", 'GEOMETRY', " ndims ")")])
     (catch java.sql.SQLException e
-      (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+      (log/with-logs ['pdok.postgres :error :error] (j/print-sql-exception-chain e))
       (throw e))))
 
 (defn table-columns [db schema table]
@@ -180,3 +181,16 @@ FROM information_schema.columns
 (defn map->where-clause
   ([clauses] (clojure.string/join " AND " (map kv->clause clauses)))
   ([clauses table] (clojure.string/join " AND " (map #(str table "." (kv->clause %)) clauses))))
+
+(defn configure-auto-vacuum [db schema table vacuum-scale-factor vacuum-threshold analyze-scale-factor]
+  (try
+    (j/db-do-commands db
+                      (str "ALTER TABLE " (-> schema name quoted) "." (-> table name quoted)
+                           " SET (autovacuum_vacuum_scale_factor = " vacuum-scale-factor ")")
+                      (str "ALTER TABLE " (-> schema name quoted) "." (-> table name quoted)
+                           " SET (autovacuum_vacuum_threshold = " vacuum-threshold ")")
+                      (str "ALTER TABLE " (-> schema name quoted) "." (-> table name quoted)
+                           " SET (autovacuum_analyze_scale_factor = " analyze-scale-factor ")"))
+    (catch java.sql.SQLException e
+      (log/with-logs ['pdok.postgres :error :error] (j/print-sql-exception-chain e))
+      (throw e))))

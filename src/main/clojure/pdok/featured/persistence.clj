@@ -103,7 +103,8 @@ If n nil => no limit, if collections nil => all collections")
                                     [:parent_id "varchar(50)"]
                                     [:parent_field "varchar(255)"])
                    (pg/create-index db dc/*persistence-schema* dc/*persistence-features* :collection :feature_id)
-                   (pg/create-index db dc/*persistence-schema* dc/*persistence-features* :parent_collection :parent_id))
+                   (pg/create-index db dc/*persistence-schema* dc/*persistence-features* :parent_collection :parent_id)
+                   (pg/configure-auto-vacuum db dc/*persistence-schema* dc/*persistence-features* 0 10000 0))
                (pg/table-exists? db dc/*persistence-schema* dc/*persistence-features*)))
 
     (when-not (pg/table-exists? db dc/*persistence-schema* dc/*persistence-feature-stream*)
@@ -117,7 +118,8 @@ If n nil => no limit, if collections nil => all collections")
                                     [:validity "timestamp without time zone"]
                                     [:geometry "text"]
                                     [:attributes "text"])
-                   (pg/create-index db dc/*persistence-schema* dc/*persistence-feature-stream* :collection :feature_id))
+                   (pg/create-index db dc/*persistence-schema* dc/*persistence-feature-stream* :collection :feature_id)
+                   (pg/configure-auto-vacuum db dc/*persistence-schema* dc/*persistence-feature-stream* 0 10000 0))
                (pg/table-exists? db dc/*persistence-schema* dc/*persistence-feature-stream*)))
 
     (when-not (pg/table-exists? db dc/*persistence-schema* dc/*persistence-collections*)
