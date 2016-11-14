@@ -110,7 +110,7 @@
       "~#int"     (if params (int (first params)) (nilled java.lang.Integer))
       "~#boolean" (if params (boolean (first params)) (nilled java.lang.Boolean))
       "~#double"  (if params (double (first params)) (nilled java.lang.Double))
-      "~#geo-attr" (if params (geometry-atrribute params) (nilled pdok.featured.GeometryAttribute))
+      "~#geometry" (if params (geometry-atrribute params) (nilled pdok.featured.GeometryAttribute))
       element ; never fail just return element
       ))
   )
