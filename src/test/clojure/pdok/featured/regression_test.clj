@@ -43,16 +43,18 @@
     [meta features]))
 
 (defn- inserted-features [extracts dataset extract-type collection features]
-  (doseq [f features]
-    (let [record (vector (:_version f) (:_valid_from f) (:_valid_to f) f)]
-      (swap! extracts conj record))))
+  (let [new-extracts (map #(vector (:_version %) (:_valid_from %) (:_valid_to %) %) features)]
+    (swap! extracts concat new-extracts)))
+
+(defn- remove-first [pred coll]
+  (keep-indexed #(if (not= %1 (.indexOf coll (first (filter pred coll)))) %2) coll))
 
 (defn- remove-extract-record [extracts record-info]
   (let [[version valid-from] record-info]
     (if valid-from
-      (into [] (remove #(and (= version  (nth %1 0))
-                             (= valid-from (nth %1 1))) extracts))
-      (into [] (remove #(= version (nth % 0)) extracts)))))
+      (remove-first #(and (= version (nth %1 0))
+                          (= valid-from (nth %1 1))) extracts)
+      (remove #(= version (nth % 0)) extracts))))
 
 (defn- deleted-versions [extracts dataset collection extract-type records]
     (doseq [record records]

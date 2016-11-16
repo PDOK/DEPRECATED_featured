@@ -96,7 +96,7 @@
 (defn- jdbc-delete-versions [db table versions]
   "([version valid_from][version valid_from] ... )"
   (let [versions-only (map #(take 1 %) (filter (fn [[_ valid-from]] (not valid-from)) versions))
-        with-valid-from (filter (fn [[_ valid-from]] valid-from) versions)]
+        with-valid-from (map #(vector (nth % 0) (nth % 1) (nth % 0) (nth % 1)) (filter (fn [[_ valid-from]] valid-from) versions))]
     (when (seq versions-only)
       (let [query (str "DELETE FROM " extract-schema "." table
                        " WHERE version = ?")]
@@ -106,7 +106,8 @@
                (throw e)))))
     (when (seq with-valid-from)
       (let [query (str "DELETE FROM " extract-schema "." table
-                       " WHERE version = ? AND valid_from = ?")]
+                       " WHERE version = ? AND valid_from = ? AND id IN (SELECT id FROM " extract-schema "." table
+                       " WHERE version = ? AND valid_from = ? ORDER BY id ASC LIMIT 1)")]
         (try (j/execute! db (cons query with-valid-from) :multi? true :transaction? (:transaction? db))
              (catch SQLException e
                (log/with-logs ['pdok.featured.extracts :error :error] (j/print-sql-exception-chain e))
