@@ -170,6 +170,7 @@
 (defn- test-timeline->extract [expected extracts]
   ;  (println "EXTRACTS\n" (clojure.string/join "\n" (map (fn [e] (into [] (take 2 e))) @extracts)))
   (is (= (:n-extracts expected) (count @extracts)))
+  (is (= (:n-extracts expected) (count (distinct (map first @extracts))))) ; extracts should have distinct versions
   (is (= (:n-valid-to expected) (count (filter #((complement nil?) (nth % 2)) @extracts)))))
 
 (defn- query-geoserver [table]
