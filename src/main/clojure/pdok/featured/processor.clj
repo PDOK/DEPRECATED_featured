@@ -363,7 +363,7 @@
     (swap! statistics update :n-processed inc)
     (when (:src feature) (swap! statistics update :n-src inc))
     (when (:geometry feature)
-      (let [tiles (-> feature :geometry as-ga tiles/nl)]
+      (let [tiles (-> feature :geometry tiles/nl)]
         (swap! statistics update :updated-tiles #(clojure.set/union % tiles))))
     (when (:invalid? feature)
       (swap! statistics update :n-errored inc)

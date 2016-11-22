@@ -291,17 +291,23 @@ If n nil => no limit, if collections nil => all collections")
              (throw e))))
     jdbc-collection-partition-size ids))
 
+(defn- to-json [column-index entry]
+  (let [json-serialized (transit/to-json (nth entry column-index))]
+    (assoc entry column-index json-serialized)))
+
 (defn- jdbc-insert
   ([{:keys [db dataset]} entries]
-   (with-bench t (log/debug "Inserted" (count entries) "events in" t "ms")
-     (try (j/with-db-connection [c db]
-            (apply
-             (partial j/insert! c (qualified-feature-stream dataset) :transaction? (:transaction? db)
-                      [:version :previous_version :action :collection :feature_id :validity :geometry :attributes])
-             entries))
-          (catch SQLException e
-            (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
-            (throw e))))))
+   (let [fn-serialize-geometry-column (comp (partial to-json 6) vec)
+         entries (map fn-serialize-geometry-column entries)]
+     (with-bench t (log/debug "Inserted" (count entries) "events in" t "ms")
+                 (try (j/with-db-connection [c db]
+                                            (apply
+                                              (partial j/insert! c (qualified-feature-stream dataset) :transaction? (:transaction? db)
+                                                       [:version :previous_version :action :collection :feature_id :validity :geometry :attributes])
+                                              entries))
+                      (catch SQLException e
+                        (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+                        (throw e)))))))
 
 (defn- jdbc-load-cache [{:keys [db dataset]} collection ids]
   (partitioned

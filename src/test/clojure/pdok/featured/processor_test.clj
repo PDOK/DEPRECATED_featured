@@ -5,7 +5,8 @@
             [pdok.featured.persistence :as pers]
             [pdok.featured.projectors :as proj]
             [clojure.test :refer :all]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io])
+  (:import (pdok.featured GeometryAttribute)))
 
 (defrecord MockedPersistence [streams streams-n state events-n collections]
   pers/ProcessorPersistence
@@ -68,12 +69,14 @@
 
 (def default-validity (tl/local-now))
 
+(def dummy-geometry (GeometryAttribute. "dummy" "dummy"))
+
 (def valid-new-feature
   {:action :new
    :collection "collection-1"
    :id "valid-feature"
    :validity default-validity
-   :geometry {:type "dummy"}
+   :geometry dummy-geometry
    :attributes {:field1 "test"}})
 
 (def valid-change-feature
@@ -82,7 +85,7 @@
    :id "valid-feature"
    :validity default-validity
    :current-validity default-validity
-   :geometry {:type "dummy"}
+   :geometry dummy-geometry
    :attributes {:field2 "test"}})
 
 (defn- init-with-feature [persistence {:keys [collection id action validity]}]

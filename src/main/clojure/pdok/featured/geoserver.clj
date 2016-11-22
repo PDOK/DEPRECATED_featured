@@ -85,8 +85,7 @@
 
 (defn- gs-add-attribute [{:keys [db dataset]} collection attribute-name attribute-value ndims srid]
   (let [table collection
-        pg-type (clj-to-pg-type attribute-value)
-        _ (println attribute-value "-" pg-type)]
+        pg-type (clj-to-pg-type attribute-value)]
     (try
       (if (= "geometry" pg-type)
         (pg/create-geometry-column db dataset collection ndims srid attribute-name)
@@ -100,7 +99,7 @@
   (let [id (:id feature)
         version (:version feature)
         sparse-attributes (all-fields-constructor (:attributes feature))]
-    (let [geometry-attribute (-> feature :geometry util/as-ga)
+    (let [geometry-attribute (-> feature :geometry)
           geometry (proj-fn (f/as-jts geometry-attribute))]
       (when (or geometry import-nil-geometry?)
         (let [geo-group (f/geometry-group geometry-attribute)
@@ -115,7 +114,7 @@
           record)))))
 
 (defn- feature-keys [feature]
-  (let [geometry (-> feature :geometry util/as-ga)
+  (let [geometry (-> feature :geometry)
         attributes (:attributes feature)]
      (cond-> (transient [])
        (f/valid-geometry? geometry)
@@ -125,7 +124,7 @@
 
  (defn- feature-to-update-record [proj-fn feature]
    (let [attributes (:attributes feature)
-         geometry (-> feature :geometry util/as-ga)
+         geometry (-> feature :geometry)
          geo-group (when geometry (f/geometry-group geometry))]
      (cond-> (transient [(:version feature)])
        (f/valid-geometry? geometry)

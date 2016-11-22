@@ -99,7 +99,7 @@
        (-> element first (clojure.string/starts-with? "~#"))))
 
 (defn- geometry-atrribute [type->geometry]
-  (let [type (get type->geometry "type")]
+  (when-let [type (get type->geometry "type")]
     (GeometryAttribute. type (get type->geometry type))))
 
 (defn- evaluate-f [element]
@@ -121,10 +121,16 @@
 (defn- pdok-field [element]
   (get pdok-field-replacements element))
 
+(defn- element-is-main-geometry? [element]
+  (and (vector? element)
+       (= 2 (count element))
+       (= :geometry (first element))))
+
 (defn- replace-fn [element]
   (condp #(%1 %2) element
     element-is-function? (evaluate-f element)
     element-is-pdok-field? (pdok-field element)
+    element-is-main-geometry? [:geometry (-> element second geometry-atrribute)]
     ;; else just return element, replace nothing
     element))
 

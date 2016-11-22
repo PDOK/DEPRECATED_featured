@@ -3,7 +3,7 @@
              [pdok.random :as random]
              [pdok.util :as util]))
 
-(defn gml [arg] (feature/as-gml (util/as-ga arg)))
+(defn gml [arg] (feature/as-gml arg))
 
 (defn simple-gml [arg] (feature/as-simple-gml arg))
 
