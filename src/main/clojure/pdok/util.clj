@@ -36,10 +36,3 @@
          ~t (/ (double (- (. System (nanoTime)) start#)) 1000000.0)]
      ~bench-out
      ret#))
-
-(defn as-ga [geometry]
-  (let [type (get geometry "type")
-        ga (GeometryAttribute. type (get geometry type))]
-    (if-let [tiles (:nl-tiles geometry)]
-      (.setTiles ga tiles))
-    ga))

@@ -1,7 +1,7 @@
 (ns pdok.featured.processor
   (:refer-clojure :exclude [flatten])
   (:require [pdok.random :as random]
-            [pdok.util :refer [with-bench as-ga]]
+            [pdok.util :refer [with-bench]]
             [pdok.featured.feature :as feature]
             [pdok.featured.persistence :as pers]
             [pdok.featured.json-reader :refer :all]
