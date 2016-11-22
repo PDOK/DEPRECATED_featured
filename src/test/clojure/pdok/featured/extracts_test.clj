@@ -1,18 +1,20 @@
 (ns pdok.featured.extracts-test
-   (:require [pdok.featured.json-reader :refer [features-from-stream file-stream]]
-             [pdok.featured.extracts :refer :all]
-             [pdok.featured.template :as template]
-             [pdok.featured.feature :as f]
-             [pdok.featured.config :as config]
-             [pdok.featured.projectors :as p]
-             [clojure.test :refer :all]
-             [clojure.java.io :as io]))
+  (:require [pdok.featured.json-reader :refer [features-from-stream file-stream]]
+            [pdok.featured.extracts :refer :all]
+            [pdok.featured.template :as template]
+            [pdok.featured.feature :as f]
+            [pdok.featured.config :as config]
+            [pdok.featured.projectors :as p]
+            [clojure.test :refer :all]
+            [clojure.java.io :as io])
+  (:import (pdok.featured GeometryAttribute)))
 
 (defn- test-feature [name something other]
-              {"name" name
-               "something" something
-               "other" other
-               "_geometry" {"type" "gml", "gml" "<gml:Polygon xmlns:gml=\"http://www.opengis.net/gml\" srsName=\"EPSG:28992\"><gml:exterior><gml:LinearRing><gml:posList srsDimension=\"2\">10.0 10.0 5.0 10.0 5.0 5.0 10.0 5.0 10.0 10.0</gml:posList></gml:LinearRing></gml:exterior></gml:Polygon>"}})
+  {"name"      name
+   "something" something
+   "other"     other
+   "_geometry" (GeometryAttribute. "gml"
+                                   "<gml:Polygon xmlns:gml=\"http://www.opengis.net/gml\" srsName=\"EPSG:28992\"><gml:exterior><gml:LinearRing><gml:posList srsDimension=\"2\">10.0 10.0 5.0 10.0 5.0 5.0 10.0 5.0 10.0 10.0</gml:posList></gml:LinearRing></gml:exterior></gml:Polygon>")})
 
 (defn two-features [] (list (test-feature "name1" "A" "B")
                              (test-feature "name2" "C" "D")))

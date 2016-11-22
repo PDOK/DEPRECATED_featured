@@ -1,6 +1,7 @@
 (ns pdok.featured.timeline-test
   (:require [pdok.featured.timeline :as timeline]
-            [clojure.test :refer :all]))
+            [clojure.test :refer :all])
+  (:import (pdok.featured GeometryAttribute)))
 
 ;; merge target path feature
 
@@ -8,8 +9,16 @@
   (cond-> {:collection "only-path-should-matter"
            :id id
            :attributes attributes}
-          geometry (assoc :geometry geometry)
+          geometry (assoc :geometry (when geometry (let [ga (GeometryAttribute. (name :dummy) (:dummy geometry))
+                                                         _ (.setTiles ga (:nl-tiles geometry))]
+                                                     ga)))
           version (assoc :version version)))
+
+(def ^{:private true} should-be-geometry
+  (let [ga (GeometryAttribute. (name :dummy) :dummy)
+        _ (.setTiles ga #{666})]
+    ga))
+
 
 (defn- make-root [versions & tiles]
   {:_version (first versions) :_all_versions versions :_tiles (into #{} tiles)})
@@ -35,7 +44,7 @@
         feature (make-feature {:attribute "value"} {:dummy :dummy :nl-tiles #{666}} "not-important" 3)
         merged (#'timeline/merge (make-root '(1) 1) path feature)
         should-be (merge (make-root '(3 1) 1 666)
-                         {:nested1 [(mustafied {:attribute "value"} {:dummy :dummy :nl-tiles #{ 666}} )]})]
+                         {:nested1 [(mustafied {:attribute "value"} should-be-geometry)]})]
     (is (= should-be merged))))
 
 (deftest append-to-empty-vector-merge
@@ -44,7 +53,7 @@
         feature (make-feature {:attribute "value"} {:dummy :dummy :nl-tiles #{666}} "not-important" 3)
         merged (#'timeline/merge starts-with path feature)
         should-be (merge (make-root '(3 1) 1 666)
-                         {:nested1 [(mustafied {:attribute "value"} {:dummy :dummy :nl-tiles #{ 666}} )]})]
+                         {:nested1 [(mustafied {:attribute "value"} should-be-geometry )]})]
     (is (= should-be merged))))
 
 (deftest merge-existing-nested
@@ -53,7 +62,7 @@
         feature (make-feature {:attribute "new-value"} {:dummy :dummy :nl-tiles #{666}} "not-important" 3)
         merged (#'timeline/merge starts-with path feature)
         should-be (merge (make-root '(3 1) 1 666)
-                         {:nested1 [(mustafied {:attribute "new-value" :keep 1} {:dummy :dummy :nl-tiles #{ 666}} )]})]
+                         {:nested1 [(mustafied {:attribute "new-value" :keep 1} should-be-geometry )]})]
     (is (= should-be merged))))
 
 (deftest replace-attr-merge
@@ -62,7 +71,7 @@
         feature (make-feature {:attribute "value"} {:dummy :dummy :nl-tiles #{666}} "not-important" 3)
         merged (#'timeline/merge starts-with path feature)
         should-be (merge (make-root '(3 1) 1 666)
-                         {:nested1 [(mustafied {:attribute "value"} {:dummy :dummy :nl-tiles #{ 666}} )]})]
+                         {:nested1 [(mustafied {:attribute "value"} should-be-geometry )]})]
     (is (= should-be merged))))
 
 (deftest replace-map-merge
@@ -71,7 +80,7 @@
         feature (make-feature {:attribute "value"} {:dummy :dummy :nl-tiles #{666}} "not-important" 3)
         merged (#'timeline/merge starts-with path feature)
         should-be (merge (make-root '(3 1) 1 666)
-                         {:nested1 [(mustafied {:attribute "value"} {:dummy :dummy :nl-tiles #{ 666}} )]})]
+                         {:nested1 [(mustafied {:attribute "value"} should-be-geometry )]})]
     (is (= should-be merged))))
 
 (deftest triple-depth-merge

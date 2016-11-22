@@ -207,10 +207,6 @@
   (with-open [in (io/input-stream extreme-nested)]
     (let [[meta features] (reader/features-from-stream in)
           processor (create-processor)
-          processed (into '() (consume processor features))
-          ]
-      (doseq [p processed]
-        (println "--------------")
-        (println p))
+          processed (into '() (consume processor features))]
       (is (= 4 (count processed)))
       (is (= 0 (count (filter #(:invalid? %) processed)))))))
