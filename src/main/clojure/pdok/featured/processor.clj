@@ -99,6 +99,10 @@
                (apply-non-new-feature-requires-existing-stream-validation persistence)
                (apply-closed-feature-cannot-be-changed-validation persistence)
                (apply-non-new-feature-current-validity-validation persistence))
+          #{:new|change}
+          (->> feature
+               (apply-all-features-validation persistence processor)
+               )
           #{:close}
           (->> feature
                (apply-all-features-validation persistence processor)
@@ -153,6 +157,24 @@
     (append-feature persistence enriched-feature)
     (project! processor proj/change-feature enriched-feature)
     enriched-feature))
+
+(defn- process-new|change-feature [{:keys [persistence] :as processor} feature]
+  (let [{:keys [collection id parent-collection]} feature]
+    (if (stream-exists? persistence feature)
+      (let [enriched-feature (->> (assoc feature :action :change) (with-current-version persistence))]
+        (append-feature persistence enriched-feature)
+        (project! processor proj/change-feature enriched-feature)
+        enriched-feature)
+      (let [feature (assoc feature :action :new)]
+        (when-not (pers/collection-exists? persistence collection parent-collection)
+          (pers/create-collection persistence collection parent-collection)
+          (project! processor proj/new-collection collection parent-collection))
+        (when-not (pers/stream-exists? persistence collection id)
+          (pers/create-stream persistence collection id
+                              (:parent-collection feature) (:parent-id feature) (and (:parent-collection feature) (or (:parent-field feature) (:collection feature)))))
+        (append-feature persistence feature)
+        (project! processor proj/new-feature feature)
+        feature))))
 
 (defn- process-nested-change-feature [processor feature]
   "Nested change is the same a nested new"
@@ -324,6 +346,7 @@
             (condp = (:action vf)
               :new (process-new-feature processor vf)
               :change (process-change-feature processor vf)
+              :new|change (process-new|change-feature processor vf)
               :close (process-close-feature processor vf)
               :delete (process-delete-feature processor vf)
               :nested-new (process-nested-new-feature processor vf)
