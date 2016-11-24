@@ -114,10 +114,8 @@
 (defn changed-features [{:keys [dataset] :as timeline} collection]
    (let [query (str "SELECT cl.collection, cl.feature_id, cl.old_version, cl.version, cl.action, cl.valid_from, tl.feature
  FROM " (qualified-changelog dataset) " AS cl
- LEFT JOIN
-(SELECT feature_id, version, valid_from, feature  FROM "
- (qualified-timeline dataset collection)
-") as tl ON cl.version = tl.version AND cl.valid_from = tl.valid_from
+ LEFT JOIN " (qualified-timeline dataset collection) " AS tl
+ ON cl.version = tl.version AND cl.valid_from = tl.valid_from
  ORDER BY cl.id ASC")]
      (query-with-results-on-channel timeline query upgrade-changelog)))
 
@@ -252,8 +250,9 @@
 
 (defn- sync-version [acc feature]
   (-> acc
+      (assoc :_version (first (:_all_versions acc)))
       (update-in [:_all_versions] (fnil conj '()) (:version feature))
-      (assoc :_version (:version feature))))
+      (update-in [:_all_versions] distinct)))
 
 (defn- sync-valid-to [acc feature]
   (let [changed (assoc acc :_valid_to (:validity feature))]
@@ -309,7 +308,8 @@ VALUES (?, ?, ?, ?, ?, ?)"))
 
 (defn- delete-version-with-valid-from-sql [dataset collection]
   (str "DELETE FROM " (qualified-timeline dataset collection)
-       " WHERE version = ? AND valid_from = ?"))
+       " WHERE version = ? AND valid_from = ? AND id IN (SELECT id FROM " (qualified-timeline dataset collection)
+       " WHERE version = ? AND valid_from = ? ORDER BY id ASC LIMIT 1)"))
 
 (defn- delete-version [{:keys [db dataset]} records]
   "([collection version valid-from] ... )"
@@ -317,7 +317,7 @@ VALUES (?, ?, ?, ?, ?, ?)"))
   (let [per-collection (group-by first records)]
     (doseq [[collection collection-records] per-collection]
       (let [versions-only (map #(vector (nth % 1)) (filter (fn [[_ _ valid-from]] (not valid-from)) collection-records))
-            with-valid-from (map #(drop 1 %) (filter (fn [[_ _ valid-from]] valid-from) collection-records))]
+            with-valid-from (map (fn [[_ ov vf]] [ov vf ov vf]) (filter (fn [[_ _ valid-from]] valid-from) collection-records))]
         (when (seq versions-only)
           (try
             (j/execute! db (cons (delete-version-sql dataset collection) versions-only) :multi? true :transaction? (:transaction? db))
@@ -441,7 +441,7 @@ VALUES (?, ?, ?, ?, ?, ?)"))
                   ;; reset valid-to for new-current.
                   (cache-batched-new (reset-valid-to (sync-valid-from new-current feature)))
                   (batched-append-changelog [(:_collection new-current)
-                                             (:_id new-current) (:_version current) (:_version new-current)
+                                             (:_id new-current) (:_version current) (:_version current)
                                              (:_valid_from current) :close])
                   (batched-append-changelog [(:_collection new-current)
                                              (:_id new-current) nil
