@@ -96,7 +96,7 @@
 (defn- jdbc-delete-versions [db table versions]
   "([version valid_from][version valid_from] ... )"
   (let [versions-only (map #(take 1 %) (filter (fn [[_ valid-from]] (not valid-from)) versions))
-        with-valid-from (map (fn [[ov nv]] [ov nv ov nv]) (filter (fn [[_ valid-from]] valid-from) versions))]
+        with-valid-from (map (fn [[ov vf]] [ov vf ov vf]) (filter (fn [[_ valid-from]] valid-from) versions))]
     (when (seq versions-only)
       (let [query (str "DELETE FROM " extract-schema "." table
                        " WHERE version = ?")]

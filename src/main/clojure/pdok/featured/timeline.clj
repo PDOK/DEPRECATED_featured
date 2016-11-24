@@ -250,9 +250,9 @@
 
 (defn- sync-version [acc feature]
   (-> acc
+      (assoc :_version (first (:_all_versions acc)))
       (update-in [:_all_versions] (fnil conj '()) (:version feature))
-      (update-in [:_all_versions] distinct)
-      (assoc :_version (first (:_all_versions acc)))))
+      (update-in [:_all_versions] distinct)))
 
 (defn- sync-valid-to [acc feature]
   (let [changed (assoc acc :_valid_to (:validity feature))]
@@ -317,7 +317,7 @@ VALUES (?, ?, ?, ?, ?, ?)"))
   (let [per-collection (group-by first records)]
     (doseq [[collection collection-records] per-collection]
       (let [versions-only (map #(vector (nth % 1)) (filter (fn [[_ _ valid-from]] (not valid-from)) collection-records))
-            with-valid-from (map #(vector (nth % 1) (nth % 2) (nth % 1) (nth % 2)) (filter (fn [[_ _ valid-from]] valid-from) collection-records))]
+            with-valid-from (map (fn [[_ ov vf]] [ov vf ov vf]) (filter (fn [[_ _ valid-from]] valid-from) collection-records))]
         (when (seq versions-only)
           (try
             (j/execute! db (cons (delete-version-sql dataset collection) versions-only) :multi? true :transaction? (:transaction? db))
