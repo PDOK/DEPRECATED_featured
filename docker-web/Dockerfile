@@ -4,6 +4,6 @@ ARG version=unknown
 LABEL nl.pdok.application="featured"
 LABEL nl.pdok.version=$version
 
-COPY target/featured-web.jar /opt
+COPY artifacts/featured-web.jar /opt
 WORKDIR /opt
 CMD ["java", "-jar", "featured-web.jar"]
