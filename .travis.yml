@@ -38,18 +38,23 @@ script:
   - $lein with-profile +web-jar build
 
 after_script:
-  - chmod +x .travis/create-docker-snapshot.sh
-  - .travis/create-docker-snapshot.sh
+  - chmod +x .travis/create-docker*snapshot.sh
+  - .travis/create-docker-cli-snapshot.sh
+  - .travis/create-docker-web-snapshot.sh
 
 before_deploy:
   - export VERSION=$(printf $(cat VERSION))
-  - chmod +x .travis/build-releases.sh
-  - chmod +x .travis/create-docker-release.sh
+  - chmod +x .travis/*.sh
   - .travis/build-releases.sh
 
 deploy:
   - provider: script
-    script: .travis/create-docker-release.sh
+    script: .travis/create-docker-cli-release.sh
+    skip_cleanup: true
+    on:
+      tags: true
+  - provider: script
+    script: .travis/create-docker-web-release.sh
     skip_cleanup: true
     on:
       tags: true
