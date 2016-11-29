@@ -105,6 +105,24 @@
   (result-set-read-column [v _ _]
     (into [] (.getArray v))))
 
+
+(defn clj-to-pg-type [clj-value]
+  (let [clj-type (type clj-value)]
+    (condp = clj-type
+      nil "text"
+      pdok.featured.NilAttribute (clj-to-pg-type (NilType. (.-clazz clj-value)))
+      clojure.lang.Keyword "text"
+      clojure.lang.IPersistentMap "text"
+      org.joda.time.DateTime "timestamp with time zone"
+      org.joda.time.LocalDateTime "timestamp without time zone"
+      org.joda.time.LocalDate "date"
+      java.lang.Integer "integer"
+      java.lang.Double "double precision"
+      java.lang.Boolean "boolean"
+      java.util.UUID "uuid"
+      pdok.featured.GeometryAttribute "geometry"
+      "text")))
+
 (def quoted (j/quoted \"))
 
 (defn schema-exists? [db schema]

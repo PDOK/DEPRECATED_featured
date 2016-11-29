@@ -23,23 +23,6 @@
       (conj! target x)
       (recur (conj! target x) (first xs) (rest xs)))))
 
-(defn clj-to-pg-type [clj-value]
-  (let [clj-type (type clj-value)]
-    (condp = clj-type
-      nil "text"
-      pdok.featured.NilAttribute (clj-to-pg-type (NilType. (.-clazz clj-value)))
-      clojure.lang.Keyword "text"
-      clojure.lang.IPersistentMap "text"
-      org.joda.time.DateTime "timestamp with time zone"
-      org.joda.time.LocalDateTime "timestamp without time zone"
-      org.joda.time.LocalDate "date"
-      java.lang.Integer "integer"
-      java.lang.Double "double precision"
-      java.lang.Boolean "boolean"
-      java.util.UUID "uuid"
-      pdok.featured.GeometryAttribute "geometry"
-      "text")))
-
 (defn do-visualization? [options]
   (if (some #{"visualization"} options) true))
 
@@ -85,7 +68,7 @@
 
 (defn- gs-add-attribute [{:keys [db dataset]} collection attribute-name attribute-value ndims srid]
   (let [table collection
-        pg-type (clj-to-pg-type attribute-value)]
+        pg-type (pg/clj-to-pg-type attribute-value)]
     (try
       (if (= "geometry" pg-type)
         (pg/create-geometry-column db dataset collection ndims srid attribute-name)
