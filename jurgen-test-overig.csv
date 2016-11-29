@@ -1,5 +1,0 @@
-test,overig
-feature-id,action,version,tiles,valid-from,old-version,old-tiles,old-valid-from,feature
-a,b,c,,,,,,"[""~#'"",null]"
-a,b,c,,,,,,"[""~#'"",null]"
-12,close,v12,4;3,,,,,"[""^ "",""~:f"",1,""~:d"",2]"
