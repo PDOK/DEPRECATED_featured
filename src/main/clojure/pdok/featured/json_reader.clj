@@ -130,13 +130,13 @@
   (condp #(%1 %2) element
     element-is-function? (evaluate-f element)
     element-is-pdok-field? (pdok-field element)
-    element-is-main-geometry? [:geometry (-> element second geometry-atrribute)]
+    ;; element-is-main-geometry? [:geometry (-> element second geometry-atrribute)]
     ;; else just return element, replace nothing
     element))
 
 (defn- upgrade-data [attributes]
   "Replaces functions with their parsed values"
-  (postwalk replace-fn attributes)
-  )
+  (let [attributes (postwalk replace-fn attributes)]
+     (update-in attributes [:geometry] geometry-atrribute)))
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))
