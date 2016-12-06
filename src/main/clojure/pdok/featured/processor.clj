@@ -438,7 +438,7 @@
          batch-size (or (config/env :processor-batch-size) 10000)]
      (merge {:dataset dataset
              :check-validity-on-delete true
-             :check-existence-on-delete false
+             :check-existence-on-delete true
              :disable-validation false
              :persistence initialized-persistence
              :projectors initialized-projectors
