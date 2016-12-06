@@ -3,6 +3,7 @@
              [api :as api]
              [config :as config]
              [json-reader :refer [features-from-stream file-stream]]
+             [json-writer :as writer]
              [data-fixes :as fixes]
              [processor :as processor :refer [consume shutdown]]
              [persistence :as pers]
@@ -20,14 +21,18 @@
                                no-projectors
                                no-timeline
                                no-state
+                               no-export
                                projection] :as meta}]
   (log/info (str "Configuring:" (when dataset (str " - dataset: " dataset))
                  (when no-projectors " without projectors")
+                 (when no-timeline " without timeline")
                  (when no-state " without state")
+                 (when no-export " without export")
                  (when projection (str " as " projection))))
   (let [persistence (if no-state (pers/make-no-state) (config/persistence))
         projectors (cond-> [] (not no-projectors) (conj (config/projectors persistence :projection projection))
-                           (not no-timeline) (conj (config/timeline persistence)))
+                           (not no-timeline) (conj (config/timeline persistence))
+                           (not no-export) (conj (config/json-writer persistence)))
         processor (processor/create meta dataset persistence projectors)]
     processor))
 

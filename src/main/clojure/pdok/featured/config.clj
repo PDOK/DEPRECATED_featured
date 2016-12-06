@@ -7,7 +7,8 @@
              [projectors :as proj]
              [persistence :as pers]
              [geoserver :as gs]
-             [timeline :as timeline]]
+             [timeline :as timeline]
+             [json-writer :as json-writer]]
             [environ.core :as environ]
              [clojure.core.async :as a
              :refer [<!!]]))
@@ -99,3 +100,5 @@
     (dorun (for [i (range 0 n-workers)]
              (factory-f i)))))
 
+(defn json-writer [persistence]
+  (json-writer/json-writer-projector [persistence]))

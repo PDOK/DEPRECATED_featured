@@ -159,6 +159,7 @@ If n nil => no limit, if collections nil => all collections")
                  :version (:version record)
                  :current-version (:previous_version record)
                  :validity (:validity record)
+                 :current-validity (:previous_validity record)
                  :geometry (transit/from-json (:geometry record))
                  :attributes (transit/from-json (:attributes record)))]
     (>!! c (persistent! f))))
@@ -185,9 +186,11 @@ If n nil => no limit, if collections nil => all collections")
        fs.version,
        fs.previous_version,
        fs.validity,
+       fs2.validity AS previous_validity,
        fs.attributes,
        fs.geometry
-  FROM " (qualified-feature-stream dataset) " fs "
+  FROM " (qualified-feature-stream dataset) " fs
+  LEFT JOIN " (qualified-feature-stream dataset) " fs2 ON fs.previous_version = fs2.version"
   (when (seq collections) (str " WHERE fs.collection in ("
                                (clojure.string/join "," (repeat (count collections) "?"))
                                ")"))
