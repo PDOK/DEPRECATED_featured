@@ -9,9 +9,7 @@
             [clojure.tools.logging :as log]
             [pdok.util :as util])
   (:import (clojure.lang PersistentQueue)
-           (java.sql SQLException)
-           (pdok.postgres NilType)
-           (pdok.featured GeometryAttribute)))
+           (java.sql SQLException)))
 
 (defn- remove-keys [map keys]
   (apply dissoc map keys))
@@ -50,7 +48,7 @@
 
     (pg/create-index db dataset table "_id")
     (doseq [geometry geometries]
-      ((partial pg/create-geometry-column db dataset table ndims srid) geometry)
+      (#(pg/create-column db dataset table %1 pg/geometry-type ndims srid) geometry)
       ((partial pg/create-geo-index db dataset table) geometry))))
 
 (defn- gs-collection-attributes [{:keys [db dataset]} collection]
@@ -67,15 +65,7 @@
     attributes))
 
 (defn- gs-add-attribute [{:keys [db dataset]} collection attribute-name attribute-value ndims srid]
-  (let [table collection
-        pg-type (pg/clj-to-pg-type attribute-value)]
-    (try
-      (if (= "geometry" pg-type)
-        (pg/create-geometry-column db dataset collection ndims srid attribute-name)
-        (pg/add-column db dataset table attribute-name pg-type))
-      (catch SQLException e
-        (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e))
-        (throw e)))))
+  (pg/create-column db dataset collection attribute-name (pg/clj-to-pg-type attribute-value) ndims srid))
 
 (defn- feature-to-sparse-record [proj-fn feature all-fields-constructor import-nil-geometry?]
   ;; could use a valid-geometry? check?! For now not, as-jts return nil if invalid (for gml)

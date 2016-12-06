@@ -105,6 +105,7 @@
   (result-set-read-column [v _ _]
     (into [] (.getArray v))))
 
+(def geometry-type "geometry")
 
 (defn clj-to-pg-type [clj-value]
   (let [clj-type (type clj-value)]
@@ -120,7 +121,7 @@
       java.lang.Double "double precision"
       java.lang.Boolean "boolean"
       java.util.UUID "uuid"
-      pdok.featured.GeometryAttribute "geometry"
+      pdok.featured.GeometryAttribute geometry-type
       "text")))
 
 (def quoted (j/quoted \"))
@@ -169,13 +170,6 @@
 (defn create-geo-index [db schema table & columns]
   (apply create-index* db schema table :gist columns))
 
-(defn create-geometry-column [db schema table ndims srid column]
-  (try
-    (j/query db [(str "SELECT public.AddGeometryColumn ('" schema "', '" table "', '" (-> column name) "', " srid ", 'GEOMETRY', " ndims ")")])
-    (catch java.sql.SQLException e
-      (log/with-logs ['pdok.postgres :error :error] (j/print-sql-exception-chain e))
-      (throw e))))
-
 (defn table-columns [db schema table]
   "Get table columns"
   (j/with-db-connection [c db]
@@ -186,10 +180,22 @@ FROM information_schema.columns
   AND table_name   = ?" schema table])]
       results)))
 
-(defn add-column [db schema collection column-name pg-type]
-  (let [template "ALTER TABLE %s.%s ADD %s %s NULL;"
-        cmd (format template (-> schema name quoted) (-> collection name quoted) (-> column-name name quoted) pg-type)]
-    (j/db-do-commands db cmd)))
+(defn- sql-add-column [schema collection column-name pg-type]
+  (let [template "ALTER TABLE %s.%s ADD %s %s NULL;"]
+    (format template (-> schema name quoted) (-> collection name quoted) (-> column-name name quoted) pg-type)))
+
+(defn- sql-add-geometry-column [schema table ndims srid column]
+    (str "SELECT public.AddGeometryColumn ('" schema "', '" table "', '" (-> column name) "', " srid ", 'GEOMETRY', " ndims ")"))
+
+(defn create-column [db schema table column-name type ndims srid]
+  (let [cmd (if (= geometry-type type)
+              (sql-add-geometry-column schema table ndims srid column-name)
+              (sql-add-column schema table column-name type))]
+    (try
+      (j/db-do-commands db cmd)
+      (catch java.sql.SQLException e
+        (log/with-logs ['pdok.postgres :error :error] (j/print-sql-exception-chain e))
+        (throw e)))))
 
 (defn kv->clause [[k v]]
   (if v
