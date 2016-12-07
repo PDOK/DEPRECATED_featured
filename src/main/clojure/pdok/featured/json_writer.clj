@@ -41,18 +41,12 @@
                   (merge-if-not-nil "_parent_id" (:parent_id feature))
                   (merge-if-not-nil "_parent_field" (:parent_field feature))
                   (merge (:attributes feature)))
-              :value-fn get-value) ",\n")))
-
-(defn- init-root
-  ([feature]
-   (init-root (:collection feature) (:id feature)))
-  ([collection id]
-   {:_collection collection :_id id}))
+              :value-fn get-value) ",\n"))) ;; TODO No ,\n for last feature in file
 
 (defrecord JsonWriterProjector [path-fn]
   proj/Projector
   (proj/init [this _ _]
-    (let [writer (io/writer "D:\\test.json")]
+    (let [writer (io/writer "D:\\test.json")] ;; TODO Add path as command-line argument
       (.write writer "{\"features\":[")
       (assoc this :writer writer)))
   (proj/new-collection [_ _ _])
