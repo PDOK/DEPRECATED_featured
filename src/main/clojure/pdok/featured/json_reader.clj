@@ -1,11 +1,12 @@
 (ns pdok.featured.json-reader
-  (:require [pdok.featured.feature :refer [nilled]]
-   [cheshire [core :as json] [factory :as jfac] [parse :as jparse]]
-   [clj-time [format :as tf] [coerce :as tc]]
-    [clojure.walk :refer [postwalk]])
+  (:require [pdok.featured.feature :refer [nilled as-jts]]
+            [cheshire [core :as json] [factory :as jfac] [parse :as jparse]]
+            [clj-time [format :as tf] [coerce :as tc]]
+            [clojure.walk :refer [postwalk]])
   (:import (com.fasterxml.jackson.core JsonFactory JsonFactory$Feature
                                        JsonParser$Feature JsonParser JsonToken)
-           (org.joda.time DateTime)))
+           (org.joda.time DateTime)
+           (pdok.featured GeometryAttribute)))
 
 (def ^:private pdok-field-replacements
   {"_action" :action "_collection" :collection "_id" :id "_validity" :validity
@@ -97,6 +98,10 @@
        (string? (first element))
        (-> element first (clojure.string/starts-with? "~#"))))
 
+(defn- geometry-atrribute [type->geometry]
+  (let [type (get type->geometry "type")]
+    (GeometryAttribute. type (get type->geometry type))))
+
 (defn- evaluate-f [element]
   (let [[function params] element]
     (case function
@@ -105,6 +110,7 @@
       "~#int"     (if params (int (first params)) (nilled java.lang.Integer))
       "~#boolean" (if params (boolean (first params)) (nilled java.lang.Boolean))
       "~#double"  (if params (double (first params)) (nilled java.lang.Double))
+      "~#geometry" (if params (geometry-atrribute params) (nilled pdok.featured.GeometryAttribute))
       element ; never fail just return element
       ))
   )

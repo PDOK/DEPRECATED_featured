@@ -1,7 +1,7 @@
 (ns pdok.featured.processor
   (:refer-clojure :exclude [flatten])
   (:require [pdok.random :as random]
-            [pdok.util :refer [with-bench]]
+            [pdok.util :refer [with-bench as-ga]]
             [pdok.featured.feature :as feature]
             [pdok.featured.persistence :as pers]
             [pdok.featured.json-reader :refer :all]
@@ -320,6 +320,7 @@
     (if (:invalid? validated)
       (make-seq validated)
       (let [vf (assoc validated :version (random/ordered-UUID))
+            _ (log/info "action" (:action vf) vf)
             processed
             (condp = (:action vf)
               :new (process-new-feature processor vf)
@@ -348,7 +349,8 @@
             (update-in [:collection] str/lower-case))))
 
 (defn pre-process [processor feature]
-  (let [prepped ((comp lower-case collect-attributes) feature)]
+  (let [prepped ((comp lower-case collect-attributes) feature)
+        ]
     (flatten processor prepped)))
 
 (defn- append-feature [persistence feature]
@@ -360,7 +362,9 @@
   (when statistics
     (swap! statistics update :n-processed inc)
     (when (:src feature) (swap! statistics update :n-src inc))
-    (when (:geometry feature) (swap! statistics update :updated-tiles #(clojure.set/union % (tiles/nl (:geometry feature)))))
+    (when (:geometry feature)
+      (let [tiles (-> feature :geometry as-ga tiles/nl)]
+        (swap! statistics update :updated-tiles #(clojure.set/union % tiles))))
     (when (:invalid? feature)
       (swap! statistics update :n-errored inc)
       (swap! statistics update :errored #(conj % (:id feature)))))
