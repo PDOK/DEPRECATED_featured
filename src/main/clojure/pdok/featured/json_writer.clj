@@ -1,64 +1,82 @@
 (ns pdok.featured.json-writer
-  (:require [pdok.featured.projectors :as proj]
-            [clojure.data.json :as json])
+  (:require [pdok.featured.persistence :as pers]
+            [pdok.featured.projectors :as proj]
+            [clojure.data.json :as json]
+            [clojure.java.io :as io])
   (:import (pdok.featured NilAttribute)
-           (org.joda.time LocalDate LocalDateTime)))
+           (java.io Writer)
+           (org.joda.time LocalDate DateTime LocalDateTime)))
 
-(defn- render-map-generic [data]
-  (json/write-str data
-                  :value-fn (fn [key value]
-                              (if (instance? NilAttribute value)
-                                nil ;; TODO: nil LocalDate(Time)s should still have ~#date and ~#moment.
-                                (if (instance? LocalDate value)
-                                  ["~#date" (str value)]
-                                  (if (instance? LocalDateTime value)
-                                    ["~#moment" (str value)]
-                                    value))))))
+(defn- get-value [key value]
+  (if (instance? NilAttribute value)
+    (case (.clazz value)
+      LocalDate ["~#date" nil]
+      DateTime ["~#moment" nil]
+      LocalDateTime ["~#moment" nil]
+      nil)
+    (if (or (= key "_validity") (= key "_current_validity")) ;; Validities are plain strings, not ~#moment
+      (str value)
+      (if (instance? LocalDate value)
+        ["~#date" [(str value)]]
+        (if (instance? LocalDateTime value)
+          ["~#moment" [(str value)]]
+          value)))))
 
-(defn- write-feature [feature]
-  (println
-    (render-map-generic
-      (-> {"_action" (:action feature)
-           "_collection" (:collection feature)
-           "_id" (:id feature)
-           "_validity" (:validity feature)}
-          (merge (if (not (nil? (:current-validity feature)))
-                   {"_current_validity" (:current-validity feature)}
-                   nil))
-          (merge (if (not (nil? (:geometry feature)))
-                   {"_geometry" (:geometry feature)}
-                   nil))
-          (merge (:attributes feature))))))
+(defn- merge-if-not-nil [coll name field]
+  (merge coll (if (not (nil? field))
+                {name field}
+                nil)))
 
-(defrecord JsonWriterProjector [dataset]
+(defn- write-feature [^Writer writer feature]
+  (.write writer
+          (str
+            (json/write-str
+              (-> {"_action" (:action feature)
+                   "_collection" (:collection feature)
+                   "_id" (:id feature)}
+                  (merge-if-not-nil "_validity" (:validity feature)) ;; nil for delete
+                  (merge-if-not-nil "_current_validity" (:current-validity feature)) ;; nil for new
+                  (merge-if-not-nil "_geometry" (:geometry feature))
+                  (merge-if-not-nil "_parent_collection" (:parent_collection feature))
+                  (merge-if-not-nil "_parent_id" (:parent_id feature))
+                  (merge-if-not-nil "_parent_field" (:parent_field feature))
+                  (merge (:attributes feature)))
+              :value-fn get-value) ",\n")))
+
+(defn- init-root
+  ([feature]
+   (init-root (:collection feature) (:id feature)))
+  ([collection id]
+   {:_collection collection :_id id}))
+
+(defrecord JsonWriterProjector [path-fn]
   proj/Projector
-  (proj/init [this for-dataset current-collections]
-    (println "Init")
-    this)
-  (proj/new-collection [this collection parent-collection]
-    (println "New collection")
-    this)
+  (proj/init [this _ _]
+    (let [writer (io/writer "D:\\test.json")]
+      (.write writer "{\"features\":[")
+      (assoc this :writer writer)))
+  (proj/new-collection [_ _ _])
   (proj/flush [this]
-    (println "Flush")
-    this)
+    (.flush (:writer this)))
   (proj/new-feature [this feature]
-    (write-feature feature)
-    this)
+    (let [[[parent_collection parent_id parent_field _]] (path-fn (:collection feature) (:id feature))
+          feature-with-parent (merge feature {:parent_collection parent_collection
+                                              :parent_id parent_id
+                                              :parent_field parent_field})]
+    (write-feature (:writer this) feature-with-parent)))
   (proj/change-feature [this feature]
-    (write-feature feature)
-    this)
+    (proj/new-feature this feature))
   (proj/close-feature [this feature]
-    (write-feature feature)
-    this)
+    (proj/new-feature this feature))
   (proj/delete-feature [this feature]
-    (write-feature feature)
-    this)
+    (proj/new-feature this feature))
   (proj/accept? [_ _]
     true)
   (proj/close [this]
-    (println "Close")
-    this))
+    (let [writer (:writer this)]
+      (.write writer "]}")
+      (.close writer))))
 
 (defn json-writer-projector [config]
-  (let [dataset "unknown-dataset"]
-    (->JsonWriterProjector dataset)))
+  (let [persistence (or (:persistence config) (pers/make-cached-jdbc-processor-persistence config))]
+    (->JsonWriterProjector (partial pers/path persistence))))

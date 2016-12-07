@@ -100,5 +100,8 @@
     (dorun (for [i (range 0 n-workers)]
              (factory-f i)))))
 
-(defn json-writer [persistence]
-  (json-writer/json-writer-projector [persistence]))
+(defn json-writer
+  ([]
+   (json-writer (persistence)))
+  ([persistence]
+   (json-writer/json-writer-projector {:persistence persistence})))
