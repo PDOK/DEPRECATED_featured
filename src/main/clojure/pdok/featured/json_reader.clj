@@ -128,7 +128,7 @@
     ;; else just return element, replace nothing
     element))
 
-(defn- replace-geometry [element]
+(defn- upgrade-geometry [element]
   (if (:geometry element)
     (update element :geometry create-geometry-atrribute)
     element))
@@ -136,6 +136,6 @@
 (defn- upgrade-data [attributes]
   "Replaces functions with their parsed values"
   (let [attributes (postwalk replace-fn attributes)]
-     (postwalk replace-geometry attributes)))
+    (postwalk upgrade-geometry attributes)))
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))
