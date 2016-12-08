@@ -320,7 +320,6 @@
     (if (:invalid? validated)
       (make-seq validated)
       (let [vf (assoc validated :version (random/ordered-UUID))
-            _ (log/info "action" (:action vf) vf)
             processed
             (condp = (:action vf)
               :new (process-new-feature processor vf)
