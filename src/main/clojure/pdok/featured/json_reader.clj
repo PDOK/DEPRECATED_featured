@@ -98,9 +98,9 @@
        (string? (first element))
        (-> element first (clojure.string/starts-with? "~#"))))
 
-(defn- geometry-atrribute [type->geometry]
-  (when-let [type (get type->geometry "type")]
-    (GeometryAttribute. type (get type->geometry type))))
+(defn- create-geometry-atrribute [geometry]
+  (when-let [type (get geometry "type")]
+    (GeometryAttribute. type (get geometry type))))
 
 (defn- evaluate-f [element]
   (let [[function params] element]
@@ -110,7 +110,7 @@
       "~#int"     (if params (int (first params)) (nilled java.lang.Integer))
       "~#boolean" (if params (boolean (first params)) (nilled java.lang.Boolean))
       "~#double"  (if params (double (first params)) (nilled java.lang.Double))
-      "~#geometry" (if params (geometry-atrribute params) (nilled pdok.featured.GeometryAttribute))
+      "~#geometry" (if params (create-geometry-atrribute params) (nilled pdok.featured.GeometryAttribute))
       element ; never fail just return element
       ))
   )
@@ -130,7 +130,7 @@
 
 (defn- replace-geometry [element]
   (if (:geometry element)
-    (update element :geometry geometry-atrribute)
+    (update element :geometry create-geometry-atrribute)
     element))
 
 (defn- upgrade-data [attributes]
