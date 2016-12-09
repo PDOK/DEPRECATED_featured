@@ -179,19 +179,55 @@ If n nil => no limit, if collections nil => all collections")
                           (jdbc-count-records pers collections))
         offset (when n (if (> n n-records) 0 (- n-records n)))
         _ (when offset (log/debug "using offset" offset))
-        query (str "SELECT fs.id,
+        query (str "WITH fs_with_parent AS (
+  SELECT fs.*,
+         CASE WHEN f2.parent_collection IS NOT NULL THEN f2.parent_collection ELSE f.parent_collection END AS parent_collection,
+         CASE WHEN f2.parent_id IS NOT NULL THEN f2.parent_id ELSE f.parent_id END AS parent_id,
+         CASE WHEN f2.parent_field IS NOT NULL THEN f2.parent_field ELSE f.parent_field END AS parent_field
+  FROM " (qualified-feature-stream dataset) " fs
+  JOIN " (qualified-features dataset) " f ON fs.feature_id = f.feature_id
+  LEFT JOIN " (qualified-features dataset) " f2 ON f.parent_id = f2.feature_id
+),
+
+fs_with_last_parent_action AS (
+  SELECT fs.id,
+         fs.collection,
+         fs.feature_id,
+         fs.action,
+         fs.version,
+         fs.previous_version,
+         fs.validity,
+         fs.attributes,
+         fs.geometry,
+         fs2.action AS last_parent_action
+  FROM fs_with_parent fs
+  LEFT JOIN " (qualified-feature-stream dataset) " fs2 ON fs.id > fs2.id AND fs2.collection = fs.parent_collection AND fs2.feature_id = fs.parent_id AND NOT EXISTS (
+      SELECT *
+      FROM " (qualified-feature-stream dataset) " fs3
+      WHERE fs.id > fs3.id AND fs3.id > fs2.id AND fs3.collection = fs.parent_collection AND fs3.feature_id = fs.parent_id)
+),
+
+fs_with_previous_version AS (
+  SELECT fs.*,
+         fs2.validity AS previous_validity
+  FROM fs_with_last_parent_action fs
+  LEFT JOIN " (qualified-feature-stream dataset) " fs2 ON fs.previous_version = fs2.version
+)
+
+SELECT fs.id,
        fs.collection,
        fs.feature_id,
        fs.action,
        fs.version,
        fs.previous_version,
        fs.validity,
-       fs2.validity AS previous_validity,
-       fs.attributes,
+       fs.previous_validity,
+       CASE WHEN fs.action = 'close' AND fs.validity = fs.previous_validity THEN NULL ELSE fs.attributes END,
        fs.geometry
-  FROM " (qualified-feature-stream dataset) " fs
-  LEFT JOIN " (qualified-feature-stream dataset) " fs2 ON fs.previous_version = fs2.version"
-  (when (seq collections) (str " WHERE fs.collection in ("
+FROM fs_with_previous_version fs
+WHERE NOT ((fs.action = 'close' OR fs.action = 'delete') AND fs.last_parent_action IS NOT NULL AND fs.action = fs.last_parent_action) -- child elements are automatically closed/deleted when the parent is closed/deleted
+AND NOT (fs.action = 'close' AND fs.last_parent_action IS NOT NULL AND fs.last_parent_action = 'change' AND array_length(string_to_array(fs.collection, '$'), 1) = 3)"
+  (when (seq collections) (str " AND fs.collection in ("
                                (clojure.string/join "," (repeat (count collections) "?"))
                                ")"))
   " ORDER BY id ASC"

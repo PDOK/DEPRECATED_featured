@@ -53,11 +53,11 @@
   (proj/flush [this]
     (.flush (:writer this)))
   (proj/new-feature [this feature]
-    (let [[[parent_collection parent_id parent_field _]] (path-fn (:collection feature) (:id feature))
+    (let [[parent_collection parent_id parent_field _] (last (path-fn (:collection feature) (:id feature)))
           feature-with-parent (merge feature {:parent_collection parent_collection
                                               :parent_id parent_id
                                               :parent_field parent_field})]
-    (write-feature (:writer this) feature-with-parent)))
+      (write-feature (:writer this) feature-with-parent)))
   (proj/change-feature [this feature]
     (proj/new-feature this feature))
   (proj/close-feature [this feature]
