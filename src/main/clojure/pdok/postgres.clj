@@ -180,22 +180,18 @@ FROM information_schema.columns
   AND table_name   = ?" schema table])]
       results)))
 
-(defn- sql-add-column [schema collection column-name pg-type]
-  (let [template "ALTER TABLE %s.%s ADD %s %s NULL;"]
-    (format template (-> schema name quoted) (-> collection name quoted) (-> column-name name quoted) pg-type)))
-
-(defn- sql-add-geometry-column [schema table ndims srid column]
-    (str "SELECT public.AddGeometryColumn ('" schema "', '" table "', '" (-> column name) "', " srid ", 'GEOMETRY', " ndims ")"))
+(defn- execute-checked-sql [db cmd]
+  (try
+    (j/db-do-commands db cmd)
+    (catch java.sql.SQLException e
+      (log/with-logs ['pdok.postgres :error :error] (j/print-sql-exception-chain e))
+      (throw e))))
 
 (defn create-column [db schema table column-name type ndims srid]
-  (let [cmd (if (= geometry-type type)
-              (sql-add-geometry-column schema table ndims srid column-name)
-              (sql-add-column schema table column-name type))]
-    (try
-      (j/db-do-commands db cmd)
-      (catch java.sql.SQLException e
-        (log/with-logs ['pdok.postgres :error :error] (j/print-sql-exception-chain e))
-        (throw e)))))
+  (let [cmd (condp = type
+              geometry-type (str "SELECT public.AddGeometryColumn ('" schema "', '" table "', '" (-> column-name name) "', " srid ", 'GEOMETRY', " ndims ")")
+              (format "ALTER TABLE %s.%s ADD %s %s NULL;" (-> schema name quoted) (-> table name quoted) (-> column-name name quoted) type))]
+    (execute-checked-sql db cmd)))
 
 (defn kv->clause [[k v]]
   (if v
