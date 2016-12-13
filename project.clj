@@ -14,7 +14,8 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :repositories [["osgeo" {:url "http://download.osgeo.org/webdav/geotools/" :snapshots false}]
-                 ["local" "file:repo"]]
+                 ["local" "file:repo"]
+                 ["oss mirror" "https://oss.sonatype.org/content/groups/public/"]]
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [cheshire "5.5.0"]
                  [clj-time "0.11.0"]
@@ -41,7 +42,7 @@
                  [prismatic/schema "0.4.3"]
                  [ring/ring-defaults "0.1.5"]
                  [ring/ring-json "0.3.1"]
-                 [nl.pdok/featured-shared "1.0-rc4"]]
+                 [nl.pdok/featured-shared "1.0-rc6"]]
   :plugins [[lein-ring "0.9.6" ]
             [lein-filegen "0.1.0-SNAPSHOT"]]
   :ring {:handler pdok.featured.api/app
