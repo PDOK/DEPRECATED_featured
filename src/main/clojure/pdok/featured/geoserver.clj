@@ -6,7 +6,8 @@
             [pdok.postgres :as pg]
             [clojure.java.jdbc :as j]
             [clojure.string :as str]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [pdok.util :as util])
   (:import (clojure.lang PersistentQueue)
            (java.sql SQLException)))
 
@@ -19,7 +20,6 @@
     (if (empty? xs)
       (conj! target x)
       (recur (conj! target x) (first xs) (rest xs)))))
-
 
 (defn do-visualization? [options]
   (if (some #{"visualization"} options) true))
@@ -48,11 +48,10 @@
 
     (pg/create-index db dataset table "_id")
     (doseq [geometry geometries]
-      ((partial pg/create-geometry-column db dataset table ndims srid) geometry)
+      (#(pg/create-column db dataset table %1 pg/geometry-type ndims srid) geometry)
       ((partial pg/create-geo-index db dataset table) geometry))))
 
 (defn- gs-collection-attributes [{:keys [db dataset]} collection]
-  ;(println "attributes")
   (let [table collection
         columns (pg/table-columns db dataset table)
         no-defaults (filter #(not (some #{(:column_name %)} ["gid"
@@ -65,22 +64,18 @@
         attributes (reduce (fn [acc c] (conj acc c)) #{} (map #(:column_name %) no-defaults))]
     attributes))
 
-(defn- gs-add-attribute [{:keys [db dataset]} collection attribute-name attribute-value]
-  (let [table collection]
-    (try
-      (pg/add-column db dataset table attribute-name attribute-value)
-      (catch SQLException e
-        (log/with-logs ['pdok.featured.projectors :error :error] (j/print-sql-exception-chain e))
-        (throw e)))))
+(defn- gs-add-attribute [{:keys [db dataset]} collection attribute-name attribute-value ndims srid]
+  (pg/create-column db dataset collection attribute-name (pg/clj-to-pg-type attribute-value) ndims srid))
 
 (defn- feature-to-sparse-record [proj-fn feature all-fields-constructor import-nil-geometry?]
   ;; could use a valid-geometry? check?! For now not, as-jts return nil if invalid (for gml)
   (let [id (:id feature)
         version (:version feature)
         sparse-attributes (all-fields-constructor (:attributes feature))]
-    (let [geometry (proj-fn (-> feature (:geometry) (f/as-jts)))]
+    (let [geometry-attribute (-> feature :geometry)
+          geometry (proj-fn (f/as-jts geometry-attribute))]
       (when (or geometry import-nil-geometry?)
-        (let [geo-group (f/geometry-group (:geometry feature))
+        (let [geo-group (f/geometry-group geometry-attribute)
               record (concat [id
                               version
                               (when (= :point geo-group) geometry)
@@ -92,7 +87,7 @@
           record)))))
 
 (defn- feature-keys [feature]
-  (let [geometry (:geometry feature)
+  (let [geometry (-> feature :geometry)
         attributes (:attributes feature)]
      (cond-> (transient [])
        (f/valid-geometry? geometry)
@@ -102,7 +97,7 @@
 
  (defn- feature-to-update-record [proj-fn feature]
    (let [attributes (:attributes feature)
-         geometry (:geometry feature)
+         geometry (-> feature :geometry)
          geo-group (when geometry (f/geometry-group geometry))]
      (cond-> (transient [(:version feature)])
        (f/valid-geometry? geometry)
@@ -240,8 +235,7 @@
       (let [{:keys [collection attributes]} feature
             cached-collection-exists? (cached cache gs-collection-exists? this)
             cached-collection-attributes (cached cache gs-collection-attributes this)
-            batched-add-feature
-            (batched insert-batch insert-batch-size flush-fn)]
+            batched-add-feature (batched insert-batch insert-batch-size flush-fn)]
         (do (when (not (cached-collection-exists? collection))
               (checked (gs-create-collection this ndims srid collection)
                        (gs-collection-exists? this collection))
@@ -249,7 +243,7 @@
             (let [current-attributes (cached-collection-attributes collection)
                   new-attributes (filter #(not (get current-attributes (first %))) attributes)]
               (doseq [[attr-key attr-value] new-attributes]
-                (checked (gs-add-attribute this collection attr-key attr-value)
+                (checked (gs-add-attribute this collection attr-key attr-value ndims srid )
                          (get (gs-collection-attributes this collection) attr-key)))
               (when (not-empty new-attributes) (cached-collection-attributes :reload collection)))
             (batched-add-feature feature)))))
@@ -261,7 +255,7 @@
         (let [current-attributes (cached-collection-attributes collection)
               new-attributes (filter #(not (get current-attributes (first %))) attributes)]
           (doseq [[attr-key attr-value] new-attributes]
-            (checked (gs-add-attribute this collection attr-key attr-value)
+            (checked (gs-add-attribute this collection attr-key attr-value ndims srid )
                      (get (gs-collection-attributes this collection) attr-key)))
           (when (not-empty new-attributes) (cached-collection-attributes :reload collection)))
         (batched-update-feature feature))))

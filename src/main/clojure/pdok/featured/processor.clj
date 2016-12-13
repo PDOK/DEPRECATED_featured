@@ -348,7 +348,8 @@
             (update-in [:collection] str/lower-case))))
 
 (defn pre-process [processor feature]
-  (let [prepped ((comp lower-case collect-attributes) feature)]
+  (let [prepped ((comp lower-case collect-attributes) feature)
+        ]
     (flatten processor prepped)))
 
 (defn- append-feature [persistence feature]
@@ -360,7 +361,9 @@
   (when statistics
     (swap! statistics update :n-processed inc)
     (when (:src feature) (swap! statistics update :n-src inc))
-    (when (:geometry feature) (swap! statistics update :updated-tiles #(clojure.set/union % (tiles/nl (:geometry feature)))))
+    (when (:geometry feature)
+      (let [tiles (-> feature :geometry tiles/nl)]
+        (swap! statistics update :updated-tiles #(clojure.set/union % tiles))))
     (when (:invalid? feature)
       (swap! statistics update :n-errored inc)
       (swap! statistics update :errored #(conj % (:id feature)))))

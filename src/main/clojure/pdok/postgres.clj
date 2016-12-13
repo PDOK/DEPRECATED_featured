@@ -2,7 +2,8 @@
   (:require [clojure.java.jdbc :as j]
             [clj-time [coerce :as tc]]
             [clojure.tools.logging :as log]
-            [pdok.transit :as transit])
+            [pdok.transit :as transit]
+            [pdok.featured.feature :as f])
   (:import [com.vividsolutions.jts.io WKTWriter]
            [java.util Calendar TimeZone]
            [org.joda.time DateTimeZone LocalDate LocalDateTime]
@@ -23,13 +24,14 @@
   (sql-value [v] (tc/to-sql-time v))
   org.joda.time.LocalDate
   (sql-value [v] (tc/to-sql-date v))
+  pdok.featured.GeometryAttribute
+  (sql-value [v] (-> v f/as-jts j/sql-value))
   com.vividsolutions.jts.geom.Geometry
   (sql-value [v] (str "SRID=" (.getSRID v) ";" (.write ^WKTWriter wkt-writer v)))
   clojure.lang.Keyword
   (sql-value [v] (name v))
   clojure.lang.IPersistentMap
   (sql-value [v] (transit/to-json v)))
-
 
 (deftype NilType [clazz]
   j/ISQLValue
@@ -48,6 +50,9 @@
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
     (.setDate s i (j/sql-value v) utcCal))
   java.util.UUID
+  (set-parameter [v ^java.sql.PreparedStatement s ^long i]
+    (.setObject s i (j/sql-value v) java.sql.Types/OTHER))
+  pdok.featured.GeometryAttribute
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
     (.setObject s i (j/sql-value v) java.sql.Types/OTHER))
   com.vividsolutions.jts.geom.Geometry
@@ -100,11 +105,13 @@
   (result-set-read-column [v _ _]
     (into [] (.getArray v))))
 
+(def geometry-type "geometry")
+
 (defn clj-to-pg-type [clj-value]
   (let [clj-type (type clj-value)]
     (condp = clj-type
       nil "text"
-      NilAttribute (clj-to-pg-type (NilType. (.-clazz ^NilAttribute clj-value)))
+      pdok.featured.NilAttribute (clj-to-pg-type (NilType. (.-clazz clj-value)))
       clojure.lang.Keyword "text"
       clojure.lang.IPersistentMap "text"
       org.joda.time.DateTime "timestamp with time zone"
@@ -114,6 +121,7 @@
       java.lang.Double "double precision"
       java.lang.Boolean "boolean"
       java.util.UUID "uuid"
+      pdok.featured.GeometryAttribute geometry-type
       "text")))
 
 (def quoted (j/quoted \"))
@@ -162,13 +170,6 @@
 (defn create-geo-index [db schema table & columns]
   (apply create-index* db schema table :gist columns))
 
-(defn create-geometry-column [db schema table ndims srid column]
-  (try
-    (j/query db [(str "SELECT public.AddGeometryColumn ('" schema "', '" table "', '" (-> column name) "', " srid ", 'GEOMETRY', " ndims ")")])
-    (catch java.sql.SQLException e
-      (log/with-logs ['pdok.postgres :error :error] (j/print-sql-exception-chain e))
-      (throw e))))
-
 (defn table-columns [db schema table]
   "Get table columns"
   (j/with-db-connection [c db]
@@ -179,11 +180,18 @@ FROM information_schema.columns
   AND table_name   = ?" schema table])]
       results)))
 
-(defn add-column [db schema collection column-name column-value]
-  (let [template "ALTER TABLE %s.%s ADD %s %s NULL;"
-        clj-type (clj-to-pg-type column-value)
-        cmd (format template (-> schema name quoted) (-> collection name quoted) (-> column-name name quoted) clj-type)]
-    (j/db-do-commands db cmd)))
+(defn- execute-checked-sql [db cmd]
+  (try
+    (j/db-do-commands db cmd)
+    (catch java.sql.SQLException e
+      (log/with-logs ['pdok.postgres :error :error] (j/print-sql-exception-chain e))
+      (throw e))))
+
+(defn create-column [db schema table column-name type ndims srid]
+  (let [cmd (condp = type
+              geometry-type (str "SELECT public.AddGeometryColumn ('" schema "', '" table "', '" (-> column-name name) "', " srid ", 'GEOMETRY', " ndims ")")
+              (format "ALTER TABLE %s.%s ADD %s %s NULL;" (-> schema name quoted) (-> table name quoted) (-> column-name name quoted) type))]
+    (execute-checked-sql db cmd)))
 
 (defn kv->clause [[k v]]
   (if v

@@ -1,6 +1,7 @@
 (ns pdok.featured.mustache-functions
    (:require [pdok.featured.feature :as feature]
-             [pdok.random :as random]))
+             [pdok.random :as random]
+             [pdok.util :as util]))
 
 (defn gml [arg] (feature/as-gml arg))
 

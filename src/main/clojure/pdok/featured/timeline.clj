@@ -242,7 +242,7 @@
          merged (merge* target (:action feature) keyworded-path mustafied)
          merged (assoc merged :_version (:version feature))
          merged (update-in merged [:_all_versions] (fnil conj '()) (:version feature))
-         merged (update merged :_tiles #((fnil clojure.set/union #{}) % (tiles/nl (:geometry feature))))]
+         merged (update merged :_tiles #((fnil clojure.set/union #{}) % (-> feature :geometry tiles/nl)))]
      merged)))
 
 (defn- sync-valid-from [acc feature]

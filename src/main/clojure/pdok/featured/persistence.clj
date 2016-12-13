@@ -293,15 +293,16 @@ If n nil => no limit, if collections nil => all collections")
 
 (defn- jdbc-insert
   ([{:keys [db dataset]} entries]
-   (with-bench t (log/debug "Inserted" (count entries) "events in" t "ms")
-     (try (j/with-db-connection [c db]
-            (apply
-             (partial j/insert! c (qualified-feature-stream dataset) :transaction? (:transaction? db)
-                      [:version :previous_version :action :collection :feature_id :validity :geometry :attributes])
-             entries))
-          (catch SQLException e
-            (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
-            (throw e))))))
+   (let [ entries (map (fn [entry] (-> entry vec (update 6 transit/to-json))) entries)]
+     (with-bench t (log/debug "Inserted" (count entries) "events in" t "ms")
+                 (try (j/with-db-connection [c db]
+                                            (apply
+                                              (partial j/insert! c (qualified-feature-stream dataset) :transaction? (:transaction? db)
+                                                       [:version :previous_version :action :collection :feature_id :validity :geometry :attributes])
+                                              entries))
+                      (catch SQLException e
+                        (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+                        (throw e)))))))
 
 (defn- jdbc-load-cache [{:keys [db dataset]} collection ids]
   (partitioned
