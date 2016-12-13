@@ -8,7 +8,7 @@ branches:
     - docker_image
 
 addons:
-  postgresql: "9.4"
+  postgresql: "9.5"
 
 jdk:
   - oraclejdk8
@@ -21,6 +21,8 @@ install:
   - curl https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein > $HOME/lein
   - chmod u+x $HOME/lein
   - export lein=$HOME/lein
+  - sudo apt-get install -y postgresql-9.5-postgis-2.3
+  - sudo service postgresql restart
 
 before_script:
   - psql -c 'create database pdok;' -U postgres
