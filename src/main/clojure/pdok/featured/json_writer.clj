@@ -5,9 +5,9 @@
             [clojure.java.io :as io])
   (:import (pdok.featured NilAttribute)
            (java.io Writer)
-           (org.joda.time LocalDate DateTime LocalDateTime)))
+           (org.joda.time LocalDate DateTime LocalDateTime DateTimeZone)))
 
-(defn- get-value [key value]
+(defn- get-value [fix-timezone key value]
   (if (instance? NilAttribute value)
     (case (.clazz value)
       LocalDate ["~#date" nil]
@@ -17,15 +17,26 @@
     (if (or (= key "_validity") (= key "_current_validity")) ;; Validities are plain strings, not ~#moment
       (str value)
       (if (instance? LocalDate value)
-        ["~#date" [(str value)]]
+        ["~#date" [(str value)]] ;; The exact timestamp for dates is also different if fix-timezone is true,
+                                 ;; but they're deserialized (rounded) to the same date as when fix-timezone is false
         (if (instance? LocalDateTime value)
-          ["~#moment" [(str value)]]
+          ["~#moment" [(str (if fix-timezone
+                              (.toLocalDateTime (.toDateTime (.toDateTime value) (DateTimeZone/UTC)))
+                              value))]]
           value)))))
 
 (defn- merge-if-not-nil [coll name field]
   (merge coll (if (not (nil? field))
                 {name field}
                 nil)))
+
+(defn- fix-timezone? [feature]
+  (let [^LocalDateTime validity (:validity feature)
+        ^LocalDateTime lv_publicatiedatum (get (:attributes feature) "lv-publicatiedatum")
+        offset (if (and (not (nil? validity)) (not (nil? lv_publicatiedatum)))
+                 (- (.getTime (.toDate validity)) (.getTime (.toDate lv_publicatiedatum)))
+                 0)]
+    (< offset 0)))
 
 (defn- write-feature [^Writer writer feature]
   (.write writer
@@ -41,7 +52,7 @@
                   (merge-if-not-nil "_parent_id" (:parent_id feature))
                   (merge-if-not-nil "_parent_field" (:parent_field feature))
                   (merge (:attributes feature)))
-              :value-fn get-value) ",\n"))) ;; TODO No ,\n for last feature in file
+              :value-fn (partial get-value (fix-timezone? feature))) ",\n"))) ;; TODO No ,\n for last feature in file
 
 (defrecord JsonWriterProjector [path-fn]
   proj/Projector
