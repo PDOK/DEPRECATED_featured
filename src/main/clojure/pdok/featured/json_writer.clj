@@ -2,10 +2,11 @@
   (:require [pdok.featured.persistence :as pers]
             [pdok.featured.projectors :as proj]
             [clojure.data.json :as json]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [clj-time [coerce :as tc]])
   (:import (pdok.featured NilAttribute)
            (java.io Writer)
-           (org.joda.time LocalDate DateTime LocalDateTime DateTimeZone)))
+           (org.joda.time LocalDate DateTime LocalDateTime)))
 
 (defn- get-value [fix-timezone key value]
   (if (instance? NilAttribute value)
@@ -21,7 +22,7 @@
                                  ;; but they're deserialized (rounded) to the same date as when fix-timezone is false
         (if (instance? LocalDateTime value)
           ["~#moment" [(str (if fix-timezone
-                              (.toLocalDateTime (.toDateTime (.toDateTime value) (DateTimeZone/UTC)))
+                              (LocalDateTime. (tc/to-long value))
                               value))]]
           value)))))
 
@@ -31,12 +32,12 @@
                 nil)))
 
 (defn- fix-timezone? [feature]
-  (let [^LocalDateTime validity (:validity feature)
-        ^LocalDateTime lv_publicatiedatum (get (:attributes feature) "lv-publicatiedatum")
+  (let [validity (tc/to-long (:validity feature))
+        lv_publicatiedatum (tc/to-long (get (:attributes feature) "lv-publicatiedatum"))
         offset (if (and (not (nil? validity)) (not (nil? lv_publicatiedatum)))
-                 (- (.getTime (.toDate validity)) (.getTime (.toDate lv_publicatiedatum)))
+                 (- validity lv_publicatiedatum)
                  0)]
-    (< offset 0)))
+    (> offset 999)))
 
 (defn- write-feature [^Writer writer feature]
   (.write writer
