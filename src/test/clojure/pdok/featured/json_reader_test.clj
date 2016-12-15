@@ -5,8 +5,14 @@
   (:import (pdok.featured GeometryAttribute)))
 
 (deftest date-time-with-timezone-to-local
-  (let [datetimestring "2016-01-01T12:00:00.000+02:00"
+  (let [datetimestring "2016-01-01T12:00:00.000+01:00"
         required (time/local-date-time 2016 1 1 12 0 0 0)
+        parsed (parse-time datetimestring)]
+    (is (= required parsed))))
+
+(deftest date-time-with-z-to-local
+  (let [datetimestring "2016-01-01T12:00:00.000Z"
+        required (time/local-date-time 2016 1 1 13 0 0 0)
         parsed (parse-time datetimestring)]
     (is (= required parsed))))
 
