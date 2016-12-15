@@ -423,3 +423,15 @@
                                            (:extracts results))
                    (test-geoserver "col-1" 0)
                    (test-geoserver "col-1$nested" 0))
+
+(defpermutatedtest new_or_change "new_or_change" results
+                   (is (= 3 (:n-processed (:stats results))))
+                   (is (= 0 (:n-errored (:stats results))))
+                   (test-persistence {:events 3 :features 1})
+                   (test-timeline {:timeline {:n 3}
+                                   :timeline-changelog {:n-new 3 :n-close 2}}
+                                  (:changelog-counts results))
+                   (test-timeline->extract {:n-extracts 3
+                                            :n-valid-to 2}
+                                           (:extracts results))
+                   (test-geoserver 1))

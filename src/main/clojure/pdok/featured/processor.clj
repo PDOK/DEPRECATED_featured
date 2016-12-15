@@ -99,6 +99,10 @@
                (apply-non-new-feature-requires-existing-stream-validation persistence)
                (apply-closed-feature-cannot-be-changed-validation persistence)
                (apply-non-new-feature-current-validity-validation persistence))
+          #{:new|change}
+          (->> feature
+               (apply-all-features-validation persistence processor)
+               )
           #{:close}
           (->> feature
                (apply-all-features-validation persistence processor)
@@ -153,6 +157,11 @@
     (append-feature persistence enriched-feature)
     (project! processor proj/change-feature enriched-feature)
     enriched-feature))
+
+(defn- process-new|change-feature [{:keys [persistence] :as processor} feature]
+  (if (stream-exists? persistence feature)
+    (process-change-feature processor (assoc feature :action :change))
+    (process-new-feature processor (assoc feature :action :new))))
 
 (defn- process-nested-change-feature [processor feature]
   "Nested change is the same a nested new"
@@ -324,6 +333,7 @@
             (condp = (:action vf)
               :new (process-new-feature processor vf)
               :change (process-change-feature processor vf)
+              :new|change (process-new|change-feature processor vf)
               :close (process-close-feature processor vf)
               :delete (process-delete-feature processor vf)
               :nested-new (process-nested-new-feature processor vf)
