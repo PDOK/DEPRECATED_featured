@@ -21,18 +21,18 @@
                                no-projectors
                                no-timeline
                                no-state
-                               no-export
+                               export
                                projection] :as meta}]
   (log/info (str "Configuring:" (when dataset (str " - dataset: " dataset))
                  (when no-projectors " without projectors")
                  (when no-timeline " without timeline")
                  (when no-state " without state")
-                 (when no-export " without export")
+                 (when export " with export")
                  (when projection (str " as " projection))))
   (let [persistence (if no-state (pers/make-no-state) (config/persistence))
         projectors (cond-> [] (not no-projectors) (conj (config/projectors persistence :projection projection))
                            (not no-timeline) (conj (config/timeline persistence))
-                           (not no-export) (conj (config/json-writer persistence)))
+                           export (conj (config/json-writer persistence export)))
         processor (processor/create meta dataset persistence projectors)]
     processor))
 
@@ -99,6 +99,10 @@
         (if (not (:dataset options))
           (exit 1 "fix requires dataset")
           (execute-fix options))
+      (:export options)
+        (if (not (:dataset options))
+          (exit 1 "export requires dataset")
+          (replay (merge options {:no-projectors true :no-timeline true})))
       (:replay options)
         (if (not (:dataset options))
           (exit 1 "replaying requires dataset")
@@ -125,6 +129,7 @@
    [nil "--projection PROJ" "RD / ETRS89 / SOURCE"]
    ["-r" "--replay [N/root-collection]" "Replay last N events or all events from root-collection tree from persistence to projectors"]
    [nil "--clear-timeline-changelog" "Clear timeline changelog for dataset"]
+   ["-e" "--export [file name]" "Export events from persistence to original JSON (use with -r)"]
    [nil "--single-processor" "One processor for all files, reads meta data of first file only."]
    [nil "--fix FIXNAME" "Execute fix"]
    [nil "--perform" "Perform fix in combination with --fix" ]

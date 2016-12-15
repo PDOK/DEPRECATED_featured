@@ -101,7 +101,7 @@
              (factory-f i)))))
 
 (defn json-writer
-  ([]
-   (json-writer (persistence)))
-  ([persistence]
-   (json-writer/json-writer-projector {:persistence persistence})))
+  ([filename]
+   (json-writer (persistence) filename))
+  ([persistence filename]
+   (json-writer/json-writer-projector {:persistence persistence :filename filename})))

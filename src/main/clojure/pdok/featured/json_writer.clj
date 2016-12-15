@@ -55,10 +55,10 @@
                   (merge (:attributes feature)))
               :value-fn (partial get-value (fix-timezone? feature))) ",\n"))) ;; TODO No ,\n for last feature in file
 
-(defrecord JsonWriterProjector [path-fn]
+(defrecord JsonWriterProjector [path-fn filename]
   proj/Projector
   (proj/init [this _ _]
-    (let [writer (io/writer "D:\\test.json")] ;; TODO Add path as command-line argument
+    (let [writer (io/writer filename)]
       (.write writer "{\"features\":[")
       (assoc this :writer writer)))
   (proj/new-collection [_ _ _])
@@ -84,5 +84,6 @@
       (.close writer))))
 
 (defn json-writer-projector [config]
-  (let [persistence (or (:persistence config) (pers/make-cached-jdbc-processor-persistence config))]
-    (->JsonWriterProjector (partial pers/path persistence))))
+  (let [persistence (or (:persistence config) (pers/make-cached-jdbc-processor-persistence config))
+        filename (or (:filename config) "D:\\test.json")]
+    (->JsonWriterProjector (partial pers/path persistence) filename)))
