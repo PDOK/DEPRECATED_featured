@@ -98,9 +98,13 @@
        (string? (first element))
        (-> element first (clojure.string/starts-with? "~#"))))
 
-(defn- create-geometry-atrribute [geometry]
-  (when-let [type (get geometry "type")]
-    (GeometryAttribute. type (get geometry type))))
+(defn- get-valid-srid [geometry]
+  (if-let [srid (get geometry "srid")]
+    (Integer. srid)))
+
+(defn create-geometry-atrribute [geometry]
+  (if-let [type (get geometry "type")]
+    (GeometryAttribute. type (get geometry type) (get-valid-srid geometry))))
 
 (defn- evaluate-f [element]
   (let [[function params] element]
