@@ -136,11 +136,11 @@
                ~@body)
              ))))))
 
-(defmacro defpermutatedtest [name file results-var & body]
-  `(defregressiontest* ~name true ~file ~results-var ~@body))
+(defmacro defpermutatedtest [test-name results-var & body]
+  `(defregressiontest* ~test-name true ~(name test-name) ~results-var ~@body))
 
-(defmacro defregressiontest [name file results-var & body]
-  `(defregressiontest* ~name false ~file ~results-var ~@body))
+(defmacro defregressiontest [test-name results-var & body]
+  `(defregressiontest* ~test-name false ~(name test-name) ~results-var ~@body))
 
 
 (defn- test-persistence
@@ -184,7 +184,7 @@
   (is (= n (count (query-geoserver collection))))))
 
 
-(defpermutatedtest new "new" results
+(defpermutatedtest new results
   (is (= 1 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 1 :features 1})
@@ -197,7 +197,7 @@
   (test-geoserver 1)
   )
 
-(defpermutatedtest new-with-child "new-with-child" results
+(defpermutatedtest new-with-child results
                    (is (= 2 (:n-processed (:stats results))))
                    (is (= 0 (:n-errored (:stats results))))
                    (test-persistence {:events 1 :features 1})
@@ -212,7 +212,7 @@
                    (test-geoserver "col-1-child" 1)
                    )
 
-(defpermutatedtest new-change "new-change" results
+(defpermutatedtest new-change results
   (is (= 2 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 2 :features 1})
@@ -224,7 +224,7 @@
                           (:extracts results))
   (test-geoserver 1))
 
-(defpermutatedtest new-delete "new-delete" results
+(defpermutatedtest new-delete results
   (is (= 2 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 2 :features 1})
@@ -236,7 +236,7 @@
                           (:extracts results))
   (test-geoserver 0))
 
-(defpermutatedtest new-change-change "new-change-change" results
+(defpermutatedtest new-change-change results
   (is (= 3 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 3 :features 1})
@@ -248,7 +248,7 @@
                           (:extracts results))
   (test-geoserver 1))
 
-(defpermutatedtest new-change-close "new-change-close" results
+(defpermutatedtest new-change-close results
   (is (= 3 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 3 :features 1})
@@ -260,7 +260,7 @@
                           (:extracts results))
   (test-geoserver 0))
 
-(defpermutatedtest new-change-close-with-attributes "new-change-close_with_attributes" results
+(defpermutatedtest new-change-close_with_attributes results
   (is (= 4 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 4 :features 1})
@@ -272,7 +272,7 @@
                           (:extracts results))
   (test-geoserver 0))
 
-(defpermutatedtest new-change-change-delete "new-change-change-delete" results
+(defpermutatedtest new-change-change-delete results
   (is (= 4 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 4 :features 1})
@@ -284,7 +284,7 @@
                           (:extracts results))
   (test-geoserver 0))
 
-(defpermutatedtest new-change-change-delete-new-change "new-change-change-delete-new-change" results
+(defpermutatedtest new-change-change-delete-new-change results
   (is (= 6 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence  {:events 6 :features 1})
@@ -296,7 +296,7 @@
                           (:extracts results))
   (test-geoserver 1))
 
-(defpermutatedtest new-with-nested-null-geom "new_with_nested_null_geom" results
+(defpermutatedtest new_with_nested_null_geom results
   (is (= 2 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence  {:events 1 :features 1})
@@ -309,7 +309,7 @@
                           (:extracts results))
   (test-geoserver 1))
 
-(defpermutatedtest new-with-nested-crappy-geom "new_with_nested_crappy_geom" results
+(defpermutatedtest new_with_nested_crappy_geom results
   (is (= 2 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 1 :features 1})
@@ -323,7 +323,7 @@
   (test-geoserver 1))
 
 
-(defpermutatedtest new-nested_change-nested_change-nested "new_nested-change_nested-change_nested" results
+(defpermutatedtest new_nested-change_nested-change_nested results
   (is (= 8 (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 3 :features 1})
@@ -337,7 +337,7 @@
   (test-geoserver "col-1" 1)
   (test-geoserver "col-1$nested" 1))
 
-(defpermutatedtest new_double_nested-delete-new_double_nested-change_double_nested "new_double_nested-delete-new_double_nested-change_double_nested" results
+(defpermutatedtest new_double_nested-delete-new_double_nested-change_double_nested results
   (is (= (+ 3 3 3 5) (:n-processed (:stats results))))
   (is (= 0 (:n-errored (:stats results))))
   (test-persistence {:events 4 :features 1})
@@ -352,7 +352,7 @@
   (test-geoserver 1)
   (test-geoserver "col-1$nestedserie$label" 1))
 
-(defpermutatedtest new_invalid_nested "new_invalid_nested" results
+(defpermutatedtest new_invalid_nested results
   (is (= 2 (:n-processed (:stats results))))
   (is (= 2 (:n-errored (:stats results))))
   (test-persistence {:events 0 :features 0})
@@ -366,7 +366,7 @@
   (test-geoserver 0)
   (test-geoserver "col-1$nested" 0))
 
-(defpermutatedtest new_double_nested-change_invalid "new_double_nested-change_invalid" results
+(defpermutatedtest new_double_nested-change_invalid results
   (is (= (+ 3 1 2 2) (:n-processed (:stats results))))
   (is (= 5 (:n-errored (:stats results))))
   (test-persistence {:events 1 :features 1})
@@ -382,7 +382,7 @@
   (test-geoserver "col-1$nestedserie" 0)
   (test-geoserver "col-1$nestedserie$label" 1))
 
-(defregressiontest pand-new-change-change-test "new-change-change-pand-test" results
+(defregressiontest new-change-change-pand-test results
   (is (= 19 (:n-processed (:stats results))))
   (test-persistence "pand" "id-a" {:events 3 :features 1})
   (test-persistence "pand$nummeraanduidingreeks" {:events 9 :features 6})
@@ -398,7 +398,7 @@
   (test-geoserver "pand$nummeraanduidingreeks" 0)
   (test-geoserver "pand$nummeraanduidingreeks$positie" 3))
 
-(defpermutatedtest same-double-new "same-double-new" results
+(defpermutatedtest same-double-new results
                    (is (= 2 (:n-processed (:stats results))))
                    (is (= 1 (:n-errored (:stats results))))
                    (test-persistence {:events 1 :features 1})
@@ -410,7 +410,7 @@
                                            (:extracts results))
                    (test-geoserver 1))
 
-(defpermutatedtest new-nested_close-parent "new_nested-close_parent" results
+(defpermutatedtest new_nested-close_parent results
                    (is (= 4 (:n-processed (:stats results))))
                    (is (= 0 (:n-errored (:stats results))))
                    (test-persistence {:events 2 :features 1})
@@ -424,7 +424,7 @@
                    (test-geoserver "col-1" 0)
                    (test-geoserver "col-1$nested" 0))
 
-(defpermutatedtest new_or_change "new_or_change" results
+(defpermutatedtest new_or_change results
                    (is (= 3 (:n-processed (:stats results))))
                    (is (= 0 (:n-errored (:stats results))))
                    (test-persistence {:events 3 :features 1})
