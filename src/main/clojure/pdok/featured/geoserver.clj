@@ -90,26 +90,26 @@
   (let [geometry (-> feature :geometry)
         attributes (:attributes feature)]
      (cond-> (transient [])
-       (f/valid-geometry? geometry)
-       (conj!-coll :_geometry_point :_geometry_line :_geometry_polygon :_geo_group)
-       (seq attributes) (conj!-coll (keys attributes))
-       true (persistent!))))
+             (and geometry (f/valid-geometry? geometry))
+             (conj!-coll :_geometry_point :_geometry_line :_geometry_polygon :_geo_group)
+             (seq attributes) (conj!-coll (keys attributes))
+             true (persistent!))))
 
  (defn- feature-to-update-record [proj-fn feature]
    (let [attributes (:attributes feature)
          geometry (-> feature :geometry)
          geo-group (when geometry (f/geometry-group geometry))]
      (cond-> (transient [(:version feature)])
-       (f/valid-geometry? geometry)
-       (conj!-coll
-        (when (= :point geo-group) (proj-fn (f/as-jts geometry)))
-        (when (= :line geo-group) (proj-fn (f/as-jts geometry)))
-        (when (= :polygon geo-group)  (proj-fn (f/as-jts geometry)))
-        geo-group)
-       (seq attributes) (conj!-coll (vals attributes))
-       true (conj! (:id feature))
-       true (conj! (:current-version feature))
-       true (persistent!))))
+             (and geometry (f/valid-geometry? geometry))
+             (conj!-coll
+               (when (= :point geo-group) (proj-fn (f/as-jts geometry)))
+               (when (= :line geo-group) (proj-fn (f/as-jts geometry)))
+               (when (= :polygon geo-group)  (proj-fn (f/as-jts geometry)))
+               geo-group)
+             (seq attributes) (conj!-coll (vals attributes))
+             true (conj! (:id feature))
+             true (conj! (:current-version feature))
+             true (persistent!))))
 
 (defn- all-fields-constructor [attributes]
   (if (empty? attributes) (constantly nil) (apply juxt (map #(fn [col] (get col %)) attributes))))
