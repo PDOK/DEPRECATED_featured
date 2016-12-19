@@ -6,6 +6,7 @@
             [clj-time [coerce :as tc]])
   (:import (pdok.featured NilAttribute)
            (java.io Writer)
+           (java.util.zip ZipOutputStream ZipEntry)
            (org.joda.time LocalDate DateTime LocalDateTime)))
 
 (defn- get-value [fix-timezone key value]
@@ -41,7 +42,7 @@
 
 (defn- write-feature [^Writer writer feature]
   (.write writer
-          (str
+          ^String
             (json/write-str
               (-> {"_action" (:action feature)
                    "_collection" (:collection feature)
@@ -53,18 +54,36 @@
                   (merge-if-not-nil "_parent_id" (:parent_id feature))
                   (merge-if-not-nil "_parent_field" (:parent_field feature))
                   (merge (:attributes feature)))
-              :value-fn (partial get-value (fix-timezone? feature))) ",\n"))) ;; TODO No ,\n for last feature in file
+              :value-fn (partial get-value (fix-timezone? feature)))))
+
+(def is-first (atom true))
+
+(defn- start-file [zip writer]
+  (.putNextEntry zip (ZipEntry. (str "part" (System/currentTimeMillis) ".json")))
+  (.write writer "{\"features\":[")
+  (swap! is-first (fn [_] false)))
+
+(defn- end-file [zip writer]
+  (.write writer "]}\n")
+  (.flush writer)
+  (.closeEntry zip)
+  (swap! is-first (fn [_] true)))
 
 (defrecord JsonWriterProjector [path-fn filename]
   proj/Projector
   (proj/init [this _ _]
-    (let [writer (io/writer filename)]
-      (.write writer "{\"features\":[")
-      (assoc this :writer writer)))
+    (let [file (io/output-stream filename)
+          zip (ZipOutputStream. file)
+          writer (io/writer zip)]
+      (-> this (assoc :file file) (assoc :zip zip) (assoc :writer writer))))
   (proj/new-collection [_ _ _])
   (proj/flush [this]
-    (.flush (:writer this)))
+    (when (not @is-first)
+      (end-file (:zip this) (:writer this))))
   (proj/new-feature [this feature]
+    (if @is-first
+      (start-file (:zip this) (:writer this))
+      (.write (:writer this) ",\n"))
     (let [[parent_collection parent_id parent_field _] (last (path-fn (:collection feature) (:id feature)))
           feature-with-parent (merge feature {:parent_collection parent_collection
                                               :parent_id parent_id
@@ -79,9 +98,9 @@
   (proj/accept? [_ _]
     true)
   (proj/close [this]
-    (let [writer (:writer this)]
-      (.write writer "]}")
-      (.close writer))))
+    (.close (:writer this))
+    (.close (:zip this))
+    (.close (:file this))))
 
 (defn json-writer-projector [config]
   (let [persistence (or (:persistence config) (pers/make-cached-jdbc-processor-persistence config))
