@@ -185,8 +185,8 @@ If n nil => no limit, if collections nil => all collections")
          CASE WHEN f2.parent_id IS NOT NULL THEN f2.parent_id ELSE f.parent_id END AS parent_id,
          CASE WHEN f2.parent_field IS NOT NULL THEN f2.parent_field ELSE f.parent_field END AS parent_field
   FROM " (qualified-feature-stream dataset) " fs
-  JOIN " (qualified-features dataset) " f ON fs.feature_id = f.feature_id
-  LEFT JOIN " (qualified-features dataset) " f2 ON f.parent_id = f2.feature_id
+  JOIN " (qualified-features dataset) " f ON fs.collection = f.collection AND fs.feature_id = f.feature_id
+  LEFT JOIN " (qualified-features dataset) " f2 ON f.parent_collection = f2.collection AND f.parent_id = f2.feature_id
 ),
 
 fs_with_last_parent_action AS (
@@ -211,7 +211,7 @@ fs_with_previous_version AS (
   SELECT fs.*,
          fs2.validity AS previous_validity
   FROM fs_with_last_parent_action fs
-  LEFT JOIN " (qualified-feature-stream dataset) " fs2 ON fs.previous_version = fs2.version
+  LEFT JOIN " (qualified-feature-stream dataset) " fs2 ON fs.collection = fs2.collection AND fs.previous_version = fs2.version
 )
 
 SELECT fs.id,
