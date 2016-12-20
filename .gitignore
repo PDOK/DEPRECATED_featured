@@ -3,6 +3,7 @@
 /artifacts
 /classes
 /checkouts
+/changelog
 pom.xml
 pom.xml.asc
 *.jar
