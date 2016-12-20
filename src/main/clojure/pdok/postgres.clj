@@ -63,9 +63,9 @@
     (.setObject s i (j/sql-value v) java.sql.Types/VARCHAR))
   clojure.lang.IPersistentVector
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
-    (if (empty? v)
-      (.setObject s i nil java.sql.Types/OTHER)
-      (j/set-parameter (into-array v) s i)))
+    (let [con (.getConnection s)
+          postgres-array (.createArrayOf con "text" (into-array v))]
+      (.setObject s i postgres-array java.sql.Types/OTHER)))
   clojure.lang.IPersistentList
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
     (if (empty? v)

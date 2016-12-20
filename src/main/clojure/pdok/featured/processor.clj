@@ -207,7 +207,10 @@
 (defn- nested-features [attributes]
   (letfn [( flat-multi [[key values]] (map #(vector key %) values))]
     (let [single-features (filter #(map? (second %)) attributes)
-          multi-features (filter #(sequential? (second %)) attributes)]
+          multi-features (filter #(-> (second %)
+                                      first
+                                      map?) (filter #(-> (second %)
+                                                         sequential?) attributes))]
       (concat single-features (mapcat flat-multi multi-features)))))
 
 (defn nested-action [action]
