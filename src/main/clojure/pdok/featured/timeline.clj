@@ -8,15 +8,19 @@
             [pdok.featured.persistence :as pers]
             [pdok.featured.tiles :as tiles]
             [pdok.transit :as transit]
+            [pdok.filestore :as fs]
             [clojure.java.jdbc :as j]
             [clojure.core.cache :as cache]
             [clojure.tools.logging :as log]
             [clojure.zip :as zip]
             [clj-time.core :as t]
             [clojure.core.async :as a
-             :refer [>!! close! chan]])
+             :refer [>!! close! chan]]
+            [clojure.java.io :as io]
+            [clojure.string :as str])
   (:import [clojure.lang MapEntry PersistentQueue]
-           (java.sql SQLException)))
+           (java.sql SQLException)
+           (java.io File Writer)))
 
 (declare create)
 
@@ -308,56 +312,134 @@ VALUES (?, ?, ?, ?, ?, ?)"))
 
 (defn- delete-version-with-valid-from-sql [dataset collection]
   (str "DELETE FROM " (qualified-timeline dataset collection)
-       " WHERE version = ? AND valid_from = ? AND id IN (SELECT id FROM " (qualified-timeline dataset collection)
-       " WHERE version = ? AND valid_from = ? ORDER BY id ASC LIMIT 1)"))
+       " WHERE version = ? AND valid_from = ? AND valid_to is null"))
 
-(defn- delete-version [{:keys [db dataset]} records]
-  "([collection version valid-from] ... )"
-  ;(println "DELETE-CURRENT" records)
+(defn- delete-version-with-valid-from-and-valid-to-sql [dataset collection]
+  (str "DELETE FROM " (qualified-timeline dataset collection)
+       " WHERE version = ? AND valid_from = ? AND valid_to = ?"))
+
+(defn- delete-feature-with-version [{:keys [db dataset]} records]
+  "([collection version] ... )"
   (let [per-collection (group-by first records)]
     (doseq [[collection collection-records] per-collection]
-      (let [versions-only (map #(vector (nth % 1)) (filter (fn [[_ _ valid-from]] (not valid-from)) collection-records))
-            with-valid-from (map (fn [[_ ov vf]] [ov vf ov vf]) (filter (fn [[_ _ valid-from]] valid-from) collection-records))]
-        (when (seq versions-only)
+      (let [versions (map #(vector (nth % 1))  collection-records)]
+        (when (seq versions)
           (try
-            (j/execute! db (cons (delete-version-sql dataset collection) versions-only) :multi? true :transaction? (:transaction? db))
-            (catch SQLException e
-              (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
-              (throw e))))
-        (when (seq with-valid-from)
-          (try
-            (j/execute! db (cons (delete-version-with-valid-from-sql dataset collection) with-valid-from) :multi? true :transaction? (:transaction? db))
+            (j/execute! db (cons (delete-version-sql dataset collection) versions) :multi? true :transaction? (:transaction? db))
             (catch SQLException e
               (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
               (throw e))))))))
 
-(defn- append-to-changelog-sql [dataset]
+(defn- delete-feature-with-version-and-validity [{:keys [db dataset]} records]
+  "([collection version valid-from valid-to] ... )"
+  (let [per-collection (group-by first records)]
+    (doseq [[collection collection-records] per-collection]
+      (let [{open true closed false} (group-by (fn [[_ _ valid-to]] (nil? valid-to)) (map #(drop 1 %) collection-records))]
+        (when (seq open)
+          (try
+            (j/execute! db (cons (delete-version-with-valid-from-sql dataset collection) (map #(take 2 %) open)) :multi? true :transaction? (:transaction? db))
+            (catch SQLException e
+              (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
+              (throw e))))
+        (when (seq closed)
+          (try
+            (j/execute! db (cons (delete-version-with-valid-from-and-valid-to-sql dataset collection) closed) :multi? true :transaction? (:transaction? db))
+            (catch SQLException e
+              (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
+              (throw e))))))))
+
+(defn- append-to-db-changelog-sql [dataset]
   (str "INSERT INTO " (qualified-changelog dataset)
        " (collection, feature_id, old_version, version, valid_from, action)
  SELECT ?, ?, ?, ?, ?, ?
  WHERE NOT EXISTS (SELECT 1 FROM " (qualified-changelog dataset)
  " WHERE version = ? AND action = ?)"))
 
-(defn- append-to-changelog [{:keys [db dataset]} log-entries]
+(defn- append-to-db-changelog [{:keys [db dataset]} log-entries]
   "([collection id old-version version valid_from action] .... )"
-  ;(println "CHANGELOG\n" (clojure.string/join "\n" (map (fn [e] (update-in e [4] #(when-not (nil? %1) (.toString %1)))) log-entries)))
   (try
     (let [transform-fn  (fn [rec] (let [[_ _ ov v a] rec] (conj rec v a)))
           records (map transform-fn log-entries)]
-      (j/execute! db (cons (append-to-changelog-sql dataset) records) :multi? true :transaction? (:transaction? db)))
+      (j/execute! db (cons (append-to-db-changelog-sql dataset) records) :multi? true :transaction? (:transaction? db)))
     (catch SQLException e
       (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
       (throw e))))
 
+(def o ^{:private true} (Object.))
+(defn unique-epoch []
+  (Thread/sleep 1)                                          ;; ugh, ugly
+  (locking o (System/currentTimeMillis)))
+
+(defn ^{:dynamic true} *changelog-name* [dataset collection]
+  (str (unique-epoch) "-" dataset "-" collection ".changelog"))
+
+(defn- init-changelog [{:keys [filestore]} dataset collection]
+  (let [^String changelog (*changelog-name* dataset collection)
+        ^File file (fs/create-target-file filestore changelog)]
+    (when-not (.exists file)
+      (.createNewFile file)
+      (with-open [^Writer out (io/writer file)]
+        (.write out (str "v1\n" dataset "," collection "\n"))))
+    changelog))
+
+;; [collection] action id version json
+(defn changelog-new-entry [new-feature]
+  [(:_collection new-feature)
+   "new"
+   (:_id new-feature)
+   (:_version new-feature)
+   (transit/to-json new-feature)])
+
+;; [collection] action id old-version new-version json
+(defn changelog-change-entry [current-version new-feature]
+  [(:_collection new-feature)
+   "change"
+   (:_id new-feature)
+   current-version
+   (:_version new-feature)
+   (transit/to-json new-feature)])
+
+;; [collection] action id version closed-feature
+(defn changelog-close-entry [closed-feature]
+  [(:_collection closed-feature)
+   "close"
+   (:_id closed-feature)
+   (:_version closed-feature)
+   (transit/to-json closed-feature)])
+
+;; [collection] action id version
+(defn changelog-delete-entry [collection id version]
+  [collection
+   "delete"
+   id
+   version])
+
+(defn write-changelog-entry [writer entry]
+  (.write writer (str/join "," entry))
+  (.write writer "\n"))
+
+(defn- append-to-changelog [{:keys [dataset changelogs filestore] :as timeline} log-entries]
+  "([collection, feature_id,action,version,valid_from,version_old,valid_from_old,feature] .... )"
+  (let [per-collection (group-by first log-entries)]
+    (doseq [[collection entries] per-collection]
+      (let [changelog (init-changelog timeline dataset collection)
+            _ (swap! changelogs conj changelog)]
+        (with-open [out (io/writer (fs/get-file filestore changelog) :append true)]
+          (doseq [entry entries]
+            ; pop collection from front
+            (write-changelog-entry out (rest entry))))))))
+
 (defn- feature-key [feature]
   [(:collection feature) (:id feature)])
 
-(defn- make-flush-all [new-batch delete-batch changelog-batch]
+(defn- make-flush-all [new-batch delete-batch delete-for-update-batch db-changelog-batch changelog-batch]
   "Used for flushing all batches, so update current is always performed after new current"
   (fn [timeline]
     (fn []
       (flush-batch new-batch (partial new-current timeline))
-      (flush-batch delete-batch (partial delete-version timeline))
+      (flush-batch delete-for-update-batch (partial delete-feature-with-version-and-validity timeline))
+      (flush-batch delete-batch (partial delete-feature-with-version timeline))
+      (flush-batch db-changelog-batch (partial append-to-db-changelog timeline))
       (flush-batch changelog-batch (partial append-to-changelog timeline)))))
 
 (defn- cache-store-key [f]
@@ -370,19 +452,18 @@ VALUES (?, ?, ?, ?, ?, ?)"))
 (defn- cache-use-key [collection id]
   [collection id])
 
-(defn- batched-updater [timeline new-batch new-batch-size delete-batch delete-batch-size flush-fn feature-cache]
+(defn- batched-updater [{:keys [new-batch delete-for-update-batch flush-fn feature-cache]}]
   "Cache batched updater consisting of insert and delete"
-  (let [batched-new (batched new-batch new-batch-size flush-fn)
+  (let [batched-new (batched new-batch flush-fn)
         cache-batched-new (with-cache feature-cache batched-new cache-store-key cache-value)
-        batched-delete (batched delete-batch delete-batch-size flush-fn)]
-    (fn [f]
-      (cache-batched-new f)
-      (let [version (first (rest (:_all_versions f)))]
-        (batched-delete [(:_collection f) version (:_valid_from f)])))))
+        batched-delete (batched delete-for-update-batch flush-fn)]
+    (fn [old-version old-valid-from old-valid-to f]
+      (batched-delete [(:_collection f) old-version old-valid-from old-valid-to])
+      (cache-batched-new f))))
 
-(defn- batched-deleter [timeline delete-batch delete-batch-size flush-fn feature-cache]
+(defn- batched-deleter [{:keys [delete-batch flush-fn feature-cache]}]
   "Cache batched deleter (thrasher) of timeline data"
-  (let [batched-delete (batched delete-batch delete-batch-size flush-fn)
+  (let [batched-delete (batched delete-batch flush-fn)
         cache-remove (with-cache feature-cache identity cache-store-key cache-invalidate)]
     (fn [f]
       (cache-remove f)
@@ -395,10 +476,13 @@ VALUES (?, ?, ?, ?, ?, ?)"))
 
 (defrecord Timeline [dataset db collections root-fn path-fn
                      feature-cache
-                     new-batch new-batch-size
-                     delete-batch delete-batch-size
-                     changelog-batch changelog-batch-size
-                     make-flush-fn flush-fn]
+                     delete-for-update-batch
+                     new-batch
+                     delete-batch
+                     db-changelog-batch
+                     changelog-batch changelogs
+                     make-flush-fn flush-fn
+                     filestore]
   proj/Projector
   (proj/init [this for-dataset current-collections]
     (let [inited (assoc this :dataset for-dataset)
@@ -420,43 +504,52 @@ VALUES (?, ?, ?, ?, ?, ?)"))
     (let [[collection id] (feature-key feature)
           [root-col root-id] (root-fn collection id)
           path (path-fn collection id)
-          batched-new (batched new-batch new-batch-size flush-fn)
+          batched-new (batched new-batch flush-fn)
           cache-batched-new (with-cache feature-cache batched-new cache-store-key cache-value)
-          cache-batched-update (batched-updater this new-batch new-batch-size
-                                          delete-batch delete-batch-size
-                                          flush-fn feature-cache)
+          cache-batched-update (batched-updater this)
           cached-get-current (use-cache feature-cache cache-use-key)
-          batched-append-changelog (batched changelog-batch changelog-batch-size flush-fn)]
+          batched-append-db-changelog (batched db-changelog-batch flush-fn)
+          batched-append-changelog (batched changelog-batch flush-fn)]
       (if-let [current (cached-get-current root-col root-id)]
         (when (util/uuid> (:version feature) (:_version current))
           (let [new-current (merge current path feature)]
             (if (= (:action feature) :close)
-              (do (cache-batched-update (sync-valid-to new-current feature))
-                  (batched-append-changelog [(:_collection new-current)
-                                               (:_id new-current) (:_version current)
-                                               (:_version new-current) (:_valid_from new-current) :close]))
+              (let [closed-current (sync-valid-to new-current feature)]
+                (cache-batched-update (:_version current) (:_valid_from current)
+                                      (:_valid_to current) closed-current)
+                (batched-append-db-changelog [(:_collection new-current)
+                                              (:_id new-current) (:_version current)
+                                              (:_version new-current) (:_valid_from new-current) :close])
+                (batched-append-changelog (changelog-close-entry closed-current)))
               (if (t/before? (:_valid_from current) (:validity feature))
-                (do ;(println "NOT-SAME")
-                  (cache-batched-update (sync-version (sync-valid-to current feature) feature))
-                  ;; reset valid-to for new-current.
-                  (cache-batched-new (reset-valid-to (sync-valid-from new-current feature)))
-                  (batched-append-changelog [(:_collection new-current)
-                                             (:_id new-current) (:_version current) (:_version current)
-                                             (:_valid_from current) :close])
-                  (batched-append-changelog [(:_collection new-current)
-                                             (:_id new-current) nil
-                                             (:_version new-current) (:validity feature) :new]))
-                (do ;(println "SAME")
+                (let [closed-current (sync-valid-to current feature)
+                      ;; reset valid-to for new-current.
+                      new-current+ (reset-valid-to (sync-valid-from new-current feature))]
+                  (cache-batched-update (:_version current) (:_valid_from current)
+                                        (:_valid_to current) closed-current)
+                  (cache-batched-new new-current+)
+                  (batched-append-db-changelog [(:_collection new-current)
+                                                (:_id new-current) (:_version current) (:_version current)
+                                                (:_valid_from current) :close])
+                  (batched-append-db-changelog [(:_collection new-current)
+                                                (:_id new-current) nil
+                                                (:_version new-current) (:validity feature) :new])
+                  (batched-append-changelog (changelog-close-entry closed-current))
+                  (batched-append-changelog (changelog-new-entry new-current+)))
+                (let [new-current+ (reset-valid-to (sync-valid-from new-current feature))]
                   ;; reset valid-to because it might be closed because of nested features.
-                  (cache-batched-update (reset-valid-to (sync-valid-from new-current feature)))
-                  (batched-append-changelog [(:_collection new-current)
-                                             (:_id new-current) (:_version current)
-                                             (:_version new-current) (:validity feature) :change]))))))
+                  (cache-batched-update (:_version current) (:_valid_from current)
+                                        (:_valid_to current) new-current+)
+                  (batched-append-db-changelog [(:_collection new-current)
+                                                (:_id new-current) (:_version current)
+                                                (:_version new-current) (:validity feature) :change])
+                  (batched-append-changelog (changelog-change-entry (:_version current) new-current+)))))))
         (let [nw (sync-valid-from (merge (init-root root-col root-id) path feature) feature)]
           (cache-batched-new nw)
-          (batched-append-changelog [(:_collection nw)
+          (batched-append-db-changelog [(:_collection nw)
                                      (:_id nw) nil
-                                     (:_version nw) (:validity feature) :new])))))
+                                     (:_version nw) (:validity feature) :new])
+          (batched-append-changelog (changelog-new-entry nw))))))
   (proj/change-feature [this feature]
     ;; change can be the same, because a new nested feature validity change will also result in a new validity
     ;(println "CHANGE")
@@ -466,17 +559,18 @@ VALUES (?, ?, ?, ?, ?, ?)"))
   (proj/delete-feature [this feature]
     (let [[collection id] (feature-key feature)
           [root-col root-id] (root-fn collection id)
-          cache-batched-delete (batched-deleter db delete-batch delete-batch-size
-                                                flush-fn feature-cache)
+          cache-batched-delete (batched-deleter this)
           cached-get-current (use-cache feature-cache cache-use-key)
-          batched-append-changelog (batched changelog-batch changelog-batch-size flush-fn)]
+          batched-append-db-changelog (batched db-changelog-batch flush-fn)
+          batched-append-changelog (batched changelog-batch flush-fn)]
       (when-let [current (cached-get-current root-col root-id)]
         (when (util/uuid> (:version feature) (:_version current))
           (cache-batched-delete current)
           (doseq [v (:_all_versions current)]
-            (batched-append-changelog [(:_collection current)
+            (batched-append-db-changelog [(:_collection current)
                                        (:_id current) nil
-                                       v (:validity current) :delete]))))))
+                                       v (:validity current) :delete])
+            (batched-append-changelog (changelog-delete-entry collection id v)))))))
   (proj/accept? [_ feature] true)
   (proj/close [this]
     (proj/flush this)
@@ -491,22 +585,24 @@ VALUES (?, ?, ?, ?, ?, ?)"))
           (load-current-feature-cache db dataset collection (map second roots-grouped-by))))
     cache))
 
-(defn process-chunk* [config dataset current-collections chunk]
+(defn process-chunk* [{:keys [config dataset collections changelogs filestore]} chunk]
   (let [cache (create-cache (:db-config config) (:persistence config) dataset chunk)
-        timeline (proj/init (create config cache dataset) dataset current-collections)]
+        timeline (proj/init (create config filestore cache dataset) dataset @collections)]
     (doseq [f chunk]
       (condp = (:action f)
         :new (proj/new-feature timeline f)
         :change (proj/change-feature timeline f)
         :close (proj/close-feature timeline f)
         :delete (proj/delete-feature timeline f)))
-    (proj/close timeline)))
+    (proj/close timeline)
+    (swap! changelogs concat @(:changelogs timeline))))
 
-(defn process-chunk [{:keys [config chunk dataset collections]}]
+(defn process-chunk [{:keys [chunk] :as chunked-timeline}]
   (with-bench t (log/debug "Processed chunk in" t "ms")
-    (flush-batch chunk (partial process-chunk* config dataset @collections))))
+    (flush-batch chunk (partial process-chunk* chunked-timeline))))
 
-(defrecord ChunkedTimeline [config dataset db collections chunk make-process-fn process-fn]
+(defrecord ChunkedTimeline [config dataset db collections chunk make-process-fn process-fn
+                            changelogs filestore]
   proj/Projector
   (proj/init [this for-dataset current-collections]
     (let [inited (assoc this :dataset for-dataset)
@@ -532,31 +628,37 @@ VALUES (?, ?, ?, ?, ?, ?)"))
     this))
 
 (defn create
-  ([config] (create config (volatile! (cache/basic-cache-factory {})) "unknow-dataset"))
-  ([config cache for-dataset]
+  ([config filestore] (create config filestore (volatile! (cache/basic-cache-factory {})) "unknow-dataset"))
+  ([config filestore cache for-dataset]
    (let [db (:db-config config)
          persistence (or (:persistence config) (pers/make-cached-jdbc-processor-persistence config))
          collections (volatile! #{})
-         new-batch-size (or (:new-current-batch-size config) (:batch-size config) 10000)
+         delete-for-update-batch (volatile! (PersistentQueue/EMPTY))
          new-batch (volatile! (PersistentQueue/EMPTY))
-         delete-batch-size (or (:delete-current-batch-size config) (:batch-size config) 10000)
          delete-batch (volatile! (PersistentQueue/EMPTY))
-         changelog-batch-size (or (:changelog-batch-size config) (:batch-size config) 10000)
+         db-changelog-batch (volatile! (PersistentQueue/EMPTY))
          changelog-batch (volatile! (PersistentQueue/EMPTY))
-         make-flush-fn (make-flush-all new-batch delete-batch changelog-batch)]
+         changelogs (atom [])
+         make-flush-fn (make-flush-all new-batch delete-batch delete-for-update-batch
+                                       db-changelog-batch changelog-batch)]
      (->Timeline for-dataset db collections
-      (partial pers/root persistence) (partial pers/path persistence)
-      cache
-      new-batch new-batch-size
-      delete-batch delete-batch-size
-      changelog-batch changelog-batch-size
-      make-flush-fn (fn [])))))
+                 (partial pers/root persistence) (partial pers/path persistence)
+                 cache
+                 delete-for-update-batch
+                 new-batch
+                 delete-batch
+                 db-changelog-batch
+                 changelog-batch changelogs
+                 make-flush-fn (fn [])
+                 filestore))))
 
 
-(defn create-chunked [config]
+(defn create-chunked [config filestore]
   (let [chunk-size (or (:chunk-size config) 10000)
         chunk (volatile! (PersistentQueue/EMPTY))
         make-process-fn (fn [tl] (batched chunk chunk-size #(process-chunk tl)))
         db (:db-config config)
-        collections (volatile! #{})]
-    (->ChunkedTimeline config "unknown-dataset" db collections chunk make-process-fn (fn []))))
+        collections (volatile! #{})
+        changelogs (atom [])]
+    (->ChunkedTimeline config "unknown-dataset" db collections chunk make-process-fn (fn [])
+                       changelogs filestore)))

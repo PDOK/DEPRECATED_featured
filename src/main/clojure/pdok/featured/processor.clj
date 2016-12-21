@@ -11,12 +11,16 @@
             [clj-time [core :as t] [local :as tl] [coerce :as tc]]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [pdok.featured.tiles :as tiles]))
+            [pdok.featured.tiles :as tiles])
+  (:import (pdok.featured.timeline Timeline ChunkedTimeline)))
 
 (def ^:private pdok-fields [:action :id :dataset :collection :validity :version :geometry :current-validity
                             :parent-id :parent-collection :parent-field :attributes :src])
 
 (declare consume consume* process pre-process append-feature)
+
+(def ^{:dynamic true} *next-version* random/ordered-UUID)   ;; generates uuid
+(def ^{:dynamic true} *child-id* (fn [] (str (random/ordered-UUID)))) ;; generates string
 
 (defn make-seq [obj]
   (if (seq? obj) obj (list obj)))
@@ -181,7 +185,7 @@
                                                (assoc! :version (:version feature))
                                                (persistent!)))
           _ (process-change-feature processor change-feature)
-          close-feature (with-current-version persistence (assoc feature :version (random/ordered-UUID)))]
+          close-feature (with-current-version persistence (assoc feature :version (*next-version*)))]
       (append-feature persistence close-feature)
       (project! processor proj/close-feature close-feature)
       (list change-feature close-feature))))
@@ -219,7 +223,7 @@
 
 (defn- link-parent [[child-collection-key child] parent]
   (let [{:keys [collection action id validity]} parent
-        child-id (str (java.util.UUID/randomUUID))
+        child-id (*child-id*)
         with-parent (-> (transient child)
                   (assoc! :parent-collection collection)
                   (assoc! :parent-id id)
@@ -328,7 +332,7 @@
   (let [validated (if (:disable-validation processor) feature (validate processor feature))]
     (if (:invalid? validated)
       (make-seq validated)
-      (let [vf (assoc validated :version (random/ordered-UUID))
+      (let [vf (assoc validated :version (*next-version*))
             processed
             (condp = (:action vf)
               :new (process-new-feature processor vf)
@@ -431,10 +435,13 @@
   (let [_ (doto-projectors! processor proj/close)
         ;; timeline uses persistence, close persistence after projectors
         closed-persistence (pers/close persistence)
+        timeline (first (filter #(or (instance? Timeline %1) (instance? ChunkedTimeline %1)) projectors))
+        info {:persistence closed-persistence
+              :projectors  projectors
+              :statistics  (cond-> (if statistics @statistics {})
+                                   timeline (assoc :changelogs @(:changelogs timeline)))}
         _ (when statistics (log/info @statistics))]
-    {:persistence closed-persistence
-     :projectors projectors
-     :statistics (if statistics @statistics {})}))
+    info))
 
 (defn add-projector [processor projector]
   (let [initialized-projector (proj/init projector (:dataset processor) (pers/collections (:persistence processor)))]

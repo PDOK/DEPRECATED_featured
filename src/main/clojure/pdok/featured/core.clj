@@ -25,9 +25,11 @@
                  (when no-projectors " without projectors")
                  (when no-state " without state")
                  (when projection (str " as " projection))))
-  (let [persistence (if no-state (pers/make-no-state) (config/persistence))
+  (let [changelog-dir (if (:changelog-dir meta) (:changelog-dir meta) (str (System/getProperty "user.dir") "/changelog"))
+        filestore (config/filestore changelog-dir)
+        persistence (if no-state (pers/make-no-state) (config/persistence))
         projectors (cond-> [] (not no-projectors) (conj (config/projectors persistence :projection projection))
-                           (not no-timeline) (conj (config/timeline persistence)))
+                           (not no-timeline) (conj (config/timeline persistence filestore)))
         processor (processor/create meta dataset persistence projectors)]
     processor))
 
@@ -113,6 +115,7 @@
 (def cli-options
   [[nil "--std-in" "Read from std-in"]
    ["-d" "--dataset DATASET" "dataset"]
+   [nil "--changelog-dir DIRECTORY" "Changelogs directory, defaults to [execution-dir/user.dir]/changelogs"]
    [nil "--no-projectors"]
    [nil "--no-timeline"]
    [nil "--no-state" "Use only with no nesting and action :new"]
@@ -125,19 +128,6 @@
    [nil "--perform" "Perform fix in combination with --fix" ]
    ["-h" "--help"]
    ["-v" "--version"]])
-
-(defn performance-test [n & args]
-  (with-open [^java.io.InputStream json (apply random-json-feature-stream "perftest" "col1" n args)]
-    (let [persistence (config/persistence)
-          processor (processor/create persistence (config/projectors persistence))
-          features (features-from-stream json)
-          consumed (consume processor features)
-          _ (println (map :invalid-reasons consumed))
-          ]
-      (time (do (log/info "Events processed:" (count consumed))
-                (shutdown processor)
-                ))
-      )))
 
 ;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))
 
