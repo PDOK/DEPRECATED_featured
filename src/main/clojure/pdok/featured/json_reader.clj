@@ -1,11 +1,12 @@
 (ns pdok.featured.json-reader
   (:require [pdok.featured.feature :refer [nilled as-jts]]
             [cheshire [core :as json] [factory :as jfac] [parse :as jparse]]
-            [clj-time [core :as t] [format :as tf] [coerce :as tc]]
+            [clj-time [format :as tf] [coerce :as tc]]
             [clojure.walk :refer [postwalk]])
   (:import (com.fasterxml.jackson.core JsonFactory JsonFactory$Feature
                                        JsonParser$Feature JsonParser JsonToken)
-           (pdok.featured GeometryAttribute)))
+           (pdok.featured GeometryAttribute)
+           (org.joda.time DateTimeZone)))
 
 (def ^:private pdok-field-replacements
   {"_action" :action "_collection" :collection "_id" :id "_validity" :validity
@@ -28,7 +29,7 @@
     feature))
 
 ;; 2015-02-26T15:48:26.578Z
-(def ^{:private true} date-time-formatter (tf/with-zone (tf/formatters :date-time-parser) (t/default-time-zone)))
+(def ^{:private true} date-time-formatter (tf/with-zone (tf/formatters :date-time-parser) (DateTimeZone/forID "Europe/Amsterdam")))
 
 (def ^{:private true} date-formatter (tf/formatter "yyyy-MM-dd"))
 
