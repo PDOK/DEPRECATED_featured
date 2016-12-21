@@ -210,3 +210,5 @@
           processed (into '() (consume processor features))]
       (is (= 4 (count processed)))
       (is (= 0 (count (filter #(:invalid? %) processed)))))))
+
+(def feature-with-array (io/resource "processor/feature-with-array.json"))
