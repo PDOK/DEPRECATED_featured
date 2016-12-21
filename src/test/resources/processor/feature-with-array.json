@@ -1,0 +1,40 @@
+{"Features": [
+  {
+    "_action": "new",
+    "_id": "B000123.51617cf3-f1e0-448d-b12a-ce5927953d68",
+    "_validity": "2015-06-17T11:12:27.248",
+    "_collection": "Pand",
+    "eindRegistratie": [
+      "~#moment",
+      null
+    ],
+    "terminationDate": [
+      "~#date",
+      null
+    ],
+    "terminationDate_leeg": "geenWaarde",
+    "LV-publicatiedatum": [
+      "~#moment",
+      [
+        "2016-12-17T11:12:27.000"
+      ]
+    ],
+    "lokaalID": "B000123.51617cf3-f1e0-448d-b12a-ce5927953d68",
+    "creationDate": [
+      "~#date",
+      [
+        "2016-12-20"
+      ]
+    ],
+    "tijdstipRegistratie": [
+      "~#moment",
+      [
+        "2016-12-20T12:38:00.000"
+      ]
+    ],
+    "bronhouder": [
+      "B0001",
+      "B0002",
+      "B0003"
+    ]
+  }]}
