@@ -44,7 +44,9 @@
       (@invalids [(:collection feature) (:id feature)])
       (make-invalid "Feature marked invalid")
       (@invalids [(:parent-collection feature) (:parent-id feature)])
-      (make-invalid "Parent marked invalid"))))
+      (make-invalid "Parent marked invalid")
+      (some #(@invalids %) (map (partial take 2) (pers/path persistence (:collection feature) (:id feature))))
+      (make-invalid "Root marked invalid"))))
 
 (defn- stream-exists? [persistence {:keys [collection id]}]
   (and (pers/stream-exists? persistence collection id)
@@ -177,23 +179,24 @@
       (append-feature persistence enriched-feature)
       (project! processor proj/close-feature enriched-feature)
       (list enriched-feature))
-    (let [change-feature (with-current-version persistence
-                                               (-> feature
-                                               (transient)
-                                               (assoc! :action :change)
-                                               (dissoc! :src)
-                                               (assoc! :version (:version feature))
-                                               (persistent!)))
-          _ (process-change-feature processor change-feature)
-          close-feature (with-current-version persistence (assoc feature :version (*next-version*)))]
-      (append-feature persistence close-feature)
-      (project! processor proj/close-feature close-feature)
-      (list change-feature close-feature))))
+    (let [change-feature (-> feature
+                             (transient)
+                             (assoc! :action :change)
+                             (dissoc! :src)
+                             (assoc! :version (:version feature))
+                             (persistent!))
+          close-feature (-> feature
+                            (assoc :attributes {})
+                            (assoc :version (*next-version*)))]
+      (list
+        (process-change-feature processor change-feature)
+        (process-close-feature processor close-feature)))))
 
 (defn- process-nested-close-feature [processor feature]
   (let [nw (process-new-feature processor (assoc feature :action :new))
-        {:keys [action collection id validity geometry attributes]} nw
-        no-update-nw (-> nw (transient)
+        validity (:validity nw)
+        no-update-nw (-> nw
+                         (transient)
                          (assoc! :action :close)
                          (dissoc! :geometry)
                          (assoc! :attributes {})
@@ -203,7 +206,7 @@
 
 (defn- process-delete-feature [{:keys [persistence projectors] :as processor} feature]
   (let [enriched-feature (->> feature
-                       (with-current-version persistence))]
+                              (with-current-version persistence))]
     (append-feature persistence enriched-feature)
     (project! processor proj/delete-feature enriched-feature)
     enriched-feature))
@@ -231,43 +234,45 @@
                   (assoc! :parent-collection collection)
                   (assoc! :parent-id id)
                   (assoc! :parent-field (name child-collection-key))
-                  (assoc! :action  (nested-action (:action parent)))
+                  (assoc! :action (nested-action action))
                   (assoc! :id child-id)
                   (assoc! :validity validity)
                   (assoc! :collection (str collection "$" (name child-collection-key))))]
     (persistent! with-parent)))
 
-(defn- meta-delete-childs [{:keys [collection id]}]
+(defn- meta-delete-childs [parent-collection parent-id]
   {:action :delete-childs
-   :parent-collection collection
-   :parent-id id})
+   :parent-collection parent-collection
+   :parent-id parent-id})
 
-(defn- meta-close-childs [features]
+(defn- meta-close-childs [parent-collection parent-id validity & [collection]]
+  (conj {:action :close-childs
+         :parent-collection parent-collection
+         :parent-id parent-id
+         :validity validity}
+        (when collection [:collection collection])))
+
+(defn- meta-close-fellow-childs [features]
   "{:action :close-childs _ :collection _ :parent-collection _ :parent-id _ :validity _"
-  (distinct (map (fn [f] {:action :close-childs
-                          :parent-collection (:parent-collection f)
-                          :parent-id (:parent-id f)
-                          :collection (:collection f)
-                          :validity (:validity f)}) features)))
+  (distinct (map (fn [f] (meta-close-childs
+                           (:parent-collection f)
+                           (:parent-id f)
+                           (:validity f)
+                           (:collection f))) features)))
 
 (defn- flatten [processor feature]
   (condp = (:action feature)
-    :delete (list feature (meta-delete-childs feature))
-    :close (list feature {:action :close-childs
-                          :parent-collection (:collection feature)
-                          :parent-id (:id feature)
-                          :validity (:validity feature)})
+    :delete (list (meta-delete-childs (:collection feature) (:id feature)) feature)
+    :close (list (meta-close-childs (:collection feature) (:id feature) (:validity feature)) feature)
     (let [attributes (:attributes feature)
           nested (nested-features attributes)
           without-nested (apply dissoc attributes (map #(first %) nested))
           flat (assoc feature :attributes without-nested)
           linked-nested (map #(link-parent % feature) nested)
-          meta-close-childs (meta-close-childs linked-nested)]
+          meta-close-childs (meta-close-fellow-childs linked-nested)]
       (if (empty? linked-nested)
         (list flat)
-        (cons flat (concat meta-close-childs (mapcat (partial pre-process processor) linked-nested))))
-      ))
-  )
+        (cons flat (concat meta-close-childs (mapcat (partial pre-process processor) linked-nested)))))))
 
 (defn- attributes [obj]
   (apply dissoc obj pdok-fields)
@@ -280,25 +285,21 @@
         collected (assoc no-attributes :attributes collected)]
     collected))
 
-(defn- close-child [processor parent-collection parent-id collection id close-time]
+(defn- close-child* [processor parent-collection parent-id collection id close-time]
   (let [persistence (:persistence processor)
         childs-of-child (pers/childs persistence collection id)
-        metas (map (fn [[child-col child-id]] {:action :close-childs
-                                  :collection child-col
-                                  :parent-collection collection
-                                  :parent-id id
-                                  :validity close-time}) childs-of-child)
+        metas (map (fn [[child-col _]] (meta-close-childs collection id close-time child-col)) childs-of-child)
         validity (pers/current-validity persistence collection id)
+        close {:action :close
+               :parent-collection parent-collection
+               :parent-id parent-id
+               :collection collection
+               :id id
+               :current-validity validity
+               :validity close-time}
         state (pers/last-action persistence collection id)]
         (if-not (= state :close)
-          (mapcat (partial process processor)
-                  (conj metas {:action :close
-                               :parent-collection parent-collection
-                               :parent-id parent-id
-                               :collection collection
-                               :id id
-                               :current-validity validity
-                               :validity close-time}))
+          (mapcat (partial process processor) (concat metas (list close)))
           (mapcat (partial process processor) metas))))
 
 (defn- close-childs [processor meta-record]
@@ -308,21 +309,18 @@
                   (pers/childs persistence parent-collection parent-id collection)
                   (pers/childs persistence parent-collection parent-id))
         closed (doall (mapcat
-                       (fn [[col id]] (close-child processor parent-collection parent-id
-                                                col id validity)) col-ids))]
-     closed))
+                        (fn [[col id]] (close-child* processor parent-collection parent-id col id validity)) col-ids))]
+    closed))
 
 (defn- delete-child* [processor collection id]
   (let [persistence (:persistence processor)
-        validity (pers/current-validity persistence collection id)]
-    (mapcat (partial process processor) (list
-                                  {:action :delete-childs
-                                   :parent-collection collection
-                                   :parent-id id}
-                                  {:action :delete
-                                   :collection collection
-                                   :id id
-                                   :current-validity validity}))))
+        meta (meta-delete-childs collection id)
+        validity (pers/current-validity persistence collection id)
+        delete {:action :delete
+                :collection collection
+                :id id
+                :current-validity validity}]
+    (mapcat (partial process processor) (list meta delete))))
 
 (defn- delete-childs [processor {:keys [parent-collection parent-id]}]
   (let [persistence (:persistence processor)

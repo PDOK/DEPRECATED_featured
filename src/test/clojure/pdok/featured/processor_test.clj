@@ -31,10 +31,12 @@
     (second (get @state [collection id] nil)))
   (last-action [this collection id]
     (first (get @state [collection id] nil)))
-  (current-version [this collection id]
+  (current-version [_ _ _]
     nil)
-  (childs [this parent-collection parent-id collection]
+  (childs [_ _ _ _]
     [])
+  (parent [_ _ _]
+    nil)
   (close [this] (assoc this :closed true)))
 
 (defrecord MockedProjector [features-n changes-n collections]

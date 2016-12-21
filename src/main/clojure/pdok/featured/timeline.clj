@@ -570,7 +570,7 @@ VALUES (?, ?, ?, ?, ?, ?)"))
             (batched-append-db-changelog [(:_collection current)
                                        (:_id current) nil
                                        v (:validity current) :delete])
-            (batched-append-changelog (changelog-delete-entry collection id v)))))))
+            (batched-append-changelog (changelog-delete-entry (:_collection current) (:_id current) v)))))))
   (proj/accept? [_ feature] true)
   (proj/close [this]
     (proj/flush this)
