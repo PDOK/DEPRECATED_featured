@@ -20,12 +20,14 @@
             [ring.middleware.defaults :refer :all]
             [ring.middleware.json :refer :all]
             [ring.util.response :as r]
-            [schema.core :as s])
+            [schema.core :as s]
+            [pdok.filestore :as fs])
   (:import [com.fasterxml.jackson.core JsonGenerator]
            (clojure.lang PersistentQueue)
            (org.joda.time DateTime)
            (schema.utils ValidationError)
-           (java.io File)))
+           (java.io File)
+           (java.util.zip ZipOutputStream ZipEntry)))
 
 (extend-protocol cheshire.generate/JSONable
   DateTime
@@ -101,19 +103,33 @@
     (catch Exception e
       [nil (:cause e)])))
 
+(defn zip-changelog [filestore changelog]
+  "Zip changelogs, returns new filenames"
+  (let [zipname (str changelog ".zip")
+        ^File uncompressed-file (fs/get-file filestore changelog)
+        compressed-file (io/file (.getParent uncompressed-file) zipname)]
+    (log/debug "Compressing file" (.getName uncompressed-file))
+    (with-open [zip (ZipOutputStream. (io/output-stream compressed-file))]
+      (.putNextEntry zip (ZipEntry. (.getName uncompressed-file)))
+      (io/copy uncompressed-file zip)
+      (.closeEntry zip)
+      zipname)))
+
 (defn- process* [worker-id stats callback-chan request]
   (log/info "Processsing: " request)
   (swap! stats assoc-in [:processing worker-id] request)
   (swap! stats update-in [:queued] pop)
   (let [dataset (:dataset request)
+        filestore (config/filestore)
         persistence (if (:no-state request) (persistence/make-no-state) (config/persistence))
         projectors (cond-> [(config/projectors persistence
                                                :projection (:projection request)
                                                :no-visualization (collections-with-option "no-visualization" (:processingOptions request)))]
-                    (not (:no-timeline request)) (conj (config/timeline persistence)))
+                    (not (:no-timeline request)) (conj (config/timeline persistence filestore)))
         processor (processor/create dataset persistence projectors)
         zipped? (= (:format request) "zip")
         [file err] (download-file (:file request) zipped?)]
+    (future (fs/cleanup-old-files filestore (* 3600 24 config/cleanup-threshold)))
     (if-not file
       (do
         (swap! stats assoc-in [:processing worker-id] nil)
@@ -127,7 +143,13 @@
                 processor (merge processor meta) ;; ugly, should move init here, but that doesnt work for the catch
                 _ (dorun (consume processor features))
                 processor (shutdown processor)
-                run-stats (assoc (:statistics processor) :request request)]
+                statistics (:statistics processor)
+                changelogs (:changelogs statistics)
+                zipped-changelogs (doall (map (partial zip-changelog filestore) changelogs))
+                _ (dorun (map #(fs/safe-delete (fs/get-file filestore %)) changelogs))
+                statistics (assoc-in statistics [:changelogs]
+                                     (map #(config/create-url (str "api/changelogs/" %)) zipped-changelogs))
+                run-stats (assoc statistics :request request)]
             (swap! stats assoc-in [:processing worker-id] nil)
             (stats-on-callback callback-chan request run-stats)))
         (catch Exception e
@@ -184,6 +206,16 @@
         (catch Exception e
           (r/status (r/response {:error (str e)}) 500))))))
 
+(defn serve-changelog [filestore changelog]
+  "Stream a changelog file identified by filename"
+  (log/debug "Request for" changelog)
+  (if-let [local-file (fs/get-file filestore changelog)]
+    {:headers {"Content-Description"       "File Transfer"
+               "Content-type"              "application/octet-stream"
+               "Content-Disposition"       (str "attachment;filename=" (.getName local-file))
+               "Content-Transfer-Encoding" "binary"}
+     :body    local-file}
+    {:status 500, :body "No such file"}))
 
 (defn api-routes [process-chan extract-chan stats]
   (defroutes api-routes
@@ -195,7 +227,8 @@
              (POST "/process" [] (partial process-request stats ProcessRequest :queued process-chan))
              (POST "/extract" [] (partial process-request stats ExtractRequest :extract-queue extract-chan))
              (POST "/extract/flush-changelog" [] (fn [r] (r/response (flush-extract-changelog r))))
-             (POST "/template" [] (fn [r] (r/response (template-request r)))))
+             (POST "/template" [] (fn [r] (r/response (template-request r))))
+             (GET "/changelogs/:changelog" [changelog] (serve-changelog (config/filestore) changelog)))
     (route/not-found "NOT FOUND")))
 
 (defn wrap-exception-handling

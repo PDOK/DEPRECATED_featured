@@ -13,6 +13,7 @@
       (consumer records))))
 
 (defn batched
+  ([batch flush-fn] (batched batch (Integer/MAX_VALUE) flush-fn))
   ([batch batch-size type f]
    (if (= :batch-fn type)
      (batched batch batch-size #(flush-batch batch f))
