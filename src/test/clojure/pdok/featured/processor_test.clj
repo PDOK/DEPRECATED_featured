@@ -211,4 +211,11 @@
       (is (= 4 (count processed)))
       (is (= 0 (count (filter #(:invalid? %) processed)))))))
 
-(def feature-with-array (io/resource "processor/feature-with-array.json"))
+(def feature-with-array-file (io/resource "processor/feature-with-array.json"))
+
+(deftest process-feature-with-array
+  (with-open [in (io/input-stream feature-with-array-file)]
+    (let [[meta features] (reader/features-from-stream in)
+          processor (create-processor)
+          processed (consume-single processor (first features))]
+      (is (= 3 (count (get processed "bronhouder")))))))
