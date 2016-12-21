@@ -217,5 +217,11 @@
   (with-open [in (io/input-stream feature-with-array-file)]
     (let [[meta features] (reader/features-from-stream in)
           processor (create-processor)
-          processed (consume-single processor (first features))]
-      (is (= 3 (count (get processed "bronhouder")))))))
+          processed (into '() (consume processor features))]
+      (is (= 1 (count processed)))
+      (is (= 0 (count (filter #(:invalid? %) processed))))
+      (let [bronhouders (get (-> processed first :attributes ) "bronhouder")]
+        (is (= 3 (count bronhouders)))
+        (is (some #{"B0001"} bronhouders))
+        (is (some #{"B0002"} bronhouders))
+        (is (some #{"B0003"} bronhouders))))))
