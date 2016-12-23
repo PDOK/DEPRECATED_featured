@@ -43,10 +43,12 @@
 (declare clj-to-pg-type)
 
 (defn write-vector [v ^java.sql.PreparedStatement s ^long i]
-  (let [con (.getConnection s)
-        pg-type (clj-to-pg-type (first v))
-        postgres-array (.createArrayOf con pg-type (into-array v))]
-    (.setObject s i postgres-array Types/ARRAY)))
+  (if (empty? v)
+    (.setObject s i nil Types/ARRAY)
+    (let [con (.getConnection s)
+          pg-type (clj-to-pg-type (first v))
+          postgres-array (.createArrayOf con pg-type (into-array v))]
+      (.setObject s i postgres-array Types/ARRAY))))
 
 (extend-protocol j/ISQLParameter
   pdok.featured.NilAttribute
