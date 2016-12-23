@@ -14,12 +14,10 @@
 (defn- remove-keys [map keys]
   (apply dissoc map keys))
 
-(defn conj!-coll [target x & xs]
-  (if (or (seq? x) (vector? x))
-    (apply conj!-coll target x)
-    (if (empty? xs)
-      (conj! target x)
-      (recur (conj! target x) (first xs) (rest xs)))))
+(defn conj!-coll [target [x & xs]]
+  (if (empty? xs)
+    (conj! target x)
+    (recur (conj! target x) xs)))
 
 (defn do-visualization? [options]
   (if (some #{"visualization"} options) true))
@@ -91,7 +89,7 @@
         attributes (:attributes feature)]
      (cond-> (transient [])
              (and geometry (f/valid-geometry? geometry))
-             (conj!-coll :_geometry_point :_geometry_line :_geometry_polygon :_geo_group)
+             (conj!-coll [:_geometry_point :_geometry_line :_geometry_polygon :_geo_group])
              (seq attributes) (conj!-coll (keys attributes))
              true (persistent!))))
 
@@ -102,10 +100,10 @@
      (cond-> (transient [(:version feature)])
              (and geometry (f/valid-geometry? geometry))
              (conj!-coll
-               (when (= :point geo-group) (proj-fn (f/as-jts geometry)))
-               (when (= :line geo-group) (proj-fn (f/as-jts geometry)))
-               (when (= :polygon geo-group)  (proj-fn (f/as-jts geometry)))
-               geo-group)
+               [(when (= :point geo-group) (proj-fn (f/as-jts geometry)))
+                (when (= :line geo-group) (proj-fn (f/as-jts geometry)))
+                (when (= :polygon geo-group) (proj-fn (f/as-jts geometry)))
+                geo-group])
              (seq attributes) (conj!-coll (vals attributes))
              true (conj! (:id feature))
              true (conj! (:current-version feature))

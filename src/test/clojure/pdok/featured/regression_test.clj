@@ -529,3 +529,7 @@
                                             :n-valid-to 2}
                                            (:extracts results))
                    (test-geoserver 1))
+
+(defregressiontest new-change_with_array_attribute results
+                   ;only checking if db imports work (without exceptions), so no checks.
+                   )
