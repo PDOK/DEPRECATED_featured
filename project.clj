@@ -42,9 +42,9 @@
                  [prismatic/schema "0.4.3"]
                  [ring/ring-defaults "0.1.5"]
                  [ring/ring-json "0.3.1"]
-                 [nl.pdok/featured-shared "1.0-rc6"]]
+                 [nl.pdok/featured-shared "1.0-rc8"]]
   :plugins [[lein-ring "0.9.6" ]
-            [lein-filegen "0.1.0-SNAPSHOT"]]
+            [pdok/lein-filegen "0.1.0"]]
   :ring {:handler pdok.featured.api/app
          :init pdok.featured.api/init!
          :uberwar-name ~uberwar-name}

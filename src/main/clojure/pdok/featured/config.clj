@@ -60,13 +60,31 @@
   (pers/make-cached-jdbc-processor-persistence
                     {:db-config processor-db :batch-size 10000}))
 
+(def store-dir
+  (let [fqdn (or (env :fully-qualified-domain-name) "localhost")
+        s (System/getProperty "file.separator")
+        path (io/file (str (System/getProperty "java.io.tmpdir") s "featured" s fqdn s ))]
+    path))
+
+(defn filestore
+  ([]
+   (let [path store-dir]
+     (filestore path)))
+  ([store-dir]
+   (let [path (io/file store-dir)]
+     (when-not (.exists path) (.mkdirs path))
+     {:store-dir path})))
+
 (defn timeline
   ([]
    (timeline (persistence)))
   ([persistence]
+   (timeline persistence (filestore (str (System/getProperty "java.io.tmpdir") "/featured"))))
+  ([persistence filestore]
    (timeline/create-chunked {:chunk-size  (read-string (or (env :processor-batch-size) "10000"))
                              :db-config   processor-db
-                             :persistence persistence})))
+                             :persistence persistence}
+                            filestore)))
 
 (defn timeline-for-dataset [dataset]
   (let [tl (timeline)]
@@ -98,4 +116,13 @@
   (let [n-workers (read-string (or (env :n-workers) "2"))]
     (dorun (for [i (range 0 n-workers)]
              (factory-f i)))))
+
+(def cleanup-threshold
+  (read-string (or (env :cleanup-threshold) "5")))
+
+(defn create-url [path]
+  (let [fully-qualified-domain-name (or (env :fully-qualified-domain-name) "localhost")
+        port (or (env :port) "3000")
+        context-root (or (env :context-root) nil)]
+    (str "http://" fully-qualified-domain-name ":" port "/" context-root (when context-root "/") path)))
 

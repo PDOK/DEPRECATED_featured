@@ -5,8 +5,8 @@
             [clojure.walk :refer [postwalk]])
   (:import (com.fasterxml.jackson.core JsonFactory JsonFactory$Feature
                                        JsonParser$Feature JsonParser JsonToken)
-           (org.joda.time DateTime)
-           (pdok.featured GeometryAttribute)))
+           (pdok.featured GeometryAttribute)
+           (org.joda.time DateTimeZone)))
 
 (def ^:private pdok-field-replacements
   {"_action" :action "_collection" :collection "_id" :id "_validity" :validity
@@ -29,7 +29,7 @@
     feature))
 
 ;; 2015-02-26T15:48:26.578Z
-(def ^{:private true} date-time-formatter (tf/formatters :date-time-parser) )
+(def ^{:private true} date-time-formatter (tf/with-zone (tf/formatters :date-time-parser) (DateTimeZone/forID "Europe/Amsterdam")))
 
 (def ^{:private true} date-formatter (tf/formatter "yyyy-MM-dd"))
 
@@ -37,8 +37,7 @@
   "Parses an ISO8601 date timestring to local date time"
   [datetimestring]
   (when-not (clojure.string/blank? datetimestring)
-    (as-> datetimestring v
-          (tf/parse-local date-time-formatter v))))
+    (tc/to-local-date-time (tf/parse date-time-formatter datetimestring))))
 
 (defn parse-date
   "Parses a date string to local date"

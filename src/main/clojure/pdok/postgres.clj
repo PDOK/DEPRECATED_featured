@@ -7,7 +7,8 @@
   (:import [com.vividsolutions.jts.io WKTWriter]
            [java.util Calendar TimeZone]
            [org.joda.time DateTimeZone LocalDate LocalDateTime]
-           (pdok.featured NilAttribute)))
+           (pdok.featured NilAttribute)
+           (java.sql Types)))
 
 (defn dbspec->url [{:keys [subprotocol subname user password]}]
   (str "jdbc:" subprotocol ":" subname "?user=" user "&password=" password))
@@ -39,6 +40,16 @@
   clojure.lang.IMeta
   (meta [_] {:type clazz}))
 
+(declare clj-to-pg-type)
+
+(defn write-vector [v ^java.sql.PreparedStatement s ^long i]
+  (if (empty? v)
+    (.setObject s i nil Types/ARRAY)
+    (let [con (.getConnection s)
+          pg-type (clj-to-pg-type (first v))
+          postgres-array (.createArrayOf con pg-type (into-array v))]
+      (.setObject s i postgres-array Types/ARRAY))))
+
 (extend-protocol j/ISQLParameter
   pdok.featured.NilAttribute
   (set-parameter [^pdok.featured.NilAttribute v ^java.sql.PreparedStatement s ^long i]
@@ -51,25 +62,26 @@
     (.setDate s i (j/sql-value v) utcCal))
   java.util.UUID
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
-    (.setObject s i (j/sql-value v) java.sql.Types/OTHER))
+    (.setObject s i (j/sql-value v) Types/OTHER))
   pdok.featured.GeometryAttribute
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
-    (.setObject s i (j/sql-value v) java.sql.Types/OTHER))
+    (.setObject s i (j/sql-value v) Types/OTHER))
   com.vividsolutions.jts.geom.Geometry
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
-    (.setObject s i (j/sql-value v) java.sql.Types/OTHER))
+    (.setObject s i (j/sql-value v) Types/OTHER))
   clojure.lang.IPersistentMap
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
-    (.setObject s i (j/sql-value v) java.sql.Types/VARCHAR))
+    (.setObject s i (j/sql-value v) Types/VARCHAR))
   clojure.lang.IPersistentVector
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
-    (if (empty? v)
-      (.setObject s i nil java.sql.Types/OTHER)
-      (j/set-parameter (into-array v) s i)))
+    (write-vector v s i))
+  clojure.lang.PersistentVector
+  (set-parameter [v ^java.sql.PreparedStatement s ^long i]
+    (write-vector v s i))
   clojure.lang.IPersistentList
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
     (if (empty? v)
-      (.setObject s i nil java.sql.Types/OTHER)
+      (.setObject s i nil Types/OTHER)
       (j/set-parameter (into-array v) s i)))
   clojure.lang.IPersistentSet
   (set-parameter [v ^java.sql.PreparedStatement s ^long i]
@@ -80,21 +92,28 @@
    (set-parameter [v ^java.sql.PreparedStatement s ^long i]
       (let [con (.getConnection s)
             postgres-array (.createArrayOf con "integer" v)]
-             (.setObject s i postgres-array java.sql.Types/OTHER))))
+        (.setObject s i postgres-array Types/ARRAY))))
 
 (extend-protocol j/ISQLParameter
   (Class/forName "[Ljava.lang.Integer;")
    (set-parameter [v ^java.sql.PreparedStatement s ^long i]
       (let [con (.getConnection s)
             postgres-array (.createArrayOf con "integer" v)]
-        (.setObject s i postgres-array java.sql.Types/OTHER))))
+        (.setObject s i postgres-array Types/ARRAY))))
 
 (extend-protocol j/ISQLParameter
   (Class/forName "[Ljava.util.UUID;")
    (set-parameter [v ^java.sql.PreparedStatement s ^long i]
       (let [con (.getConnection s)
             postgres-array (.createArrayOf con "uuid" v)]
-        (.setObject s i postgres-array java.sql.Types/OTHER))))
+        (.setObject s i postgres-array Types/ARRAY))))
+
+(extend-protocol j/ISQLParameter
+  (Class/forName "[Ljava.lang.String;")
+  (set-parameter [v ^java.sql.PreparedStatement s ^long i]
+    (let [con (.getConnection s)
+          postgres-array (.createArrayOf con "text" v)]
+      (.setObject s i postgres-array Types/ARRAY))))
 
 (extend-protocol j/IResultSetReadColumn
   java.sql.Date
@@ -107,6 +126,12 @@
 
 (def geometry-type "geometry")
 
+(declare clj-to-pg-type)
+
+(defn vector->pg-type [v]
+  (let [e (first v)]
+    (str (clj-to-pg-type e) "[]")))
+
 (defn clj-to-pg-type [clj-value]
   (let [clj-type (type clj-value)]
     (condp = clj-type
@@ -114,6 +139,8 @@
       pdok.featured.NilAttribute (clj-to-pg-type (NilType. (.-clazz clj-value)))
       clojure.lang.Keyword "text"
       clojure.lang.IPersistentMap "text"
+      clojure.lang.IPersistentVector (vector->pg-type clj-value)
+      clojure.lang.PersistentVector (vector->pg-type clj-value)
       org.joda.time.DateTime "timestamp with time zone"
       org.joda.time.LocalDateTime "timestamp without time zone"
       org.joda.time.LocalDate "date"
