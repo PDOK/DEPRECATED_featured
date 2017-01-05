@@ -103,6 +103,7 @@
     (Integer. srid)))
 
 (defn create-geometry-atrribute [geometry]
+  (println "Geometry: " geometry)
   (if-let [type (get geometry "type")]
     (GeometryAttribute. type (get geometry type) (get-valid-srid geometry))))
 
@@ -114,7 +115,7 @@
       "~#int"     (if params (int (first params)) (nilled java.lang.Integer))
       "~#boolean" (if params (boolean (first params)) (nilled java.lang.Boolean))
       "~#double"  (if params (double (first params)) (nilled java.lang.Double))
-      "~#geometry" (if params (create-geometry-atrribute params) (nilled pdok.featured.GeometryAttribute))
+      "~#geometry" (if params (create-geometry-atrribute (first params)) (nilled pdok.featured.GeometryAttribute))
       element ; never fail just return element
       ))
   )
