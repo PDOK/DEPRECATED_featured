@@ -390,7 +390,7 @@ VALUES (?, ?, ?, ?, ?, ?)"))
    (:_version new-feature)
    (transit/to-json new-feature)])
 
-;; [collection] action id old-version new-version json
+;; [collection] action id old-version version json
 (defn changelog-change-entry [current-version new-feature]
   [(:_collection new-feature)
    "change"
@@ -399,15 +399,16 @@ VALUES (?, ?, ?, ?, ?, ?)"))
    (:_version new-feature)
    (transit/to-json new-feature)])
 
-;; [collection] action id version closed-feature
-(defn changelog-close-entry [closed-feature]
+;; [collection] action id old-version version json
+(defn changelog-close-entry [old-version closed-feature]
   [(:_collection closed-feature)
    "close"
    (:_id closed-feature)
+   old-version
    (:_version closed-feature)
    (transit/to-json closed-feature)])
 
-;; [collection] action id version
+;; [collection] action id old-version
 (defn changelog-delete-entry [collection id version]
   [collection
    "delete"
@@ -520,7 +521,7 @@ VALUES (?, ?, ?, ?, ?, ?)"))
                 (batched-append-db-changelog [(:_collection new-current)
                                               (:_id new-current) (:_version current)
                                               (:_version new-current) (:_valid_from new-current) :close])
-                (batched-append-changelog (changelog-close-entry closed-current)))
+                (batched-append-changelog (changelog-close-entry (:_version current) closed-current)))
               (if (t/before? (:_valid_from current) (:validity feature))
                 (let [closed-current (sync-valid-to current feature)
                       ;; reset valid-to for new-current.
@@ -534,7 +535,7 @@ VALUES (?, ?, ?, ?, ?, ?)"))
                   (batched-append-db-changelog [(:_collection new-current)
                                                 (:_id new-current) nil
                                                 (:_version new-current) (:validity feature) :new])
-                  (batched-append-changelog (changelog-close-entry closed-current))
+                  (batched-append-changelog (changelog-close-entry (:_version current) closed-current))
                   (batched-append-changelog (changelog-new-entry new-current+)))
                 (let [new-current+ (reset-valid-to (sync-valid-from new-current feature))]
                   ;; reset valid-to because it might be closed because of nested features.
