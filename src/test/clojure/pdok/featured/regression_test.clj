@@ -96,14 +96,15 @@
     {:action :change
      :id id
      :old-version old-version
-     :new-version new-version
+     :version new-version
      :feature (t/from-json json)}))
 
 (defn make-close-record [line]
-  (let [[id version json] (str/split line #"," 3)]
+  (let [[id old-version new-version json] (str/split line #"," 4)]
     {:action :close
      :id id
-     :version version
+     :old-version old-version
+     :version new-version
      :feature (t/from-json json)}))
 
 (defn make-delete-record [line]
