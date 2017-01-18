@@ -102,7 +102,6 @@
     (Integer. srid)))
 
 (defn create-geometry-atrribute [geometry]
-  (println "Geometry: " geometry)
   (if-let [type (get geometry "type")]
     (GeometryAttribute. type (get geometry type) (get-valid-srid geometry))))
 
