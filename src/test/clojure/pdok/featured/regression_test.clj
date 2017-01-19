@@ -424,7 +424,7 @@
   (test-persistence {:events 3 :features 1})
   (test-persistence "col-1$nested" {:events 5 :features 3})
   (test-timeline {:timeline              {:n 3}
-                  :timeline-db-changelog {:n-new 3 :n-change 3 :n-close 4}}
+                  :timeline-db-changelog {:n-new 3 :n-change 5 :n-close 2}}
                  results)
   (test-timeline->extract {:n-extracts 3
                            :n-valid-to 2}
@@ -439,7 +439,7 @@
   (test-persistence "col-1$nestedserie" {:events 5 :features 3})
   (test-persistence "col-1$nestedserie$label" {:events 5 :features 3})
   (test-timeline {:timeline              {:n 2}
-                  :timeline-db-changelog {:n-new 3 :n-change 6 :n-delete 3 :n-close 3}}
+                  :timeline-db-changelog {:n-new 3 :n-change 8 :n-delete 3 :n-close 1}}
                  results)
   (test-timeline->extract {:n-extracts 2
                            :n-valid-to 1}
@@ -484,7 +484,7 @@
   (test-persistence "pand$nummeraanduidingreeks$positie" {:events 7 :features 5})
   (test-timeline "pand" "id-a"
                  {:timeline              {:n 3}
-                  :timeline-db-changelog {:n-new 3 :n-change 11 :n-close 7}}
+                  :timeline-db-changelog {:n-new 3 :n-change 16 :n-close 2}}
                  results)
   (test-timeline->extract {:n-extracts 3
                            :n-valid-to 2}
@@ -511,7 +511,7 @@
                    (test-persistence {:events 2 :features 1})
                    (test-persistence "col-1$nested" {:events 2 :features 1})
                    (test-timeline {:timeline              {:n 1}
-                                   :timeline-db-changelog {:n-new 1 :n-change 1 :n-close 2}}
+                                   :timeline-db-changelog {:n-new 1 :n-change 2 :n-close 1}}
                                   results)
                    (test-timeline->extract {:n-extracts 1
                                             :n-valid-to 1}
