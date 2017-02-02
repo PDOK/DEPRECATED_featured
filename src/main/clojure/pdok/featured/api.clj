@@ -153,7 +153,10 @@
             (swap! stats assoc-in [:processing worker-id] nil)
             (stats-on-callback callback-chan request run-stats)))
         (catch Exception e
-          (let [_ (shutdown processor)
+          (let [_ (try
+                    (shutdown processor)
+                    (catch Exception e
+                      (log/warn e "failed to shutdown processor in exception handler")))
                 error-stats (assoc request :error (str e))]
             (log/warn e error-stats)
             (swap! stats assoc-in [:processing worker-id] nil)
