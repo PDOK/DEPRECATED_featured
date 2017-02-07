@@ -70,7 +70,7 @@
 (defn- feature-to-sparse-record [proj-fn feature all-fields-constructor import-nil-geometry?]
   ;; could use a valid-geometry? check?! For now not, as-jts return nil if invalid (for gml)
   (let [id (:id feature)
-        parent_id (:parent-id feature)
+        parent-id (:parent-id feature)
         version (:version feature)
         sparse-attributes (all-fields-constructor (:attributes feature))]
     (let [geometry-attribute (-> feature :geometry)
@@ -78,7 +78,7 @@
       (when (or geometry import-nil-geometry?)
         (let [geo-group (f/geometry-group geometry-attribute)
               record (concat [id
-                              parent_id
+                              parent-id
                               version
                               (when (= :point geo-group) geometry)
                               (when (= :line geo-group) geometry)
