@@ -473,7 +473,7 @@
                            :n-valid-to 0}
                           (:extracts results))
   (test-geoserver 1)
-  (test-geoserver "col-1$nestedserie" 0)
+  (test-geoserver "col-1$nestedserie" 1)
   (test-geoserver "col-1$nestedserie$label" 1))
 
 (defregressiontest new-change-change-pand-test results
@@ -489,7 +489,7 @@
                            :n-valid-to 2}
                           (:extracts results))
   (test-geoserver "pand" 1)
-  (test-geoserver "pand$nummeraanduidingreeks" 0)
+  (test-geoserver "pand$nummeraanduidingreeks" 3)
   (test-geoserver "pand$nummeraanduidingreeks$positie" 3))
 
 (defpermutatedtest same-double-new results
