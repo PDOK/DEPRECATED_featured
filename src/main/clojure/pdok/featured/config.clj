@@ -110,7 +110,7 @@
                                :ndims ndims
                                :srid srid
                                :no-visualization no-visualization
-                               :import-nil-geometry? (env :import-nil-geometry)})]))
+                               :import-nil-geometry? true})]))
 
 (defn create-workers [factory-f]
   (let [n-workers (read-string (or (env :n-workers) "2"))]

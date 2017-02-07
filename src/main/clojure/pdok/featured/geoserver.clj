@@ -41,6 +41,7 @@
     (pg/create-table db dataset table
                      [:gid "serial" :primary :key]
                      [:_id "text"]
+                     [:_parent_id "text"]
                      [:_version "uuid"]
                      [:_geo_group "text"])
 
@@ -54,6 +55,7 @@
         columns (pg/table-columns db dataset table)
         no-defaults (filter #(not (some #{(:column_name %)} ["gid"
                                                              "_id"
+                                                             "_parent_id"
                                                              "_version"
                                                              "_geometry_point"
                                                              "_geometry_line"
@@ -68,6 +70,7 @@
 (defn- feature-to-sparse-record [proj-fn feature all-fields-constructor import-nil-geometry?]
   ;; could use a valid-geometry? check?! For now not, as-jts return nil if invalid (for gml)
   (let [id (:id feature)
+        parent_id (:parent-id feature)
         version (:version feature)
         sparse-attributes (all-fields-constructor (:attributes feature))]
     (let [geometry-attribute (-> feature :geometry)
@@ -75,6 +78,7 @@
       (when (or geometry import-nil-geometry?)
         (let [geo-group (f/geometry-group geometry-attribute)
               record (concat [id
+                              parent_id
                               version
                               (when (= :point geo-group) geometry)
                               (when (= :line geo-group) geometry)
@@ -133,7 +137,7 @@
                                (map #(feature-to-sparse-record proj-fn % (all-fields-constructor all-attributes) import-nil-geometry?)
                                     grouped-features))]
            (if (not (empty? records))
-             (let [fields (concat [:_id :_version :_geometry_point :_geometry_line :_geometry_polygon :_geo_group]
+             (let [fields (concat [:_id :_parent_id :_version :_geometry_point :_geometry_line :_geometry_polygon :_geo_group]
                                   all-attributes)
                    sql (gs-insert-sql dataset collection fields)]
                (j/execute! db (cons sql records) :multi? true :transaction? (:transaction? db)))))))
