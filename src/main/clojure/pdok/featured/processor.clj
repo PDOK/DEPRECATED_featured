@@ -198,7 +198,6 @@
         no-update-nw (-> nw
                          (transient)
                          (assoc! :action :close)
-                         (dissoc! :geometry)
                          (assoc! :attributes {})
                          (assoc! :current-validity validity)
                          (persistent!))]
@@ -368,8 +367,8 @@
     (flatten processor prepped)))
 
 (defn- append-feature [persistence feature]
-  (let [{:keys [version action collection id validity geometry attributes]} feature]
-    (pers/append-to-stream persistence version action collection id validity geometry attributes)
+  (let [{:keys [version action collection id validity attributes]} feature]
+    (pers/append-to-stream persistence version action collection id validity attributes)
     feature))
 
 (defn- update-statistics [{:keys [statistics]} feature]

@@ -56,7 +56,7 @@
 (def example-feature-bgt-wegdeel
                     (merge
                     {"_action" "new"}
-                    {:geometry example-geometry-bgt-wegdeel}
+                    {"_geometry" example-geometry-bgt-wegdeel}
                      example-attributes-bgt-wegdeel
                     {:label ["een" "twee" "drie"]})
 )

@@ -28,7 +28,7 @@
   (create-stream
     [persistence collection id]
     [persistence collection id parent-collection parent-id parent-field])
-  (append-to-stream [persistence version action collection id validity geometry attributes])
+  (append-to-stream [persistence version action collection id validity attributes])
   (current-validity [persistence collection id])
   (last-action [persistence collection id])
   (current-version [persistence collection id])
@@ -116,7 +116,6 @@ If n nil => no limit, if collections nil => all collections")
                                     [:collection "varchar(255)"]
                                     [:feature_id "varchar(50)"]
                                     [:validity "timestamp without time zone"]
-                                    [:geometry "text"]
                                     [:attributes "text"])
                    (pg/create-index db dc/*persistence-schema* dc/*persistence-feature-stream* :collection :feature_id)
                    (pg/configure-auto-vacuum db dc/*persistence-schema* dc/*persistence-feature-stream* 0 10000 0))
@@ -159,7 +158,6 @@ If n nil => no limit, if collections nil => all collections")
                  :version (:version record)
                  :current-version (:previous_version record)
                  :validity (:validity record)
-                 :geometry (transit/from-json (:geometry record))
                  :attributes (transit/from-json (:attributes record)))]
     (>!! c (persistent! f))))
 
@@ -185,8 +183,7 @@ If n nil => no limit, if collections nil => all collections")
        fs.version,
        fs.previous_version,
        fs.validity,
-       fs.attributes,
-       fs.geometry
+       fs.attributes
   FROM " (qualified-feature-stream dataset) " fs "
   (when (seq collections) (str " WHERE fs.collection in ("
                                (clojure.string/join "," (repeat (count collections) "?"))
@@ -298,7 +295,7 @@ If n nil => no limit, if collections nil => all collections")
                  (try (j/with-db-connection [c db]
                                             (apply
                                               (partial j/insert! c (qualified-feature-stream dataset) :transaction? (:transaction? db)
-                                                       [:version :previous_version :action :collection :feature_id :validity :geometry :attributes])
+                                                       [:version :previous_version :action :collection :feature_id :validity :attributes])
                                               entries))
                       (catch SQLException e
                         (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
@@ -422,14 +419,13 @@ If n nil => no limit, if collections nil => all collections")
       (when-not (collection-exists? this collection parent-collection)
         (create-collection this collection parent-collection))
       (double-cache-batched collection id parent-collection parent-id parent-field)))
-  (append-to-stream [this version action collection id validity geometry attributes]
-    ;(println "APPEND: " id)
-    (let [key-fn   (fn [_ _ _ collection id _ _ _] [collection id])
-          value-fn (fn [_ version _ action _ _ validity _ _] [validity action version])
+  (append-to-stream [this version action collection id validity attributes]
+    (let [key-fn   (fn [_ _ _ collection id _ _] [collection id])
+          value-fn (fn [_ version _ action _ _ validity _] [validity action version])
           previous-version (current-version this collection id)
           batched-insert (batched stream-batch stream-batch-size :batch-fn (partial jdbc-insert this))
           cache-batched-insert (with-cache stream-cache batched-insert key-fn value-fn)]
-      (cache-batched-insert version previous-version action collection id validity geometry attributes)))
+      (cache-batched-insert version previous-version action collection id validity attributes)))
   (current-validity [this collection id]
     (get (current-state this collection id) 0))
   (last-action [this collection id]
@@ -497,7 +493,7 @@ If n nil => no limit, if collections nil => all collections")
     nil)
   (create-stream [persistence collection id parent-collection parent-id parent-field]
     nil)
-  (append-to-stream [persistence version action collection id validity geometry attributes]
+  (append-to-stream [persistence version action collection id validity attributes]
     nil)
   (current-validity [persistence collection id]
     nil)

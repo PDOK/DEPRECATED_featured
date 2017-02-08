@@ -10,8 +10,8 @@
 
 (def ^:private pdok-field-replacements
   {"_action" :action "_collection" :collection "_id" :id "_validity" :validity
-   "_geometry" :geometry "_current_validity" :current-validity
-   "_parent_id" :parent-id "_parent_collection" :parent-collection "_parent_field" :parent-field})
+   "_current_validity" :current-validity "_parent_id" :parent-id 
+   "_parent_collection" :parent-collection "_parent_field" :parent-field})
 
 (declare parse-time
          parse-date
@@ -131,14 +131,7 @@
     ;; else just return element, replace nothing
     element))
 
-(defn- upgrade-geometry [element]
-  (if (:geometry element)
-    (update element :geometry create-geometry-atrribute)
-    element))
-
 (defn- upgrade-data [attributes]
   "Replaces functions with their parsed values"
   (let [attributes (postwalk replace-fn attributes)]
-    (postwalk upgrade-geometry attributes)))
-
-;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))
+    attributes))
