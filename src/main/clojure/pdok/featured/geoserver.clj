@@ -54,7 +54,10 @@
     attributes))
 
 (defn- gs-add-attribute [{:keys [db dataset]} collection attribute-name attribute-value ndims srid]
-  (pg/create-column db dataset collection attribute-name (pg/clj-to-pg-type attribute-value) ndims srid))
+  (let [attribute-type (pg/clj-to-pg-type attribute-value)]
+    (pg/create-column db dataset collection attribute-name attribute-type ndims srid)
+    (when (= attribute-type pg/geometry-type)
+      (pg/create-geo-index db dataset collection attribute-name))))
 
 (defn- feature-to-sparse-record [proj-fn feature all-fields-constructor import-nil-geometry?]
   (let [id (:id feature)

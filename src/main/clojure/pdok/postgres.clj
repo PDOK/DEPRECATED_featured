@@ -177,11 +177,15 @@
   (j/db-do-commands db
                     (apply j/create-table-ddl (str (-> schema name quoted) "." (-> table name quoted)) fields)))
 
+(defn- remove-underscores [name]
+  (if (= (first name) \_)
+    (recur (next name))
+    (apply str name)))
 
 (defn- create-index* [db schema table index-type & columns]
   (let [column-names (map name columns)
         quoted-columns (clojure.string/join "," (map quoted column-names))
-        index-name (str (name table) (clojure.string/join "" (map name columns)) (or (index-type {:gist "_sidx"}) "_idx"))]
+        index-name (str (name table) "_" (clojure.string/join "_" (map remove-underscores column-names)) (or (index-type {:gist "_sidx"}) "_idx"))]
     (try
       (j/db-do-commands db (str "CREATE INDEX " (quoted index-name)
                                 " ON "  (-> schema name quoted) "." (-> table name quoted)
