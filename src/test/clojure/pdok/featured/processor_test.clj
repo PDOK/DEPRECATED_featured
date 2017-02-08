@@ -24,7 +24,7 @@
   (create-stream [this collection id parent-collection parent-id parent-field]
     (swap! streams assoc [collection id] 1)
     (swap! streams-n inc))
-  (append-to-stream [this version action collection id validity geometry attributes]
+  (append-to-stream [this version action collection id validity attributes]
     (swap! state assoc [collection id] [action validity])
     (swap! events-n inc))
   (current-validity [_ collection id]
@@ -92,7 +92,7 @@
 
 (defn- init-with-feature [persistence {:keys [collection id action validity]}]
   (pers/create-stream persistence collection id)
-  (pers/append-to-stream persistence nil action collection id validity nil nil))
+  (pers/append-to-stream persistence nil action collection id validity nil))
 
 (deftest inititialized-processor
   (let [processor (processor/create "know-dataset" (create-persistence) (create-projectors 2))]

@@ -4,7 +4,7 @@
 		<imgeo:inOnderzoek>{{inOnderzoek}}</imgeo:inOnderzoek>
 		<imgeo:kruinlijnWegdeel{{#kruinlijn_leeg}} nilReason="{{.}}"{{/kruinlijn_leeg}}>{{{kruinlijn.geometry.gml}}}</imgeo:kruinlijnWegdeel>
 		<imgeo:lokaalId>{{lokaalID}}</lokaaldId>
-		<imgeo:geometrie2dWegdeel>{{{geometry.gml}}}</imgeo:geometrie2dWegdeel>
+		<imgeo:geometrie2dWegdeel>{{{_geometry.gml}}}</imgeo:geometrie2dWegdeel>
 		<imgeo:wegdeelOpTalud{{#opTalud_leeg}} nilReason="{{.}}"{{/opTalud_leeg}}>{{opTalud}}</imgeo:wegdeelOpTalud>			
 		<imgeo:plus-fysiekVoorkomenWegdeel codeSpace="{{fysiekVoorkomen_codeSpace}}">{{plus-fysiekVoorkomen}}{{plus-fysiekVoorkomen_leeg}}</imgeo:plus-fysiekVoorkomenWegdeel>
 		<imgeo:plus-functieWegdeel codeSpace="{{plus-functie_codeSpace}}">{{plus-functie}}{{plus-functie_leeg}}</imgeo:plus-functieWegdeel>
