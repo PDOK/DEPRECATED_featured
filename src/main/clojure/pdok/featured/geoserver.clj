@@ -34,20 +34,13 @@
 
 (defn- gs-create-collection [{:keys [db dataset]} ndims srid collection]
   "Create table with default fields"
-  (let [table collection
-        geometries [:_geometry_point :_geometry_line :_geometry_polygon]]
-
+  (let [table collection]
     (pg/create-table db dataset table
                      [:gid "serial" :primary :key]
                      [:_id "text"]
                      [:_parent_id "text"]
-                     [:_version "uuid"]
-                     [:_geo_group "text"])
-
-    (pg/create-index db dataset table "_id")
-    (doseq [geometry geometries]
-      (#(pg/create-column db dataset table %1 pg/geometry-type ndims srid) geometry)
-      ((partial pg/create-geo-index db dataset table) geometry))))
+                     [:_version "uuid"])
+    (pg/create-index db dataset table "_id")))
 
 (defn- gs-collection-attributes [{:keys [db dataset]} collection]
   (let [table collection
@@ -55,11 +48,7 @@
         no-defaults (filter #(not (some #{(:column_name %)} ["gid"
                                                              "_id"
                                                              "_parent_id"
-                                                             "_version"
-                                                             "_geometry_point"
-                                                             "_geometry_line"
-                                                             "_geometry_polygon"
-                                                             "_geo_group"])) columns)
+                                                             "_version"])) columns)
         attributes (reduce (fn [acc c] (conj acc c)) #{} (map #(:column_name %) no-defaults))]
     attributes))
 
@@ -67,46 +56,25 @@
   (pg/create-column db dataset collection attribute-name (pg/clj-to-pg-type attribute-value) ndims srid))
 
 (defn- feature-to-sparse-record [proj-fn feature all-fields-constructor import-nil-geometry?]
-  ;; could use a valid-geometry? check?! For now not, as-jts return nil if invalid (for gml)
   (let [id (:id feature)
         parent-id (:parent-id feature)
         version (:version feature)
         sparse-attributes (all-fields-constructor (:attributes feature))]
-    (let [geometry-attribute (-> feature :geometry)
-          geometry (proj-fn (f/as-jts geometry-attribute))]
-      (when (or geometry import-nil-geometry?)
-        (let [geo-group (f/geometry-group geometry-attribute)
-              record (concat [id
-                              parent-id
-                              version
-                              (when (= :point geo-group) geometry)
-                              (when (= :line geo-group) geometry)
-                              (when (= :polygon geo-group) geometry)
-                              geo-group]
-                             sparse-attributes
-                             [id])]
-          record)))))
+    (concat [id
+                parent-id
+                version]
+               sparse-attributes
+               [id])))
 
 (defn- feature-keys [feature]
-  (let [geometry (-> feature :geometry)
-        attributes (:attributes feature)]
+  (let [attributes (:attributes feature)]
      (cond-> (transient [])
-             (and geometry (f/valid-geometry? geometry))
-             (conj!-coll [:_geometry_point :_geometry_line :_geometry_polygon :_geo_group])
              (seq attributes) (conj!-coll (keys attributes))
              true (persistent!))))
 
  (defn- feature-to-update-record [proj-fn feature]
-   (let [attributes (:attributes feature)
-         geometry (-> feature :geometry)
-         geo-group (when geometry (f/geometry-group geometry))]
+   (let [attributes (:attributes feature)]
      (cond-> (transient [(:version feature)])
-             (and geometry (f/valid-geometry? geometry))
-             (conj!-coll
-               [(when (= :point geo-group) (proj-fn (f/as-jts geometry)))
-                (when (= :line geo-group) (proj-fn (f/as-jts geometry)))
-                (when (= :polygon geo-group) (proj-fn (f/as-jts geometry)))
-                geo-group])
              (seq attributes) (conj!-coll (vals attributes))
              true (conj! (:id feature))
              true (conj! (:current-version feature))
@@ -114,9 +82,6 @@
 
 (defn- all-fields-constructor [attributes]
   (if (empty? attributes) (constantly nil) (apply juxt (map #(fn [col] (get col %)) attributes))))
-
-(defn- geo-column [geo-group]
-   (str "_geometry_" (name geo-group)))
 
 (defn gs-insert-sql [schema table columns]
   (str "INSERT INTO " (pg/quoted schema) "." (pg/quoted table)
@@ -136,7 +101,7 @@
                                (map #(feature-to-sparse-record proj-fn % (all-fields-constructor all-attributes) import-nil-geometry?)
                                     grouped-features))]
            (if (not (empty? records))
-             (let [fields (concat [:_id :_parent_id :_version :_geometry_point :_geometry_line :_geometry_polygon :_geo_group]
+             (let [fields (concat [:_id :_parent_id :_version]
                                   all-attributes)
                    sql (gs-insert-sql dataset collection fields)]
                (j/execute! db (cons sql records) :multi? true :transaction? (:transaction? db)))))))
