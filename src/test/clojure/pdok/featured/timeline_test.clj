@@ -8,35 +8,34 @@
 (defn- make-feature [attributes geometry id version]
   (cond-> {:collection "only-path-should-matter"
            :id id
-           :attributes attributes}
-          geometry (assoc :geometry (when geometry (let [ga (GeometryAttribute. (name :dummy) (:dummy geometry))
-                                                         _ (.setTiles ga (:nl-tiles geometry))]
-                                                     ga)))
+           :attributes (assoc attributes "_geometry" (when geometry 
+                                                       (let [ga (GeometryAttribute. 
+                                                                  (name :dummy) 
+                                                                  (:dummy geometry))]
+                                                         ga)))}
+          geometry (assoc :tiles (:nl-tiles geometry))
           version (assoc :version version)))
 
 (def ^{:private true} should-be-geometry
-  (let [ga (GeometryAttribute. (name :dummy) :dummy)
-        _ (.setTiles ga #{666})]
+  (let [ga (GeometryAttribute. (name :dummy) :dummy)]
     ga))
-
 
 (defn- make-root [versions & tiles]
   {:_version (first versions) :_all_versions versions :_tiles (into #{} tiles)})
 
 (defn- mustafied
-  ([attributes] (mustafied attributes nil))
-  ([attributes geom] (mustafied attributes geom "not-important"))
-  ( [attributes geom id]
+  ([attributes] (mustafied attributes "not-important"))
+  ([attributes id]
    (reduce (fn [m [k v]] (assoc m k v))
            {:_collection "only-path-should-matter"
             :_id id}
-           (cond-> attributes geom (assoc :_geometry geom)))))
+           attributes)))
 
 (deftest single-depth-merge
   (let [path '()
         feature (make-feature {:attribute2 "value2"} nil "not-important" 1)
         merged (#'timeline/merge {:attribute1 "value1"} path feature)
-        should-be (merge (make-root '(1)) (mustafied {:attribute1 "value1" :attribute2 "value2"}))]
+        should-be (merge (make-root '(1)) (mustafied {:attribute1 "value1" :attribute2 "value2" :_geometry nil}))]
     (is (= should-be merged))))
 
 (deftest double-depth-merge ;; with tiles
@@ -44,7 +43,7 @@
         feature (make-feature {:attribute "value"} {:dummy :dummy :nl-tiles #{666}} "not-important" 3)
         merged (#'timeline/merge (make-root '(1) 1) path feature)
         should-be (merge (make-root '(3 1) 1 666)
-                         {:nested1 [(mustafied {:attribute "value"} should-be-geometry)]})]
+                         {:nested1 [(mustafied {:attribute "value" :_geometry should-be-geometry})]})]
     (is (= should-be merged))))
 
 (deftest append-to-empty-vector-merge
@@ -53,16 +52,16 @@
         feature (make-feature {:attribute "value"} {:dummy :dummy :nl-tiles #{666}} "not-important" 3)
         merged (#'timeline/merge starts-with path feature)
         should-be (merge (make-root '(3 1) 1 666)
-                         {:nested1 [(mustafied {:attribute "value"} should-be-geometry )]})]
+                         {:nested1 [(mustafied {:attribute "value" :_geometry should-be-geometry})]})]
     (is (= should-be merged))))
 
 (deftest merge-existing-nested
-  (let [starts-with (assoc (make-root '(1) 1) :nested1 [(mustafied {:attribute "value" :keep 1} {:dummy :dummy} "child-id")])
+  (let [starts-with (assoc (make-root '(1) 1) :nested1 [(mustafied {:attribute "value" :keep 1 :_geometry {:dummy :dummy}} "child-id")])
         path '(["parent-collection" "parent-id" "nested1" "child-id"])
         feature (make-feature {:attribute "new-value"} {:dummy :dummy :nl-tiles #{666}} "not-important" 3)
         merged (#'timeline/merge starts-with path feature)
         should-be (merge (make-root '(3 1) 1 666)
-                         {:nested1 [(mustafied {:attribute "new-value" :keep 1} should-be-geometry )]})]
+                         {:nested1 [(mustafied {:attribute "new-value" :keep 1 :_geometry should-be-geometry})]})]
     (is (= should-be merged))))
 
 (deftest replace-attr-merge
@@ -71,7 +70,7 @@
         feature (make-feature {:attribute "value"} {:dummy :dummy :nl-tiles #{666}} "not-important" 3)
         merged (#'timeline/merge starts-with path feature)
         should-be (merge (make-root '(3 1) 1 666)
-                         {:nested1 [(mustafied {:attribute "value"} should-be-geometry )]})]
+                         {:nested1 [(mustafied {:attribute "value" :_geometry should-be-geometry})]})]
     (is (= should-be merged))))
 
 (deftest replace-map-merge
@@ -80,7 +79,7 @@
         feature (make-feature {:attribute "value"} {:dummy :dummy :nl-tiles #{666}} "not-important" 3)
         merged (#'timeline/merge starts-with path feature)
         should-be (merge (make-root '(3 1) 1 666)
-                         {:nested1 [(mustafied {:attribute "value"} should-be-geometry )]})]
+                         {:nested1 [(mustafied {:attribute "value" :_geometry should-be-geometry})]})]
     (is (= should-be merged))))
 
 (deftest triple-depth-merge
@@ -90,7 +89,7 @@
         merged (#'timeline/merge starts-with path feature)
         should-be (merge (make-root '(5 1) 1)
                          {:attr1 :a :nested_1
-                          [{:nested_2 [(mustafied {:attributeX "valueY"})]}]})]
+                          [{:nested_2 [(mustafied {:attributeX "valueY" :_geometry nil})]}]})]
     (is (= should-be merged))))
 
 (deftest triple-depth-merge-in-existing-map
@@ -100,7 +99,7 @@
         merged (#'timeline/merge starts-with path feature)
         should-be (merge (make-root '(5 1) 1)
                          {:nested_1
-                          [{:_id "id1" :nested_2 [(mustafied {:attributeX "valueY"})]}]})]
+                          [{:_id "id1" :nested_2 [(mustafied {:attributeX "valueY" :_geometry nil})]}]})]
     (is (= should-be merged))))
 
 (deftest close-one-of-two-child-merge ;; with tiles
@@ -109,12 +108,12 @@
                     (assoc :action :close))
         merged (#'timeline/merge
                 (-> (assoc (make-root '(1) 1) :extra-attr 1)
-                    (assoc :nested1 [(mustafied {:attribute "value"} {:dummy :dummy} "child-id")
-                                     (mustafied {:attribute "value"} {:dummy :dummy} "keep-id")]))
+                    (assoc :nested1 [(mustafied {:attribute "value" :_geometry {:dummy :dummy}} "child-id")
+                                     (mustafied {:attribute "value" :_geometry {:dummy :dummy}} "keep-id")]))
                 path
                 feature)
         should-be (merge (make-root '(3 1) 1)
-                         {:extra-attr 1 :nested1 [(mustafied {:attribute "value"} {:dummy :dummy} "keep-id")]})]
+                         {:extra-attr 1 :nested1 [(mustafied {:attribute "value" :_geometry {:dummy :dummy}} "keep-id")]})]
     (is (= should-be merged))))
 
 (deftest close-single-child-keeps-vector
@@ -123,7 +122,7 @@
                     (assoc :action :close))
         merged (#'timeline/merge
                 (-> (assoc (make-root '(1) 1) :extra-attr "value")
-                    (assoc :nested1 [(mustafied {:attribute "value"} {:dummy :dummy} "child-id")]))
+                    (assoc :nested1 [(mustafied {:attribute "value" :_geometry {:dummy :dummy}} "child-id")]))
                 path
                 feature)
         should-be (merge (make-root '(3 1) 1)
