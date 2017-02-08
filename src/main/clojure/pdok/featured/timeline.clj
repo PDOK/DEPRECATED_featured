@@ -515,21 +515,17 @@ VALUES (?, ?, ?, ?, ?, ?)"))
         (when (util/uuid> (:version feature) (:_version current))
           (let [new-current (merge current path feature)]
             (if (= (:action feature) :close)
-              (if (= collection root-col)
-                (let [closed-current (sync-valid-to new-current feature)]
-                  (cache-batched-update (:_version current) (:_valid_from current)
-                                        (:_valid_to current) closed-current)
-                  (batched-append-db-changelog [(:_collection new-current)
-                                                (:_id new-current) (:_version current)
-                                                (:_version new-current) (:_valid_from new-current) :close])
-                  (batched-append-changelog (changelog-close-entry (:_version current) closed-current)))
-                (do
-                  (cache-batched-update (:_version current) (:_valid_from current)
-                                        (:_valid_to current) new-current)
-                  (batched-append-db-changelog [(:_collection new-current)
-                                                (:_id new-current) (:_version current)
-                                                (:_version new-current) (:_valid_from new-current) :change])
-                  (batched-append-changelog (changelog-change-entry (:_version current) new-current))))
+              ;; Process close of child as change of parent.
+              (let [collection-is-root (= collection root-col)
+                    closed-or-new-current (if collection-is-root (sync-valid-to new-current feature) new-current)
+                    action (if collection-is-root :close :change)
+                    changelog-entry-fn (if collection-is-root changelog-close-entry changelog-change-entry)]
+                (cache-batched-update (:_version current) (:_valid_from current)
+                                      (:_valid_to current) closed-or-new-current)
+                (batched-append-db-changelog [(:_collection new-current)
+                                              (:_id new-current) (:_version current)
+                                              (:_version new-current) (:_valid_from new-current) action])
+                (batched-append-changelog (changelog-entry-fn (:_version current) closed-or-new-current)))
               (if (t/before? (:_valid_from current) (:validity feature))
                 (let [closed-current (sync-valid-to current feature)
                       ;; reset valid-to for new-current.
