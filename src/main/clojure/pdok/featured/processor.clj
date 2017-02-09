@@ -13,7 +13,7 @@
             [pdok.featured.tiles :as tiles])
   (:import (pdok.featured.timeline Timeline ChunkedTimeline)))
 
-(def ^:private pdok-fields [:action :id :dataset :collection :validity :version :geometry :current-validity
+(def ^:private pdok-fields [:action :id :dataset :collection :validity :version :current-validity
                             :parent-id :parent-collection :parent-field :attributes :src])
 
 (declare consume consume* process pre-process append-feature)
@@ -324,7 +324,12 @@
   (let [validated (if (:disable-validation processor) feature (validate processor feature))]
     (if (:invalid? validated)
       (make-seq validated)
-      (let [vf (assoc validated :version (*next-version*))
+      (let [vf (assoc validated 
+                      :version (*next-version*)
+                      :tiles (apply clojure.set/union
+                                    (->> feature :attributes vals
+                                      (filter #(instance? pdok.featured.GeometryAttribute %)) 
+                                      (map tiles/nl))))
             processed
             (condp = (:action vf)
               :new (process-new-feature processor vf)
@@ -365,9 +370,7 @@
   (when statistics
     (swap! statistics update :n-processed inc)
     (when (:src feature) (swap! statistics update :n-src inc))
-    (when (:geometry feature)
-      (let [tiles (-> feature :geometry tiles/nl)]
-        (swap! statistics update :updated-tiles #(clojure.set/union % tiles))))
+    (swap! statistics update :updated-tiles #(clojure.set/union % (:tiles feature)))
     (when (:invalid? feature)
       (swap! statistics update :n-errored inc)
       (swap! statistics update :errored #(conj % (:id feature))))))
