@@ -125,7 +125,12 @@
     ;; else just return element, replace nothing
     element))
 
+(defn- upgrade-geometry [element]
+  (if (get element "_geometry")
+    (update element "_geometry" create-geometry-attribute)
+    element))
+
 (defn- upgrade-data [attributes]
   "Replaces functions with their parsed values"
   (let [attributes (postwalk replace-fn attributes)]
-    attributes))
+    (postwalk upgrade-geometry attributes)))
