@@ -35,7 +35,7 @@
   (let [path '()
         feature (make-feature {:attribute2 "value2"} nil "not-important" 1)
         merged (#'timeline/merge {:attribute1 "value1"} path feature)
-        should-be (merge (make-root '(1)) (mustafied {:attribute1 "value1" :attribute2 "value2" :_geometry nil}))]
+        should-be (merge (make-root '(1)) (mustafied {:attribute1 "value1" :attribute2 "value2"}))]
     (is (= should-be merged))))
 
 (deftest double-depth-merge ;; with tiles
@@ -89,7 +89,7 @@
         merged (#'timeline/merge starts-with path feature)
         should-be (merge (make-root '(5 1) 1)
                          {:attr1 :a :nested_1
-                          [{:nested_2 [(mustafied {:attributeX "valueY" :_geometry nil})]}]})]
+                          [{:nested_2 [(mustafied {:attributeX "valueY"})]}]})]
     (is (= should-be merged))))
 
 (deftest triple-depth-merge-in-existing-map
@@ -99,7 +99,7 @@
         merged (#'timeline/merge starts-with path feature)
         should-be (merge (make-root '(5 1) 1)
                          {:nested_1
-                          [{:_id "id1" :nested_2 [(mustafied {:attributeX "valueY" :_geometry nil})]}]})]
+                          [{:_id "id1" :nested_2 [(mustafied {:attributeX "valueY"})]}]})]
     (is (= should-be merged))))
 
 (deftest close-one-of-two-child-merge ;; with tiles
