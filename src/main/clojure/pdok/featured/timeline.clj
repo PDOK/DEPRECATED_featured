@@ -151,7 +151,12 @@
    {:_collection collection :_id id}))
 
 (defn- mustafy [feature]
-  (reduce (fn [acc [k v]] (assoc acc (keyword k) v)) (init-root feature) (:attributes feature)))
+  (reduce 
+    (fn [acc [k v]] (if v 
+                      (assoc acc (keyword k) v) 
+                      acc)) 
+    (init-root feature) 
+    (:attributes feature)))
 
 (defn drop-nth [v n]
   (into [] (concat (subvec v 0 n) (subvec v (inc n) (count v)))))
