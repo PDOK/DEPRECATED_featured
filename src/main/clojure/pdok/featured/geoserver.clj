@@ -56,13 +56,24 @@
   (let [attribute-type (pg/clj-to-pg-type attribute-value)]
     (pg/create-column db dataset collection attribute-name attribute-type ndims srid)
     (when (= attribute-type pg/geometry-type)
-      (pg/create-geo-index db dataset collection attribute-name))))
+      (pg/create-column db dataset collection (str attribute-name "_group") "text" ndims srid)
+      (pg/create-geo-index db dataset collection attribute-name))))  
+
+(defn- all-feature-attributes [existing-attributes]
+  (merge
+    existing-attributes
+    (into {}
+       (->>
+         (seq existing-attributes)
+         (filter (fn [[_ value]] (instance? pdok.featured.GeometryAttribute value)))
+         (map (fn [[attribute-name geometry-attribute]]
+                [(str attribute-name "_group") (f/geometry-group geometry-attribute)]))))))
 
 (defn- feature-to-sparse-record [proj-fn feature all-fields-constructor import-nil-geometry?]
   (let [id (:id feature)
         parent-id (:parent-id feature)
         version (:version feature)
-        sparse-attributes (all-fields-constructor (:attributes feature))]
+        sparse-attributes (all-fields-constructor (all-feature-attributes (:attributes feature)))]
     (concat [id
                 parent-id
                 version]
@@ -133,7 +144,7 @@
            (group-by selector features)]
      (doseq [[[collection] collection-features] per-collection]
         ;; group per key collection so we can batch every group
-        (let [keyed (group-by feature-keys collection-features)]
+        (let [keyed (group-by feature-keys (map #(update % :attribute all-feature-attributes) collection-features))]
           (doseq [[columns vals] keyed]
             (when (< 0 (count columns))
               (let [update-vals (map (partial feature-to-update-record proj-fn) vals)]
