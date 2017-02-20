@@ -157,7 +157,10 @@
                     (shutdown processor)
                     (catch Exception e
                       (log/warn e "failed to shutdown processor in exception handler")))
-                error-stats (assoc request :error (str e))]
+                error-str (if (instance? Iterable e)
+                            (clojure.string/join " Next: " (map str (seq e)))
+                            (str e))
+                error-stats (assoc request :error error-str)]
             (log/warn e error-stats)
             (swap! stats assoc-in [:processing worker-id] nil)
             (stats-on-callback callback-chan request error-stats)))
