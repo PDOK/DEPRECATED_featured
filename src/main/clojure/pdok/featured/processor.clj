@@ -350,15 +350,8 @@
   (let [kmap (into {} (map #(vector %1 (change-key %1)) (keys src-map)))]
      (clojure.set/rename-keys src-map kmap)))
 
-(defn lower-case [feature]
-  (let [attributes-lower-case (rename-keys (:attributes feature) clojure.string/lower-case)
-        feature-lower-case (assoc feature :attributes attributes-lower-case)]
-    (cond-> feature-lower-case
-            ((complement str/blank?) (:collection feature-lower-case))
-            (update-in [:collection] str/lower-case))))
-
 (defn pre-process [processor feature]
-  (let [prepped ((comp lower-case collect-attributes) feature)]
+  (let [prepped (collect-attributes feature)]
     (flatten processor prepped)))
 
 (defn- append-feature [persistence feature]
