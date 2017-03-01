@@ -16,7 +16,8 @@
             [clojure.core.async :as a
              :refer [>!! close! chan]]
             [clojure.java.io :as io]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [clojure.walk :as walk])
   (:import [clojure.lang MapEntry PersistentQueue]
            (java.io OutputStream)
            (java.sql SQLException)
@@ -150,12 +151,18 @@
   ([collection id]
    {:_collection collection :_id id}))
 
+(defn keywordize-keys-and-remove-nils
+  "Recursively transforms all map keys from strings to keywords and removes all pairs with nil values."
+  [m]
+  (let [f (fn [[k v]] (when (not (nil? v)) (if (string? k) [(keyword k) v] [k v])))]
+    (walk/postwalk (fn [x] (if (map? x) (into {} (map f x)) x)) m)))
+
 (defn- mustafy [feature]
-  (reduce 
-    (fn [acc [k v]] (if v 
-                      (assoc acc (keyword k) v) 
-                      acc)) 
-    (init-root feature) 
+  (reduce
+    (fn [acc [k v]] (if v
+                      (assoc acc (keyword k) (keywordize-keys-and-remove-nils v))
+                      acc))
+    (init-root feature)
     (:attributes feature)))
 
 (defn drop-nth [v n]
