@@ -89,10 +89,10 @@
       feature)))
 
 (defn- validate [{:keys [persistence invalids] :as processor} feature]
-  "Validates features. Nested actions are validated against new checks, because we always close the old nested features."
+  "Validates features."
   (let [validated
         (condp contains? (:action feature)
-          #{:new :nested-new :nested-change :nested-close}
+          #{:new}
           (->> feature
                (apply-all-features-validation persistence processor)
                (apply-new-feature-requires-non-existing-stream-validation persistence))
@@ -149,9 +149,6 @@
     (project! processor proj/new-feature feature))
   feature)
 
-(defn- process-nested-new-feature [processor feature]
-  (process-new-feature processor (assoc feature :action :new)))
-
 (defn- process-change-feature [{:keys [persistence] :as processor} feature]
   (let [enriched-feature (with-current-version persistence feature)]
     (append-feature persistence enriched-feature)
@@ -162,10 +159,6 @@
   (if (stream-exists? persistence feature)
     (process-change-feature processor (assoc feature :action :change))
     (process-new-feature processor (assoc feature :action :new))))
-
-(defn- process-nested-change-feature [processor feature]
-  "Nested change is the same a nested new"
-  (process-new-feature processor (assoc feature :action :change)))
 
 (defn- process-close-feature [{:keys [persistence] :as processor} feature]
   (if (empty? (:attributes feature))
@@ -186,85 +179,11 @@
         (process-change-feature processor change-feature)
         (process-close-feature processor close-feature)))))
 
-(defn- process-nested-close-feature [processor feature]
-  (let [nw (process-new-feature processor (assoc feature :action :new))
-        validity (:validity nw)
-        no-update-nw (-> nw
-                         (transient)
-                         (assoc! :action :close)
-                         (assoc! :attributes {})
-                         (assoc! :current-validity validity)
-                         (persistent!))]
-    (list nw (process-close-feature processor no-update-nw))))
-
 (defn- process-delete-feature [{:keys [persistence projectors] :as processor} feature]
   (let [enriched-feature (with-current-version persistence feature)]
     (append-feature persistence enriched-feature)
     (project! processor proj/delete-feature enriched-feature)
     enriched-feature))
-
-(defn- nested-features [attributes]
-  (letfn [( flat-multi [[key values]] (map #(vector key %) values))]
-    (let [single-features (filter #(map? (second %)) attributes)
-          multi-features (filter #(-> (second %)
-                                      first
-                                      map?) (filter #(-> (second %)
-                                                         sequential?) attributes))]
-      (concat single-features (mapcat flat-multi multi-features)))))
-
-(defn nested-action [action]
-  (if-not action
-    nil
-    (if (.startsWith (name action) "nested-")
-      action
-      (keyword (str "nested-" (name action))))))
-
-(defn- link-parent [[child-collection-key child] parent]
-  (let [{:keys [collection action id validity]} parent
-        child-id (*child-id*)
-        with-parent (-> (transient child)
-                  (assoc! :parent-collection collection)
-                  (assoc! :parent-id id)
-                  (assoc! :parent-field (name child-collection-key))
-                  (assoc! :action (nested-action action))
-                  (assoc! :id child-id)
-                  (assoc! :validity validity)
-                  (assoc! :collection (str collection "$" (name child-collection-key))))]
-    (persistent! with-parent)))
-
-(defn- meta-delete-childs [parent-collection parent-id]
-  {:action :delete-childs
-   :parent-collection parent-collection
-   :parent-id parent-id})
-
-(defn- meta-close-childs [parent-collection parent-id validity & [collection]]
-  (conj {:action :close-childs
-         :parent-collection parent-collection
-         :parent-id parent-id
-         :validity validity}
-        (when collection [:collection collection])))
-
-(defn- meta-close-fellow-childs [features]
-  "{:action :close-childs _ :collection _ :parent-collection _ :parent-id _ :validity _"
-  (distinct (map (fn [f] (meta-close-childs
-                           (:parent-collection f)
-                           (:parent-id f)
-                           (:validity f)
-                           (:collection f))) features)))
-
-(defn- flatten [processor feature]
-  (condp = (:action feature)
-    :delete (list (meta-delete-childs (:collection feature) (:id feature)) feature)
-    :close (list (meta-close-childs (:collection feature) (:id feature) (:validity feature)) feature)
-    (let [attributes (:attributes feature)
-          nested (nested-features attributes)
-          without-nested (apply dissoc attributes (map #(first %) nested))
-          flat (assoc feature :attributes without-nested)
-          linked-nested (map #(link-parent % feature) nested)
-          meta-close-childs (meta-close-fellow-childs linked-nested)]
-      (if (empty? linked-nested)
-        (list flat)
-        (cons flat (concat meta-close-childs (mapcat (partial pre-process processor) linked-nested)))))))
 
 (defn- attributes [obj]
   (apply dissoc obj pdok-fields))
@@ -276,59 +195,16 @@
         collected (assoc no-attributes :attributes collected)]
     collected))
 
-(defn- close-child* [processor parent-collection parent-id collection id close-time]
-  (let [persistence (:persistence processor)
-        childs-of-child (pers/childs persistence collection id)
-        metas (map (fn [[child-col _]] (meta-close-childs collection id close-time child-col)) childs-of-child)
-        validity (pers/current-validity persistence collection id)
-        close {:action :close
-               :parent-collection parent-collection
-               :parent-id parent-id
-               :collection collection
-               :id id
-               :current-validity validity
-               :validity close-time}
-        state (pers/last-action persistence collection id)]
-        (if-not (= state :close)
-          (mapcat (partial process processor) (concat metas (list close)))
-          (mapcat (partial process processor) metas))))
-
-(defn- close-childs [processor meta-record]
-  (let [{:keys [collection parent-collection parent-id validity]} meta-record
-        persistence (:persistence processor)
-        col-ids (if collection
-                  (pers/childs persistence parent-collection parent-id collection)
-                  (pers/childs persistence parent-collection parent-id))
-        closed (doall (mapcat
-                        (fn [[col id]] (close-child* processor parent-collection parent-id col id validity)) col-ids))]
-    closed))
-
-(defn- delete-child* [processor collection id]
-  (let [persistence (:persistence processor)
-        meta (meta-delete-childs collection id)
-        validity (pers/current-validity persistence collection id)
-        delete {:action :delete
-                :collection collection
-                :id id
-                :current-validity validity}]
-    (mapcat (partial process processor) (list meta delete))))
-
-(defn- delete-childs [processor {:keys [parent-collection parent-id]}]
-  (let [persistence (:persistence processor)
-        ids (pers/childs persistence parent-collection parent-id)
-        deleted (doall (mapcat (fn [[col id]] (delete-child* processor col id)) ids))]
-    deleted))
-
 (defn process [processor feature]
   "Processes feature events. Should return the feature, possibly with added data, returns sequence"
   (let [validated (if (:disable-validation processor) feature (validate processor feature))]
     (if (:invalid? validated)
       (make-seq validated)
-      (let [vf (assoc validated 
+      (let [vf (assoc validated
                       :version (*next-version*)
                       :tiles (apply clojure.set/union
                                     (->> feature :attributes vals
-                                      (filter #(instance? pdok.featured.GeometryAttribute %)) 
+                                      (filter #(instance? pdok.featured.GeometryAttribute %))
                                       (map tiles/nl))))
             processed
             (condp = (:action vf)
@@ -337,22 +213,8 @@
               :new|change (process-new|change-feature processor vf)
               :close (process-close-feature processor vf)
               :delete (process-delete-feature processor vf)
-              :nested-new (process-nested-new-feature processor vf)
-              :nested-change (process-nested-new-feature processor vf)
-              :nested-close  (process-nested-close-feature processor vf)
-              :close-childs (close-childs processor vf);; should save this too... So we can backtrack actions. Right?
-              :delete-childs (delete-childs processor vf)
               (make-invalid vf (str "Unknown action:" (:action vf))))]
         (make-seq processed)))))
-
-(defn rename-keys [src-map change-key]
-  "Change keys in map with function change-key"
-  (let [kmap (into {} (map #(vector %1 (change-key %1)) (keys src-map)))]
-     (clojure.set/rename-keys src-map kmap)))
-
-(defn pre-process [processor feature]
-  (let [prepped (collect-attributes feature)]
-    (flatten processor prepped)))
 
 (defn- append-feature [persistence feature]
   (let [{:keys [version action collection id validity attributes]} feature]
@@ -380,7 +242,7 @@
 (defn consume-partition [processor features]
   (when (seq? features)
     (let [prepped (with-bench t (log/debug "Preprocessed batch in" t "ms")
-                    (mapcat (partial pre-process processor) features))
+                    (map collect-attributes features))
           _ (pers/flush (:persistence processor)) ;; flush before run, to save cache in shutdown
           _ (pers/prepare (:persistence processor) prepped)
           consumed (with-bench t (log/debug "Consumed batch in" t "ms")
