@@ -11,25 +11,17 @@
             [clojure.java.jdbc :as j]
             [clojure.core.cache :as cache]
             [clojure.tools.logging :as log]
-            [clojure.zip :as zip]
             [clj-time.core :as t]
-            [clojure.core.async :as a
-             :refer [>!! close! chan]]
+            [clojure.core.async :refer [>!! close! chan]]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.walk :as walk])
-  (:import [clojure.lang MapEntry PersistentQueue]
+  (:import [clojure.lang PersistentQueue]
            (java.io OutputStream)
            (java.sql SQLException)
            (java.util.zip ZipEntry ZipOutputStream)))
 
 (declare create)
-
-(defn indices-of [f coll]
-  (keep-indexed #(if (f %2) %1 nil) coll))
-
-(defn index-of [f coll]
-  (first (indices-of f coll)))
 
 (defn schema [dataset]
   (str (name dc/*timeline-schema-prefix*) "_" dataset))
@@ -37,27 +29,10 @@
 (defn- qualified-timeline [dataset collection]
   (str (pg/quoted (schema dataset)) "." (pg/quoted (str (name dc/*timeline-table*) "_" collection))))
 
-(defn- qualified-changelog [dataset]
-  (str (pg/quoted (schema dataset)) "." (name dc/*timeline-changelog*)))
-
 (defn- init [db dataset]
   (when-not (pg/schema-exists? db (schema dataset))
     (checked (pg/create-schema db (schema dataset))
-             (pg/schema-exists? db (schema dataset))))
-  (with-bindings {#'dc/*timeline-schema* (schema dataset)}
-    (when-not (pg/table-exists? db dc/*timeline-schema* dc/*timeline-changelog*)
-      (checked (do (pg/create-table db dc/*timeline-schema* dc/*timeline-changelog*
-                                    [:id "serial" :primary :key]
-                                    [:collection "varchar(255)"]
-                                    [:feature_id "varchar(100)"]
-                                    [:old_version "uuid"]
-                                    [:version "uuid"]
-                                    [:valid_from "timestamp without time zone"]
-                                    [:action "varchar(12)"]
-                                    )
-                   (pg/create-index db dc/*timeline-schema* dc/*timeline-changelog* :version :action)
-                   (pg/create-index db dc/*timeline-schema* dc/*timeline-changelog* :collection))
-               (pg/table-exists? db dc/*timeline-schema* dc/*timeline-changelog*)))))
+             (pg/schema-exists? db (schema dataset)))))
 
 (defn- init-collection [db dataset collection]
   (let [table-name (str (name dc/*timeline-table*) "_" collection)]
@@ -90,61 +65,6 @@
                     "WHERE valid_to is null")]
      (execute-query timeline query))))
 
-(defn closed
-  ([{:keys [dataset] :as timeline} collection]
-   (let [query (str "SELECT feature FROM " (qualified-timeline dataset collection) " "
-                    "WHERE valid_to is not null")]
-     (execute-query timeline query))))
-
-(defn- record->result [fn-transform c record]
-  (>!! c (fn-transform record)))
-
-(defn- query-with-results-on-channel [db-config query fn-transform]
-  "Returns a channel which contains the (transformed) results of the query"
-  (let [rc (chan)]
-    (a/thread
-      (j/with-db-connection [c (:db db-config)]
-        (let [statement (j/prepare-statement
-                         (doto (j/get-connection c) (.setAutoCommit false))
-                         query :fetch-size 10000)]
-          (j/query c [statement] :row-fn (partial record->result fn-transform rc))
-          (close! rc))))
-    rc))
-
-(defn- upgrade-changelog [changelog]
-  (-> changelog
-      (update-in [:feature] transit/from-json)
-      (update-in [:action] keyword)))
-
-(defn changed-features [{:keys [dataset] :as timeline} collection]
-   (let [query (str "SELECT cl.collection, cl.feature_id, cl.old_version, cl.version, cl.action, cl.valid_from, tl.feature
- FROM " (qualified-changelog dataset) " AS cl
- LEFT JOIN " (qualified-timeline dataset collection) " AS tl
- ON cl.version = tl.version AND cl.valid_from = tl.valid_from
- ORDER BY cl.id ASC")]
-     (query-with-results-on-channel timeline query upgrade-changelog)))
-
-(defn all-features [{:keys [dataset] :as timeline} collection]
-  (let [query (str "SELECT feature_id, NULL as old_version, version, 'new' as action, valid_from, feature
-                    FROM " (qualified-timeline dataset collection))]
-     (query-with-results-on-channel timeline query upgrade-changelog)))
-
-(defn delete-changelog [{:keys [db dataset]}]
-  (try
-    (j/delete! db (qualified-changelog dataset) [])
-  (catch SQLException e
-    (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
-    (throw e))))
-
-(defn collections-in-changelog [{:keys [db dataset]}]
-  (let [sql (str "SELECT DISTINCT collection FROM " (qualified-changelog dataset)) ]
-    (try
-      (flatten (drop 1 (j/query db [sql] :as-arrays? true)))
-       (catch SQLException e
-         (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
-         (throw e)))))
-
-
 (defn- init-root
   ([feature]
    (init-root (:collection feature) (:id feature)))
@@ -165,93 +85,15 @@
     (init-root feature)
     (:attributes feature)))
 
-(defn drop-nth [v n]
-  (into [] (concat (subvec v 0 n) (subvec v (inc n) (count v)))))
-
-(defn mapvec-zipper [m]
-  (zip/zipper
-   (fn [x] (or
-           (when (vector? x) (vector? (nth x 1)))
-           (map? x)))
-   (fn [x] (cond
-            (map? x) (seq x)
-            (vector? x) (nth x 1)))
-   (fn [node children]
-     (cond
-       (instance? MapEntry node) (MapEntry. (first node) (vec children))
-       (map? node) (into {} children)
-       (vector? node) children))
-    m))
-
-(defn zip-find-key [zipper key]
-  (when zipper
-    (loop [inner (zip/down zipper)]
-      (when inner
-        (let [[[k v] _] inner]
-          (if-not (= k key)
-            (recur (zip/right inner))
-            inner))))))
-
-(defn zip-filter-seq [zipper filter-fn]
-  (when zipper
-    (loop [inner (zip/down zipper)]
-      (when inner
-        (if-not (filter-fn (zip/node inner))
-          (recur (zip/right inner))
-          inner)))))
-
-(defn insert* [target path feature]
-  (if (seq path)
-    (loop [zipper (mapvec-zipper target)
-           [[field id] & more] path]
-      (let [loc (zip-find-key zipper field)]
-        (cond
-          (and loc (not (vector? (nth (zip/node loc) 1))))
-          (insert* (zip/root (zip/remove loc)) path feature)
-          loc
-          (if-let [nested (zip-filter-seq loc #(= id (:_id %)))]
-            (if-not more
-              (zip/root (zip/replace nested (clojure.core/merge (zip/node nested) feature)))
-              (recur nested more))
-            (if-not more
-              (zip/root (zip/insert-child loc feature))
-              (recur (-> (zip/insert-child loc zip/down)) more)))
-          ;; add root and step into it
-          :else
-          (if-not more
-            (zip/root (zip/insert-child zipper (MapEntry. field [feature])))
-            (recur (-> (zip/insert-child zipper (MapEntry. field [{}]))
-                       zip/down zip/down)
-                   more)))))
+(defn merge* [target action feature]
+  (condp = action
+    :close target
     (clojure.core/merge target feature)))
 
-(defn delete-in* [target path]
-  (if (seq path)
-    (loop [zipper (mapvec-zipper target)
-           [[field id] & more] path]
-      (if-let [loc (zip-find-key zipper field)]
-        (cond
-          (or (not (vector? (nth (zip/node loc) 1))) (not (seq (nth (zip/node loc) 1))))
-          target
-          :else
-          (if-let [nested (zip-filter-seq loc #(= id (:_id %)))]
-            (if more
-              (recur nested more)
-              (zip/root (zip/remove nested)))
-            target))
-        target))
-    target))
-
-(defn merge* [target action path feature]
-  (condp = action
-    :close (delete-in* target path)
-    (insert* target path feature)))
-
 (defn merge
-  ([target path feature]
-   (let [keyworded-path (map (fn [[_ _ field id]] [(keyword field) id]) path)
-         mustafied (mustafy feature)
-         merged (merge* target (:action feature) keyworded-path mustafied)
+  ([target feature]
+   (let [mustafied (mustafy feature)
+         merged (merge* target (:action feature) mustafied)
          merged (assoc merged :_version (:version feature))
          merged (update-in merged [:_all_versions] (fnil conj '()) (:version feature))
          merged (update merged :_tiles #((fnil clojure.set/union #{}) % (:tiles feature)))]
@@ -259,12 +101,6 @@
 
 (defn- sync-valid-from [acc feature]
   (assoc acc :_valid_from  (:validity feature)))
-
-(defn- sync-version [acc feature]
-  (-> acc
-      (assoc :_version (first (:_all_versions acc)))
-      (update-in [:_all_versions] (fnil conj '()) (:version feature))
-      (update-in [:_all_versions] distinct)))
 
 (defn- sync-valid-to [acc feature]
   (let [changed (assoc acc :_valid_to (:validity feature))]
@@ -356,23 +192,6 @@ VALUES (?, ?, ?, ?, ?, ?)"))
               (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
               (throw e))))))))
 
-(defn- append-to-db-changelog-sql [dataset]
-  (str "INSERT INTO " (qualified-changelog dataset)
-       " (collection, feature_id, old_version, version, valid_from, action)
- SELECT ?, ?, ?, ?, ?, ?
- WHERE NOT EXISTS (SELECT 1 FROM " (qualified-changelog dataset)
- " WHERE version = ? AND action = ?)"))
-
-(defn- append-to-db-changelog [{:keys [db dataset]} log-entries]
-  "([collection id old-version version valid_from action] .... )"
-  (try
-    (let [transform-fn  (fn [rec] (let [[_ _ ov v a] rec] (conj rec v a)))
-          records (map transform-fn log-entries)]
-      (j/execute! db (cons (append-to-db-changelog-sql dataset) records) :multi? true :transaction? (:transaction? db)))
-    (catch SQLException e
-      (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
-      (throw e))))
-
 (def o ^{:private true} (Object.))
 (defn unique-epoch []
   (locking o
@@ -459,14 +278,13 @@ VALUES (?, ?, ?, ?, ?, ?)"))
 (defn- feature-key [feature]
   [(:collection feature) (:id feature)])
 
-(defn- make-flush-all [new-batch delete-batch delete-for-update-batch db-changelog-batch changelog-batch]
+(defn- make-flush-all [new-batch delete-batch delete-for-update-batch changelog-batch]
   "Used for flushing all batches, so update current is always performed after new current"
   (fn [timeline]
     (fn []
       (flush-batch new-batch (partial new-current timeline))
       (flush-batch delete-for-update-batch (partial delete-feature-with-version-and-validity timeline))
       (flush-batch delete-batch (partial delete-feature-with-version timeline))
-      (flush-batch db-changelog-batch (partial append-to-db-changelog timeline))
       (flush-batch changelog-batch (partial append-to-changelog timeline)))))
 
 (defn- cache-store-key [f]
@@ -498,15 +316,11 @@ VALUES (?, ?, ?, ?, ?, ?)"))
         (doseq [v (:_all_versions f)]
           (batched-delete [collection v]))))))
 
-(defn- create-changelog-entry [feature]
-  [(:_collection feature) (:_id feature)])
-
 (defrecord Timeline [dataset db collections root-fn path-fn
                      feature-cache
                      delete-for-update-batch
                      new-batch
                      delete-batch
-                     db-changelog-batch
                      changelog-batch changelogs
                      make-flush-fn flush-fn
                      filestore]
@@ -525,29 +339,19 @@ VALUES (?, ?, ?, ?, ?, ?)"))
     this)
   (proj/new-feature [this feature]
     (let [[collection id] (feature-key feature)
-          [root-col root-id] (root-fn collection id)
-          path (path-fn collection id)
           batched-new (batched new-batch flush-fn)
           cache-batched-new (with-cache feature-cache batched-new cache-store-key cache-value)
           cache-batched-update (batched-updater this)
           cached-get-current (use-cache feature-cache cache-use-key)
-          batched-append-db-changelog (batched db-changelog-batch flush-fn)
           batched-append-changelog (batched changelog-batch flush-fn)]
-      (if-let [current (cached-get-current root-col root-id)]
+      (if-let [current (cached-get-current collection id)]
         (when (util/uuid> (:version feature) (:_version current))
-          (let [new-current (merge current path feature)]
+          (let [new-current (merge current feature)]
             (if (= (:action feature) :close)
-              ;; Process close of child as change of parent.
-              (let [collection-is-root (= collection root-col)
-                    closed-or-new-current (if collection-is-root (sync-valid-to new-current feature) new-current)
-                    action (if collection-is-root :close :change)
-                    changelog-entry-fn (if collection-is-root changelog-close-entry changelog-change-entry)]
+              (let [closed-or-new-current (sync-valid-to new-current feature)]
                 (cache-batched-update (:_version current) (:_valid_from current)
                                       (:_valid_to current) closed-or-new-current)
-                (batched-append-db-changelog [(:_collection new-current)
-                                              (:_id new-current) (:_version current)
-                                              (:_version new-current) (:_valid_from new-current) action])
-                (batched-append-changelog (changelog-entry-fn (:_version current) closed-or-new-current)))
+                (batched-append-changelog (changelog-close-entry (:_version current) closed-or-new-current)))
               (if (t/before? (:_valid_from current) (:validity feature))
                 (let [closed-current (sync-valid-to current feature)
                       ;; reset valid-to for new-current.
@@ -555,27 +359,15 @@ VALUES (?, ?, ?, ?, ?, ?)"))
                   (cache-batched-update (:_version current) (:_valid_from current)
                                         (:_valid_to current) closed-current)
                   (cache-batched-new new-current+)
-                  (batched-append-db-changelog [(:_collection new-current)
-                                                (:_id new-current) (:_version current) (:_version current)
-                                                (:_valid_from current) :close])
-                  (batched-append-db-changelog [(:_collection new-current)
-                                                (:_id new-current) nil
-                                                (:_version new-current) (:validity feature) :new])
                   (batched-append-changelog (changelog-close-entry (:_version current) closed-current))
                   (batched-append-changelog (changelog-new-entry new-current+)))
                 (let [new-current+ (reset-valid-to (sync-valid-from new-current feature))]
                   ;; reset valid-to because it might be closed because of nested features.
                   (cache-batched-update (:_version current) (:_valid_from current)
                                         (:_valid_to current) new-current+)
-                  (batched-append-db-changelog [(:_collection new-current)
-                                                (:_id new-current) (:_version current)
-                                                (:_version new-current) (:validity feature) :change])
                   (batched-append-changelog (changelog-change-entry (:_version current) new-current+)))))))
-        (let [nw (sync-valid-from (merge (init-root root-col root-id) path feature) feature)]
+        (let [nw (sync-valid-from (merge (init-root collection id) feature) feature)]
           (cache-batched-new nw)
-          (batched-append-db-changelog [(:_collection nw)
-                                     (:_id nw) nil
-                                     (:_version nw) (:validity feature) :new])
           (batched-append-changelog (changelog-new-entry nw))))))
   (proj/change-feature [this feature]
     ;; change can be the same, because a new nested feature validity change will also result in a new validity
@@ -585,18 +377,13 @@ VALUES (?, ?, ?, ?, ?, ?)"))
     (proj/new-feature this feature))
   (proj/delete-feature [this feature]
     (let [[collection id] (feature-key feature)
-          [root-col root-id] (root-fn collection id)
           cache-batched-delete (batched-deleter this)
           cached-get-current (use-cache feature-cache cache-use-key)
-          batched-append-db-changelog (batched db-changelog-batch flush-fn)
           batched-append-changelog (batched changelog-batch flush-fn)]
-      (when-let [current (cached-get-current root-col root-id)]
+      (when-let [current (cached-get-current collection id)]
         (when (util/uuid> (:version feature) (:_version current))
           (cache-batched-delete current)
-          (doseq [v (:_all_versions current)]
-            (batched-append-db-changelog [(:_collection current)
-                                       (:_id current) nil
-                                       v (:validity current) :delete])
+          (doseq [v (:_all_versions current)] ;; TODO is all versions still necessary?
             (batched-append-changelog (changelog-delete-entry (:_collection current) (:_id current) v)))))))
   (proj/accept? [_ feature] true)
   (proj/close [this]
@@ -663,18 +450,15 @@ VALUES (?, ?, ?, ?, ?, ?)"))
          delete-for-update-batch (volatile! (PersistentQueue/EMPTY))
          new-batch (volatile! (PersistentQueue/EMPTY))
          delete-batch (volatile! (PersistentQueue/EMPTY))
-         db-changelog-batch (volatile! (PersistentQueue/EMPTY))
          changelog-batch (volatile! (PersistentQueue/EMPTY))
          changelogs (atom [])
-         make-flush-fn (make-flush-all new-batch delete-batch delete-for-update-batch
-                                       db-changelog-batch changelog-batch)]
+         make-flush-fn (make-flush-all new-batch delete-batch delete-for-update-batch changelog-batch)]
      (->Timeline for-dataset db collections
                  (partial pers/root persistence) (partial pers/path persistence)
                  cache
                  delete-for-update-batch
                  new-batch
                  delete-batch
-                 db-changelog-batch
                  changelog-batch changelogs
                  make-flush-fn (fn [])
                  filestore))))
