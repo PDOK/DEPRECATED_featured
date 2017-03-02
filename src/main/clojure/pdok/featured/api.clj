@@ -12,8 +12,6 @@
             [pdok.featured
              [config :as config]
              [processor :as processor :refer [consume shutdown]]
-             [extracts :as extracts]
-             [template :as template]
              [json-reader :as reader]
              [zipfiles :as zipfiles]
              [persistence :as persistence]]
@@ -53,23 +51,6 @@
    (s/optional-key :no-timeline) boolean
    (s/optional-key :no-state) boolean
    (s/optional-key :projection) s/Str})
-
-(def ExtractRequest
-  "A schema for a JSON extract request"
-  {:dataset s/Str
-   :extractType s/Str
-   (s/optional-key :callback) URI})
-
-(def TemplateRequest
-  "A schema for a JSON template request"
-  {:dataset s/Str
-   :extractType s/Str
-   :templateName s/Str
-   :template s/Str})
-
-(def FlushRequest
-  "A schema for a JSON flush request"
-  {:dataset s/Str})
 
 (defn- callbacker [uri run-stats]
   (try
@@ -160,43 +141,6 @@
         (do (swap! stats update-in [queue-id] #(conj % request)) (r/response {:result :ok}))
         (r/status (r/response {:error "queue full"}) 429)))))
 
-(defn- extract* [stats callback-chan request]
-  (log/info "Processing extract: " request)
-  (swap! stats update-in [:extract-queue] pop)
-  (try
-    (let [response (extracts/fill-extract (:dataset request)
-                                          (:extractType request))
-          _ (log/info "response: " response)
-          extract-stats (merge request response)]
-       (stats-on-callback callback-chan request extract-stats))
-    (catch Exception e
-      (let [error-stats (merge request {:status "error" :msg (str e)})]
-        (log/warn e error-stats)
-        (stats-on-callback callback-chan request error-stats)))))
-
-
-(defn- template-request [http-req]
-  (let [request (:body http-req)
-        invalid (s/check TemplateRequest request)]
-    (if invalid
-      (r/status (r/response invalid) 400)
-      (r/response (if (template/add-or-update-template {:dataset (:dataset request)
-                                                        :extract-type (:extractType request)
-                                                        :name (:templateName request)
-                                                        :template (:template request)})
-                    {:status "ok"}
-                    {:status "error"})))))
-
-(defn- flush-extract-changelog [http-req]
-  (let [request (:body http-req)
-        invalid (s/check FlushRequest request)]
-    (if invalid
-      (r/status (r/response invalid) 400)
-      (try
-        (r/response (extracts/flush-changelog (:dataset request)))
-        (catch Exception e
-          (r/status (r/response {:error (str e)}) 500))))))
-
 (defn serve-changelog [filestore changelog]
   "Stream a changelog file identified by filename"
   (log/debug "Request for" changelog)
@@ -208,7 +152,7 @@
      :body    local-file}
     {:status 500, :body "No such file"}))
 
-(defn api-routes [process-chan extract-chan stats]
+(defn api-routes [process-chan stats]
   (defroutes api-routes
     (context "/api" []
              (GET "/info" [] (r/response {:version (slurp (clojure.java.io/resource "version"))}))
@@ -216,9 +160,8 @@
              (POST "/ping" [] (fn [r] (log/info "!ping pong!" (:body r)) (r/response {:pong (tl/local-now)})))
              (GET "/stats" [] (r/response @stats))
              (POST "/process" [] (partial process-request stats ProcessRequest :queued process-chan))
-             (POST "/extract" [] (partial process-request stats ExtractRequest :extract-queue extract-chan))
-             (POST "/extract/flush-changelog" [] (fn [r] (r/response (flush-extract-changelog r))))
-             (POST "/template" [] (fn [r] (r/response (template-request r))))
+             (POST "/extract/flush-changelog" [] (r/response {:status 200, :body "Not implemented, but who cares"}))
+             (POST "/template" [] (r/response {:status 200, :body "Not implemented, but who cares"}))
              (GET "/changelogs/:changelog" [changelog] (serve-changelog (config/filestore) changelog)))
     (route/not-found "NOT FOUND")))
 
@@ -239,18 +182,15 @@
     (config/create-workers factory-fn)))
 
 (def process-chan (chan 1000))
-(def extract-chan (chan 100))
 (def callback-chan (chan 10))
 (def stats  (atom {:processing {}
-                   :queued     (PersistentQueue/EMPTY)
-                   :extract-queue (PersistentQueue/EMPTY)}))
+                   :queued     (PersistentQueue/EMPTY)}))
 
 (defn init! []
   (create-workers stats callback-chan process-chan)
-  (go (while true (extract* stats callback-chan (<! extract-chan))))
   (go (while true (apply callbacker (<! callback-chan)))))
 
-(def app (-> (api-routes process-chan extract-chan stats)
+(def app (-> (api-routes process-chan stats)
              (wrap-json-body {:keywords? true :bigdecimals? true})
              (wrap-json-response)
              (wrap-defaults api-defaults)

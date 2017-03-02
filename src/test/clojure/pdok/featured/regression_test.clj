@@ -2,9 +2,7 @@
   (:require [pdok.featured
              [dynamic-config :as dc]
              [config :as config]
-             [timeline :as timeline]
              [processor :as processor]
-             [extracts :as e]
              [json-reader :as json-reader]]
             [pdok.postgres :as pg]
             [pdok.transit :as t]
@@ -57,24 +55,6 @@
         [meta features] (json-reader/features-from-stream stream)]
     [meta features]))
 
-(defn- inserted-features [extracts _ _ _ features]
-  (let [new-extracts (map #(vector (:_version %) (:_valid_from %) (:_valid_to %) %) features)]
-    (swap! extracts concat new-extracts)))
-
-(defn- remove-first [pred coll]
-  (keep-indexed #(if (not= %1 (.indexOf coll (first (filter pred coll)))) %2) coll))
-
-(defn- remove-extract-record [extracts record-info]
-  (let [[version valid-from] record-info]
-    (if valid-from
-      (remove-first #(and (= version (nth %1 0))
-                          (= valid-from (nth %1 1))) extracts)
-      (remove #(= version (nth % 0)) extracts))))
-
-(defn- deleted-versions [extracts _ _ _ records]
-  (doseq [record records]
-    (swap! extracts remove-extract-record record)))
-
 (defn- query [table selector]
   (when (pg/table-exists? test-db "featured_regression_regression-set" table)
     (let [clauses (pg/map->where-clause selector)]
@@ -90,27 +70,11 @@
         lines (drop 1 lines)]
     [collection (doall (map t/from-json lines))]))
 
-(defn- update-db-changelog-counts [changelog-counts]
-  (let [records (j/query test-db ["SELECT * FROM \"featured_regression_regression-set\".timeline_changelog"])]
-    (doseq [action [:new :change :close :delete]]
-      (let [n (count (filter #(= (:action %1) (name action)) records)) ]
-        (swap! changelog-counts update action (fnil + 0) n)))
-
-    (doseq [[column stat-name] [[:collection :nil-collections]
-                                [:feature_id :nil-ids]]]
-      (let [nils (count (filter #(= (get %1 column) nil) records)) ]
-        (swap! changelog-counts update stat-name (fnil + 0) nils)))))
-
-
 (defn process-feature-permutation [meta feature-permutation]
   (println "  " (map #(into [] (map :action %1)) feature-permutation))
-  (let [extracts (atom [])
-        db-changelog-counts (atom{})]
+  (let []
     (with-bindings
-      {#'e/*process-insert-extract* (partial inserted-features extracts)
-       #'e/*process-delete-extract* (partial deleted-versions extracts)
-       #'e/*initialized-collection?* (constantly true)
-       #'processor/*next-version* (sequential-version-generator)
+      {#'processor/*next-version* (sequential-version-generator)
        #'processor/*child-id* (sequential-child-id-generator)}
       (merge (apply merge-with (fn [a b] (if (set? a) (merge a b) (if (sequential? a) (concat a b) (+ a b))))
                     (map (fn [features]
@@ -120,13 +84,9 @@
                                  projectors (conj (config/projectors persistence) timeline)
                                  processor (processor/create meta "regression-set" persistence projectors)]
                              (dorun (processor/consume processor features))
-                             (update-db-changelog-counts db-changelog-counts)
-                             (e/fill-extract "regression-set" nil nil)
-                             (e/flush-changelog "regression-set")
                              (:statistics (processor/shutdown processor))))
                          feature-permutation))
-             {:extracts         extracts
-              :db-changelog-counts db-changelog-counts}))))
+             {}))))
 
 (defn replay []
   (println "  Replaying")
@@ -156,8 +116,7 @@
   `(deftest ~name
      (with-bindings
        {#'dc/*persistence-schema-prefix* :featured_regression
-        #'dc/*timeline-schema-prefix*    :featured_regression
-        #'timeline/*changelog-name*      (fn [_# _#] (str ~(clojure.core/name name) "-" (timeline/unique-epoch) ".changelog"))}
+        #'dc/*timeline-schema-prefix*    :featured_regression}
        (let [[meta# features#] (json-features (str "regression/" ~file ".json"))
              expected-changelog# (io/resource (str "regression/" ~file ".changelog"))
              permutated# (if ~permutated? (permutate-features features#) [[features#]])
@@ -191,13 +150,6 @@
      (is (= features (count (query "feature" (cond-> {:collection collection}
                                                feature-id (assoc :feature_id feature-id)))))))))
 
-(defn- test-timeline-db-changelog [expected-counts changelog-counts]
-  (is (= 0 (:nil-collections @changelog-counts)))
-  (is (= 0 (:nil-ids @changelog-counts)))
-  (doseq [action [:new :change :close :delete]]
-    (is (= (or ((keyword (str "n-" (name action))) expected-counts) 0)
-           (action @changelog-counts)))))
-
 (defn- test-timeline-changelog [{:keys [expected-changelog changelogs]}]
   (let [[expected-collection expected-records]
         (with-open [in (io/reader expected-changelog)] (parse-changelog in))
@@ -218,17 +170,11 @@
 
 (defn- test-timeline
   ([expected-counts results] (test-timeline "col-1" "id-a" expected-counts results))
-  ([collection feature-id {:keys [timeline timeline-db-changelog]} results]
+  ([collection feature-id {:keys [timeline _]} results]
    (testing "!>>> Timeline"
      (is (= (:n timeline) (count (query (str "timeline_" collection) {:feature_id feature-id}))))
-     (test-timeline-db-changelog timeline-db-changelog (:db-changelog-counts results))
      (test-timeline-changelog results)
      )))
-
-(defn- test-timeline->extract [expected extracts]
-  (is (= (:n-extracts expected) (count @extracts)))
-  (is (= (:n-extracts expected) (count (distinct (map first @extracts))))) ; extracts should have distinct versions
-  (is (= (:n-valid-to expected) (count (filter #((complement nil?) (nth % 2)) @extracts)))))
 
 (defn- query-geoserver [table]
   (if-not (pg/table-exists? test-db "regression-set" table)
@@ -245,249 +191,134 @@
                    (is (= 1 (:n-processed results)))
                    (is (= 0 (:n-errored results)))
                    (test-persistence {:events 1 :features 1})
-                   (test-timeline {:timeline              {:n 1}
-                                   :timeline-db-changelog {:n-new 1}}
-                                  results)
-                   (test-timeline->extract {:n-extracts 1
-                                            :n-valid-to 0}
-                                           (:extracts results))
+                   (test-timeline {:timeline {:n 1}} results)
                    (test-geoserver 1))
 
-(defpermutatedtest new-with-child results
-                   (is (= 2 (:n-processed results)))
-                   (is (= 0 (:n-errored results)))
-                   (test-persistence {:events 1 :features 1})
-                   (test-persistence "col-1-child" {:events 1 :features 1})
-                   (test-timeline {:timeline              {:n 1}
-                                   :timeline-db-changelog {:n-new 1 :n-change 1}}
-                                  results)
-                   (test-timeline->extract {:n-extracts 1
-                                            :n-valid-to 0}
-                                           (:extracts results))
-                   (test-geoserver 1)
-                   (test-geoserver "col-1-child" 1))
+;; Won't work anymore: adds child separately.
+;(defpermutatedtest new-with-child results
+;                   (is (= 2 (:n-processed results)))
+;                   (is (= 0 (:n-errored results)))
+;                   (test-persistence {:events 1 :features 1})
+;                   (test-timeline {:timeline {:n 1}} results)
+;                   (test-geoserver 1))
 
 (defpermutatedtest new-change results
                    (is (= 2 (:n-processed results)))
                    (is (= 0 (:n-errored results)))
                    (test-persistence {:events 2 :features 1})
-                   (test-timeline {:timeline              {:n 2}
-                                   :timeline-db-changelog {:n-new 2 :n-close 1}}
-                                  results)
-                   (test-timeline->extract {:n-extracts 2
-                                            :n-valid-to 1}
-                                           (:extracts results))
+                   (test-timeline {:timeline {:n 2}} results)
                    (test-geoserver 1))
 
 (defpermutatedtest new-delete results
                    (is (= 2 (:n-processed results)))
                    (is (= 0 (:n-errored results)))
                    (test-persistence {:events 2 :features 1})
-                   (test-timeline {:timeline              {:n 0}
-                                   :timeline-db-changelog {:n-new 1 :n-delete 1}}
-                                  results)
-                   (test-timeline->extract {:n-extracts 0
-                                            :n-valid-to 0}
-                                           (:extracts results))
+                   (test-timeline {:timeline {:n 0}} results)
                    (test-geoserver 0))
 
 (defpermutatedtest new-change-change results
                    (is (= 3 (:n-processed results)))
                    (is (= 0 (:n-errored results)))
                    (test-persistence {:events 3 :features 1})
-                   (test-timeline {:timeline              {:n 3}
-                                   :timeline-db-changelog {:n-new 3 :n-close 2}}
-                                  results)
-                   (test-timeline->extract {:n-extracts 3
-                                            :n-valid-to 2}
-                                           (:extracts results))
+                   (test-timeline {:timeline {:n 3}} results)
                    (test-geoserver 1))
 
 (defpermutatedtest new-change-close results
                    (is (= 3 (:n-processed results)))
                    (is (= 0 (:n-errored results)))
                    (test-persistence {:events 3 :features 1})
-                   (test-timeline {:timeline              {:n 2}
-                                   :timeline-db-changelog {:n-new 2 :n-close 2}}
-                                  results)
-                   (test-timeline->extract {:n-extracts 2
-                                            :n-valid-to 2}
-                                           (:extracts results))
+                   (test-timeline {:timeline {:n 2}} results)
                    (test-geoserver 0))
 
 (defpermutatedtest new-change-close_with_attributes results
                    (is (= 4 (:n-processed results)))
                    (is (= 0 (:n-errored results)))
                    (test-persistence {:events 4 :features 1})
-                   (test-timeline {:timeline              {:n 3}
-                                   :timeline-db-changelog {:n-new 3 :n-close 3}}
-                                  results)
-                   (test-timeline->extract {:n-extracts 3
-                                            :n-valid-to 3}
-                                           (:extracts results))
+                   (test-timeline {:timeline {:n 3}} results)
                    (test-geoserver 0))
 
 (defpermutatedtest new-change-change-delete results
                    (is (= 4 (:n-processed results)))
                    (is (= 0 (:n-errored results)))
                    (test-persistence {:events 4 :features 1})
-                   (test-timeline {:timeline              {:n 0}
-                                   :timeline-db-changelog {:n-new 3 :n-close 2 :n-delete 3}}
-                                  results)
-                   (test-timeline->extract {:n-extracts 0
-                                            :n-valid-to 0}
-                                           (:extracts results))
+                   (test-timeline {:timeline {:n 0}} results)
                    (test-geoserver 0))
 
 (defpermutatedtest new-change-change-delete-new-change results
                    (is (= 6 (:n-processed results)))
                    (is (= 0 (:n-errored results)))
                    (test-persistence {:events 6 :features 1})
-                   (test-timeline {:timeline              {:n 2}
-                                   :timeline-db-changelog {:n-new 5 :n-close 3 :n-delete 3}}
-                                  results)
-                   (test-timeline->extract {:n-extracts 2
-                                            :n-valid-to 1}
-                                           (:extracts results))
+                   (test-timeline {:timeline {:n 2}} results)
                    (test-geoserver 1))
 
 (defpermutatedtest new_with_nested_null_geom results
-                   (is (= 2 (:n-processed results)))
+                   (is (= 1 (:n-processed results)))
                    (is (= 0 (:n-errored results)))
                    (test-persistence {:events 1 :features 1})
-                   (test-persistence "col-1$nested" {:events 1 :features 1})
-                   (test-timeline {:timeline              {:n 1}
-                                   :timeline-db-changelog {:n-new 1 :n-change 1}}
-                                  results)
-                   (test-timeline->extract {:n-extracts 1
-                                            :n-valid-to 0}
-                                           (:extracts results))
+                   (test-timeline {:timeline {:n 1}} results)
                    (test-geoserver 1))
 
 (defpermutatedtest new_with_nested_crappy_geom results
-                   (is (= 2 (:n-processed results)))
+                   (is (= 1 (:n-processed results)))
                    (is (= 0 (:n-errored results)))
                    (test-persistence {:events 1 :features 1})
-                   (test-persistence "col-1$nested" {:events 1 :features 1})
-                   (test-timeline {:timeline              {:n 1}
-                                   :timeline-db-changelog {:n-new 1 :n-change 1}}
-                                  results)
-                   (test-timeline->extract {:n-extracts 1
-                                            :n-valid-to 0}
-                                           (:extracts results))
+                   (test-timeline {:timeline {:n 1}} results)
                    (test-geoserver 1))
 
 (defpermutatedtest new_nested-change_nested-change_nested results
-                   (is (= 8 (:n-processed results)))
+                   (is (= 3 (:n-processed results)))
                    (is (= 0 (:n-errored results)))
                    (test-persistence {:events 3 :features 1})
-                   (test-persistence "col-1$nested" {:events 5 :features 3})
-                   (test-timeline {:timeline              {:n 3}
-                                   :timeline-db-changelog {:n-new 3 :n-change 5 :n-close 2}}
-                                  results)
-                   (test-timeline->extract {:n-extracts 3
-                                            :n-valid-to 2}
-                                           (:extracts results))
-                   (test-geoserver "col-1" 1)
-                   (test-geoserver "col-1$nested" 1))
+                   (test-timeline {:timeline {:n 3}} results)
+                   (test-geoserver 1))
 
 (defpermutatedtest new_double_nested-delete-new_double_nested-change_double_nested results
-                   (is (= (+ 3 3 3 5) (:n-processed results)))
+                   (is (= 4 (:n-processed results)))
                    (is (= 0 (:n-errored results)))
                    (test-persistence {:events 4 :features 1})
-                   (test-persistence "col-1$nestedserie" {:events 5 :features 3})
-                   (test-persistence "col-1$nestedserie$label" {:events 5 :features 3})
-                   (test-timeline {:timeline              {:n 2}
-                                   :timeline-db-changelog {:n-new 3 :n-change 8 :n-delete 3 :n-close 1}}
-                                  results)
-                   (test-timeline->extract {:n-extracts 2
-                                            :n-valid-to 1}
-                                           (:extracts results))
-                   (test-geoserver 1)
-                   (test-geoserver "col-1$nestedserie$label" 1))
+                   (test-timeline {:timeline {:n 2}} results)
+                   (test-geoserver 1))
 
 (defpermutatedtest new_invalid_nested results
-                   (is (= 2 (:n-processed results)))
-                   (is (= 2 (:n-errored results)))
+                   (is (= 1 (:n-processed results)))
+                   (is (= 1 (:n-errored results)))
                    (test-persistence {:events 0 :features 0})
-                   (test-persistence "col-1$nested" {:events 0 :features 0})
-                   (test-timeline {:timeline              {:n 0}
-                                   :timeline-db-changelog {}}
-                                  results)
-                   (test-timeline->extract {:n-extracts 0
-                                            :n-valid-to 0}
-                                           (:extracts results))
-                   (test-geoserver 0)
-                   (test-geoserver "col-1$nested" 0))
+                   (test-timeline {:timeline {:n 0}} results)
+                   (test-geoserver 0))
 
 (defpermutatedtest new_double_nested-change_invalid results
-                   (is (= (+ 3 1 2 2) (:n-processed results)))
-                   (is (= 5 (:n-errored results)))
+                   (is (= 2 (:n-processed results)))
+                   (is (= 1 (:n-errored results)))
                    (test-persistence {:events 1 :features 1})
-                   (test-persistence "col-1$nestedserie" {:events 1 :features 1})
-                   (test-persistence "col-1$nestedserie$label" {:events 1 :features 1})
-                   (test-timeline {:timeline              {:n 1}
-                                   :timeline-db-changelog {:n-new 1 :n-change 2}}
-                                  results)
-                   (test-timeline->extract {:n-extracts 1
-                                            :n-valid-to 0}
-                                           (:extracts results))
-                   (test-geoserver 1)
-                   (test-geoserver "col-1$nestedserie" 1)
-                   (test-geoserver "col-1$nestedserie$label" 1))
+                   (test-timeline {:timeline {:n 1}} results)
+                   (test-geoserver 1))
 
 (defregressiontest new-change-change-pand-test results
-                   (is (= 19 (:n-processed results)))
+                   (is (= 3 (:n-processed results)))
+                   (is (= 0 (:n-errored results)))
                    (test-persistence "pand" "id-a" {:events 3 :features 1})
-                   (test-persistence "pand$nummeraanduidingreeks" {:events 9 :features 6})
-                   (test-persistence "pand$nummeraanduidingreeks$positie" {:events 7 :features 5})
-                   (test-timeline "pand" "id-a"
-                                  {:timeline              {:n 3}
-                                   :timeline-db-changelog {:n-new 3 :n-change 16 :n-close 2}}
-                                  results)
-                   (test-timeline->extract {:n-extracts 3
-                                            :n-valid-to 2}
-                                           (:extracts results))
-                   (test-geoserver "pand" 1)
-                   (test-geoserver "pand$nummeraanduidingreeks" 3)
-                   (test-geoserver "pand$nummeraanduidingreeks$positie" 3))
+                   (test-timeline "pand" "id-a" {:timeline {:n 3}} results)
+                   (test-geoserver "pand" 1))
 
 (defpermutatedtest same-double-new results
                    (is (= 2 (:n-processed results)))
                    (is (= 1 (:n-errored results)))
                    (test-persistence {:events 1 :features 1})
-                   (test-timeline {:timeline              {:n 1}
-                                   :timeline-db-changelog {:n-new 1 :n-change 0 :n-close 0}}
-                                  results)
-                   (test-timeline->extract {:n-extracts 1
-                                            :n-valid-to 0}
-                                           (:extracts results))
+                   (test-timeline {:timeline {:n 1}} results)
                    (test-geoserver 1))
 
 (defpermutatedtest new_nested-close_parent results
-                   (is (= 4 (:n-processed results)))
+                   (is (= 2 (:n-processed results)))
                    (is (= 0 (:n-errored results)))
                    (test-persistence {:events 2 :features 1})
-                   (test-persistence "col-1$nested" {:events 2 :features 1})
-                   (test-timeline {:timeline              {:n 1}
-                                   :timeline-db-changelog {:n-new 1 :n-change 2 :n-close 1}}
-                                  results)
-                   (test-timeline->extract {:n-extracts 1
-                                            :n-valid-to 1}
-                                           (:extracts results))
-                   (test-geoserver "col-1" 0)
-                   (test-geoserver "col-1$nested" 0))
+                   (test-timeline {:timeline {:n 1}} results)
+                   (test-geoserver 0))
 
 (defpermutatedtest new_or_change results
                    (is (= 3 (:n-processed results)))
                    (is (= 0 (:n-errored results)))
                    (test-persistence {:events 3 :features 1})
-                   (test-timeline {:timeline              {:n 3}
-                                   :timeline-db-changelog {:n-new 3 :n-close 2}}
-                                  results)
-                   (test-timeline->extract {:n-extracts 3
-                                            :n-valid-to 2}
-                                           (:extracts results))
+                   (test-timeline {:timeline {:n 3}} results)
                    (test-geoserver 1))
 
 (defregressiontest new-change_with_array_attribute results

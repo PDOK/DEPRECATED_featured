@@ -5,7 +5,6 @@
              [data-fixes :as fixes]
              [processor :as processor :refer [consume shutdown]]
              [persistence :as pers]
-             [timeline :as tl]
              [generator :refer [random-json-feature-stream]]]
             [clojure.tools.cli :refer [parse-opts]]
             [clojure.tools.logging :as log])
@@ -97,10 +96,6 @@
         (if (not (:dataset options))
           (exit 1 "replaying requires dataset")
           (replay options))
-      (:clear-timeline-changelog options)
-        (if (not (:dataset options))
-          (exit 1 "clearing changelog requires dataset")
-          (tl/delete-changelog (config/timeline-for-dataset (:dataset options))))
       (not (or (seq arguments) (:std-in options)))
         (exit 1 "json-file or std-in required")
       :else
@@ -119,7 +114,6 @@
    [nil "--disable-validation"]
    [nil "--projection PROJ" "RD / ETRS89 / SOURCE"]
    ["-r" "--replay [N/root-collection]" "Replay last N events or all events from root-collection tree from persistence to projectors"]
-   [nil "--clear-timeline-changelog" "Clear timeline changelog for dataset"]
    [nil "--single-processor" "One processor for all files, reads meta data of first file only."]
    [nil "--fix FIXNAME" "Execute fix"]
    [nil "--perform" "Perform fix in combination with --fix" ]
