@@ -1,5 +1,4 @@
 (ns pdok.featured.timeline
-  (:refer-clojure :exclude [merge])
   (:require [pdok.cache :refer :all]
             [pdok.featured.dynamic-config :as dc]
             [pdok.postgres :as pg]
@@ -65,12 +64,6 @@
                     "WHERE valid_to is null")]
      (execute-query timeline query))))
 
-(defn- init-root
-  ([feature]
-   (init-root (:collection feature) (:id feature)))
-  ([collection id]
-   {:_collection collection :_id id}))
-
 (defn keywordize-keys-and-remove-nils
   "Recursively transforms all map keys from strings to keywords and removes all pairs with nil values."
   [m]
@@ -78,36 +71,29 @@
     (walk/postwalk (fn [x] (if (map? x) (into {} (map f x)) x)) m)))
 
 (defn- mustafy [feature]
-  (reduce
-    (fn [acc [k v]] (if v
-                      (assoc acc (keyword k) (keywordize-keys-and-remove-nils v))
-                      acc))
-    (init-root feature)
-    (:attributes feature)))
+  (into {} (for [[k v] (:attributes feature)]
+             (when v
+               [(keyword k) (keywordize-keys-and-remove-nils v)]))))
 
-(defn merge* [target action feature]
-  (condp = action
-    :close target
-    (clojure.core/merge target feature)))
+(defn- merge* [target current-versions feature]
+  (merge target
+         {:_collection (:collection feature)
+          :_id (:id feature)
+          :_version (:version feature)
+          :_all_versions (conj current-versions (:version feature))
+          :_tiles (or (:_tiles target) (:tiles feature))})) ;; Current tiles for close, new tiles for new and change.
 
-(defn merge
-  ([target feature]
-   (let [mustafied (mustafy feature)
-         merged (merge* target (:action feature) mustafied)
-         merged (assoc merged :_version (:version feature))
-         merged (update-in merged [:_all_versions] (fnil conj '()) (:version feature))
-         merged (update merged :_tiles #((fnil clojure.set/union #{}) % (:tiles feature)))]
-     merged)))
+(defn- build-new-entry [feature]
+  (-> (merge* (mustafy feature) (list) feature)
+      (assoc :_valid_from (:validity feature))))
 
-(defn- sync-valid-from [acc feature]
-  (assoc acc :_valid_from  (:validity feature)))
+(defn- build-change-entry [current feature]
+  (-> (merge* (mustafy feature) (:_all_versions current) feature)
+      (assoc :_valid_from (:validity feature))))
 
-(defn- sync-valid-to [acc feature]
-  (let [changed (assoc acc :_valid_to (:validity feature))]
-    changed))
-
-(defn- reset-valid-to [acc]
-  (assoc acc :_valid_to nil))
+(defn- build-close-entry [current feature]
+  (-> (merge* current (:_all_versions current) feature)
+      (assoc :_valid_to (:validity feature))))
 
 (defn- new-current-sql [dataset collection]
   (str "INSERT INTO " (qualified-timeline dataset collection)
@@ -275,9 +261,6 @@ VALUES (?, ?, ?, ?, ?, ?)"))
           (write-changelog-entries zip collection entries)
           (.closeEntry zip))))))
 
-(defn- feature-key [feature]
-  [(:collection feature) (:id feature)])
-
 (defn- make-flush-all [new-batch delete-batch delete-for-update-batch changelog-batch]
   "Used for flushing all batches, so update current is always performed after new current"
   (fn [timeline]
@@ -338,61 +321,53 @@ VALUES (?, ?, ?, ?, ?, ?)"))
     (flush-fn)
     this)
   (proj/new-feature [this feature]
-    (let [[collection id] (feature-key feature)
-          batched-new (batched new-batch flush-fn)
+    (let [batched-new (batched new-batch flush-fn)
           cache-batched-new (with-cache feature-cache batched-new cache-store-key cache-value)
           cached-get-current (use-cache feature-cache cache-use-key)
           batched-append-changelog (batched changelog-batch flush-fn)
-          current (cached-get-current collection id)]
+          current (cached-get-current (:collection feature) (:id feature))]
       (when (not current) ;; Check idempotency
-        (let [nw (sync-valid-from (merge (init-root collection id) feature) feature)]
-          (cache-batched-new nw)
-          (batched-append-changelog (changelog-new-entry nw))))))
+        (let [new-entry (build-new-entry feature)]
+          (cache-batched-new new-entry)
+          (batched-append-changelog (changelog-new-entry new-entry))))))
   (proj/change-feature [this feature]
-    (let [[collection id] (feature-key feature)
-          batched-new (batched new-batch flush-fn)
+    (let [batched-new (batched new-batch flush-fn)
           cache-batched-new (with-cache feature-cache batched-new cache-store-key cache-value)
           cache-batched-update (batched-updater this)
           cached-get-current (use-cache feature-cache cache-use-key)
           batched-append-changelog (batched changelog-batch flush-fn)
-          current (cached-get-current collection id)]
+          current (cached-get-current (:collection feature) (:id feature))]
       (when (and current (util/uuid> (:version feature) (:_version current))) ;; Check idempotency
-        (let [new-current (merge current feature)]
-          (if (t/before? (:_valid_from current) (:validity feature))
-            (let [closed-current (sync-valid-to current feature)
-                  ;; reset valid-to for new-current.
-                  new-current+ (reset-valid-to (sync-valid-from new-current feature))]
-              (cache-batched-update (:_version current) (:_valid_from current)
-                                    (:_valid_to current) closed-current)
-              (cache-batched-new new-current+)
-              (batched-append-changelog (changelog-close-entry (:_version current) closed-current))
-              (batched-append-changelog (changelog-new-entry new-current+)))
-            (let [new-current+ (reset-valid-to (sync-valid-from new-current feature))]
-              ;; reset valid-to because it might be closed because of nested features.
-              (cache-batched-update (:_version current) (:_valid_from current)
-                                    (:_valid_to current) new-current+)
-              (batched-append-changelog (changelog-change-entry (:_version current) new-current+))))))))
+        (if (t/before? (:_valid_from current) (:validity feature)) ;; New version or rewrite of existing version?
+          (let [close-entry (assoc current :_valid_to (:validity feature))
+                new-entry (build-change-entry current feature)]
+            (cache-batched-update (:_version current) (:_valid_from current)
+                                  (:_valid_to current) close-entry)
+            (cache-batched-new new-entry)
+            (batched-append-changelog (changelog-close-entry (:_version current) close-entry))
+            (batched-append-changelog (changelog-new-entry new-entry)))
+          (let [change-entry (build-change-entry current feature)]
+            (cache-batched-update (:_version current) (:_valid_from current)
+                                  (:_valid_to current) change-entry)
+            (batched-append-changelog (changelog-change-entry (:_version current) change-entry)))))))
   (proj/close-feature [this feature]
-    (let [[collection id] (feature-key feature)
-          cache-batched-update (batched-updater this)
+    (let [cache-batched-update (batched-updater this)
           cached-get-current (use-cache feature-cache cache-use-key)
           batched-append-changelog (batched changelog-batch flush-fn)
-          current (cached-get-current collection id)]
+          current (cached-get-current (:collection feature) (:id feature))]
       (when (and current (util/uuid> (:version feature) (:_version current))) ;; Check idempotency
-        (let [new-current (merge current feature)
-              closed-or-new-current (sync-valid-to new-current feature)]
+        (let [close-entry (build-close-entry current feature)]
           (cache-batched-update (:_version current) (:_valid_from current)
-                                (:_valid_to current) closed-or-new-current)
-          (batched-append-changelog (changelog-close-entry (:_version current) closed-or-new-current))))))
+                                (:_valid_to current) close-entry)
+          (batched-append-changelog (changelog-close-entry (:_version current) close-entry))))))
   (proj/delete-feature [this feature]
-    (let [[collection id] (feature-key feature)
-          cache-batched-delete (batched-deleter this)
+    (let [cache-batched-delete (batched-deleter this)
           cached-get-current (use-cache feature-cache cache-use-key)
           batched-append-changelog (batched changelog-batch flush-fn)
-          current (cached-get-current collection id)]
+          current (cached-get-current (:collection feature) (:id feature))]
       (when (and current (util/uuid> (:version feature) (:_version current))) ;; Check idempotency
         (cache-batched-delete current)
-        (doseq [v (:_all_versions current)] ;; TODO is all versions still necessary?
+        (doseq [v (:_all_versions current)] ;; TODO only delete what can actually exist in the database
           (batched-append-changelog (changelog-delete-entry (:_collection current) (:_id current) v))))))
   (proj/accept? [_ feature] true)
   (proj/close [this]
