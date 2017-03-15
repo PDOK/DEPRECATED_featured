@@ -1,7 +1,7 @@
 {"_check_validity_on_delete" : true,
  "Features": [
   {"_action":"new","_id":"id-a","_validity":"2016-01-01T00:00:00.000","_collection":"col-1","b":"first","_geometry":{"type":"gml","gml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><gml:Point xmlns:gml=\"http://www.opengis.net/gml\"><gml:pos>154742 464096</gml:pos></gml:Point>"}},
-  {"_action":"change","_id":"id-a","_current_validity":"2016-01-01T00:00:00.000","_validity":"2016-02-02T00:00:00.000","_collection":"col-1","b":"second"},
-  {"_action":"change","_id":"id-a","_current_validity":"2016-02-02T00:00:00.000","_validity":"2016-03-03T00:00:00.000","_collection":"col-1","b":"second + second"},
+  {"_action":"change","_id":"id-a","_current_validity":"2016-01-01T00:00:00.000","_validity":"2016-02-02T00:00:00.000","_collection":"col-1","b":"second","_geometry":{"type":"gml","gml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><gml:Point xmlns:gml=\"http://www.opengis.net/gml\"><gml:pos>154742 464096</gml:pos></gml:Point>"}},
+  {"_action":"change","_id":"id-a","_current_validity":"2016-02-02T00:00:00.000","_validity":"2016-03-03T00:00:00.000","_collection":"col-1","b":"second + second","_geometry":{"type":"gml","gml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><gml:Point xmlns:gml=\"http://www.opengis.net/gml\"><gml:pos>154742 464096</gml:pos></gml:Point>"}},
   {"_action":"delete","_id":"id-a","_current_validity":"2016-03-03T00:00:00.000","_collection":"col-1"}
 ]}
