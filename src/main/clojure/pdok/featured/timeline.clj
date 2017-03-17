@@ -378,44 +378,62 @@ VALUES (?, ?, ?, ?, ?, ?)"))
 (defn changelog-new-entry [new-feature]
   "[collection] action id version json"
   [(:_collection new-feature)
-   "new"
-   (:_id new-feature)
-   (:_version new-feature)
-   (transit/to-json new-feature)])
+   (transit/to-json {:action "new"
+                     :collection (:_collection new-feature)
+                     :id (:_id new-feature)
+                     :version (:_version new-feature)
+                     :tiles (:_tiles new-feature)
+                     :valid-from (:_valid_from new-feature)
+                     :attributes (apply dissoc new-feature
+                                        [:_collection :_id :_version :_all_versions :_tiles :_valid_from :_valid_to])
+                     })])
 
 (defn changelog-change-entry [current-version new-feature]
   "[collection] action id old-version version json"
   [(:_collection new-feature)
-   "change"
-   (:_id new-feature)
-   current-version
-   (:_version new-feature)
-   (transit/to-json new-feature)])
+   (transit/to-json {:action "change"
+                     :collection (:_collection new-feature)
+                     :id (:_id new-feature)
+                     :previous-version current-version
+                     :version (:_version new-feature)
+                     :tiles (:_tiles new-feature)
+                     :valid-from (:_valid_from new-feature)
+                     :attributes (apply dissoc new-feature
+                                        [:_collection :_id :_version :_all_versions :_tiles :_valid_from :_valid_to])
+                     })])
 
 (defn changelog-close-entry [old-version closed-feature]
   "[collection] action id old-version version json"
   [(:_collection closed-feature)
-   "close"
-   (:_id closed-feature)
-   old-version
-   (:_version closed-feature)
-   (transit/to-json closed-feature)])
+   (transit/to-json {:action "close"
+                     :collection (:_collection closed-feature)
+                     :id (:_id closed-feature)
+                     :previous-version old-version
+                     :version (:_version closed-feature)
+                     :tiles (:_tiles closed-feature)
+                     :valid-from (:_valid_from closed-feature)
+                     :valid-to (:_valid_to closed-feature)
+                     :attributes (apply dissoc closed-feature
+                                        [:_collection :_id :_version :_all_versions :_tiles :_valid_from :_valid_to])
+                     })])
 
 (defn changelog-delete-entry [collection id version]
   "[collection] action id old-version"
   [collection
-   "delete"
-   id
-   version])
+   (transit/to-json {:action "delete"
+                     :collection collection
+                     :id id
+                     :previous-version version
+                     })])
 
-(defn- write-changelog-entries [^OutputStream stream, dataset, collection, entries]
+(defn- write-changelog-entries [^OutputStream stream, collection, entries]
   "Write the contents of one changelog file to an arbitrary output stream"
   (let [write-fn (fn [^String str] (.write stream (.getBytes str)))]
-    (write-fn (str "v1\n" dataset "," collection "\n"))
+    (write-fn "pdok-featured-changelog-v2\n")
+    (write-fn (str (transit/to-json {:collection collection}) "\n"))
     (doseq [entry entries]
       ; pop collection from front
-      (write-fn (str/join "," (rest entry)))
-      (write-fn "\n"))))
+      (write-fn (str (second entry) "\n")))))
 
 (defn- append-to-changelog [{:keys [dataset changelogs filestore]} log-entries]
   "Write a batch of changelog entries to separate zip files per collection"
@@ -428,7 +446,7 @@ VALUES (?, ?, ?, ?, ?, ?)"))
         (with-open [output-stream (io/output-stream compressed-file)
                     zip (ZipOutputStream. output-stream)]
           (.putNextEntry zip (ZipEntry. uncompressed-filename))
-          (write-changelog-entries zip dataset collection entries)
+          (write-changelog-entries zip collection entries)
           (.closeEntry zip))))))
 
 (defn- feature-key [feature]
