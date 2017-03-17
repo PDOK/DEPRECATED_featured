@@ -82,51 +82,13 @@
                              "WHERE 1 = 1 "
                              "AND " clauses)]))))
 
-(defn make-new-record [line]
-  (let [[id version json] (str/split line #"," 3)]
-    {:action :new
-     :id id
-     :version version
-     :feature (t/from-json json)}))
-
-(defn make-change-record [line]
-  (let [[id old-version new-version json] (str/split line #"," 4)]
-    {:action :change
-     :id id
-     :old-version old-version
-     :version new-version
-     :feature (t/from-json json)}))
-
-(defn make-close-record [line]
-  (let [[id old-version new-version json] (str/split line #"," 4)]
-    {:action :close
-     :id id
-     :old-version old-version
-     :version new-version
-     :feature (t/from-json json)}))
-
-(defn make-delete-record [line]
-  (let [[id version] (str/split line #"," 2)]
-    {:action :delete
-     :id id
-     :version version}))
-
-(defn- make-changelog-record [csv-line]
-  (let [[action rest] (str/split csv-line #"," 2)]
-    (condp = action
-      "new" (make-new-record rest)
-      "change" (make-change-record rest)
-      "close" (make-close-record rest)
-      "delete" (make-delete-record rest)
-      nil)))
-
 (defn- parse-changelog [in-stream]
   "Returns [dataset collection change-record]"
   (let [lines (drop 1 (line-seq (io/reader in-stream)))
-        [dataset collection] (str/split (first lines) #",")
+        collection (:collection (t/from-json (first lines)))
         ;drop collection info
         lines (drop 1 lines)]
-    [dataset collection (doall (map make-changelog-record lines))]))
+    [collection (doall (map t/from-json lines))]))
 
 (defn- update-db-changelog-counts [changelog-counts]
   (let [records (j/query test-db ["SELECT * FROM \"featured_regression_regression-set\".timeline_changelog"])]
@@ -237,19 +199,19 @@
            (action @changelog-counts)))))
 
 (defn- test-timeline-changelog [{:keys [expected-changelog changelogs]}]
-  (let [[expected-dataset expected-collection expected-records]
+  (let [[expected-collection expected-records]
         (with-open [in (io/reader expected-changelog)] (parse-changelog in))
         filestore (config/filestore changelog-dir)
         parsed-changelogs (doall (map (fn [log] (with-open [in (io/input-stream (fs/get-file filestore log))
                                                             zip (ZipInputStream. in)]
                                                   (.getNextEntry zip)
                                                   (parse-changelog zip))) changelogs))
-        all-records (mapcat (fn [[_ _ records]] records) parsed-changelogs)]
-    (is (every? #(= [expected-dataset expected-collection] %) (->> parsed-changelogs (map (partial take 2)))))
-    (is (every? #(not (nil? %)) (->> all-records (filter #(#{:new :change :close} (:action %))) (map :feature))))
-    (is (every? #(nil? %) (->> all-records (filter #(= :new (:action %))) (map (comp :_valid_to :feature)))))
-    (is (every? #(nil? %) (->> all-records (filter #(= :change (:action %))) (map (comp :_valid_to :feature)))))
-    (is (every? #(not (nil? %)) (->> all-records (filter #(= :close (:action %))) (map (comp :_valid_to :feature)))))
+        all-records (mapcat (fn [[_ records]] records) parsed-changelogs)]
+    (is (every? #(= expected-collection %) (->> parsed-changelogs (map first))))
+    (is (every? #(not (nil? %)) (->> all-records (filter #(#{"new" "change" "close"} (:action %))) (map :attributes))))
+    (is (every? #(nil? %) (->> all-records (filter #(= "new" (:action %))) (map :valid-to))))
+    (is (every? #(nil? %) (->> all-records (filter #(= "change" (:action %))) (map :valid-to))))
+    (is (every? #(not (nil? %)) (->> all-records (filter #(= "close" (:action %))) (map :valid-to))))
     (is (= (count expected-records) (count all-records)))
     (doseq [[expected created] (map (fn [e c] [e c]) expected-records all-records)]
       (is (= expected created)))))
