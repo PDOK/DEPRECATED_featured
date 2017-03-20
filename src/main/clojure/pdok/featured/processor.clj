@@ -13,8 +13,7 @@
             [pdok.featured.tiles :as tiles])
   (:import (pdok.featured.timeline Timeline ChunkedTimeline)))
 
-(def ^:private pdok-fields [:action :id :dataset :collection :validity :version :current-validity
-                            :parent-id :parent-collection :parent-field :attributes :src])
+(def ^:private pdok-fields [:action :id :dataset :collection :validity :version :current-validity :attributes :src])
 
 (declare consume consume* process pre-process append-feature)
 
@@ -30,22 +29,12 @@
     (-> feature (assoc :invalid? true) (assoc :invalid-reasons new-reasons))))
 
 (defn- apply-all-features-validation [persistence {:keys [invalids]} feature]
-  (let [{:keys [collection id action validity geometry attributes]} feature
-        parent-set #{:parent-collection :parent-id}
-        parent-check (map #(contains? feature %) parent-set)]
+  (let [{:keys [collection id action validity geometry attributes]} feature]
     (cond-> feature
       (or (some str/blank? [collection id]) (and (not= action :delete) (nil? validity)))
       (make-invalid "All feature require: collection id validity")
-      (and (some true? parent-check) (not (every? true? parent-check)))
-      (make-invalid "Feature should contain both parent-collection and parent-id or none")
-      (and (every? true? parent-check) (not (pers/stream-exists? persistence (:parent-collection feature) (:parent-id feature))))
-      (make-invalid "Parent should exist")
       (@invalids [(:collection feature) (:id feature)])
-      (make-invalid "Feature marked invalid")
-      (@invalids [(:parent-collection feature) (:parent-id feature)])
-      (make-invalid "Parent marked invalid")
-      (some #(@invalids %) (map (partial take 2) (pers/path persistence (:collection feature) (:id feature))))
-      (make-invalid "Root marked invalid"))))
+      (make-invalid "Feature marked invalid"))))
 
 (defn- stream-exists? [persistence {:keys [collection id]}]
   (and (pers/stream-exists? persistence collection id)
@@ -139,12 +128,11 @@
 
 (defn- process-new-feature [{:keys [persistence] :as processor} feature]
   (let [{:keys [collection id parent-collection]} feature]
-    (when-not (pers/collection-exists? persistence collection parent-collection)
-      (pers/create-collection persistence collection parent-collection)
+    (when-not (pers/collection-exists? persistence collection)
+      (pers/create-collection persistence collection)
       (project! processor proj/new-collection collection parent-collection))
     (when-not (pers/stream-exists? persistence collection id)
-      (pers/create-stream persistence collection id
-                          (:parent-collection feature) (:parent-id feature) (and (:parent-collection feature) (or (:parent-field feature) (:collection feature)))))
+      (pers/create-stream persistence collection id))
     (append-feature persistence feature)
     (project! processor proj/new-feature feature))
   feature)
@@ -259,23 +247,22 @@
 (defn replay [{:keys [persistence projectors batch-size statistics] :as processor}
               last-n root-collection]
   "Sends the last n events from persistence to the projectors"
-  (let [collections (when root-collection (pers/collection-tree persistence root-collection))
+  (let [collections [root-collection]
         features (pers/get-last-n persistence last-n collections)
         parts (a/pipe features (a/chan 1 (partition-all batch-size)))]
     (loop [part (a/<!! parts)]
       (when (seq part)
-        (let [enriched-part (pers/enrich-with-parent-info persistence part)]
-          (pers/flush persistence)
-          (pers/prepare persistence enriched-part)
-          (doseq [f enriched-part]
-            (condp = (:action f)
-              :new (project! processor proj/new-feature f)
-              :change (project! processor proj/change-feature f)
-              :close (project! processor proj/close-feature f)
-              :delete (project! processor proj/delete-feature f))
-            (swap! statistics update :replayed inc))
-          (doto-projectors! processor proj/flush)
-          (recur (a/<!! parts)))))))
+        (pers/flush persistence)
+        (pers/prepare persistence part)
+        (doseq [f part]
+          (condp = (:action f)
+            :new (project! processor proj/new-feature f)
+            :change (project! processor proj/change-feature f)
+            :close (project! processor proj/close-feature f)
+            :delete (project! processor proj/delete-feature f))
+          (swap! statistics update :replayed inc))
+        (doto-projectors! processor proj/flush)
+        (recur (a/<!! parts))))))
 
 (defn shutdown [{:keys [persistence projectors statistics] :as processor}]
   "Shutdown feature store. Make sure all data is processed and persisted"

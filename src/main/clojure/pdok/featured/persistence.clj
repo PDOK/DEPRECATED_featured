@@ -13,7 +13,7 @@
   (:import (clojure.lang PersistentQueue)
            (java.sql SQLException)))
 
-(declare prepare-caches prepare-childs-cache prepare-parent-cache)
+(declare prepare-caches)
 
 (def ^Integer jdbc-collection-partition-size 30000)
 
@@ -22,60 +22,22 @@
   (prepare [persistence features] "Called before processing this feature batch")
   (flush [persistence])
   (collections [persistence])
-  (create-collection [persistence collection parent-collection])
-  (child-collections [persistence parent-collection])
+  (create-collection [persistence collection])
   (stream-exists? [persistence collection id])
-  (create-stream
-    [persistence collection id]
-    [persistence collection id parent-collection parent-id parent-field])
+  (create-stream [persistence collection id])
   (append-to-stream [persistence version action collection id validity attributes])
   (current-validity [persistence collection id])
   (last-action [persistence collection id])
   (current-version [persistence collection id])
-  (childs
-    [persistence parent-collection parent-id child-collection]
-    [persistence parent-collection parent-id]
-    "Returns seq of [collection id]")
-  (parent [persistence collection id] "Returns [collection id field] tuple or nil")
   (get-last-n [persistence n collections]
     "Returns channel with n last stream entries for all collections in collections
 If n nil => no limit, if collections nil => all collections")
-  (enrich-with-parent-info [persistence features] "returns features enriched with parent info (collection and id)")
   (streams [persistence collection] "returns channel with all stream ids in collection")
   (close [persistence]))
 
-(defn collection-tree [persistence root]
-  "Returns root and all (child) collections in tree"
-  (if-let [children (seq (child-collections persistence root))]
-    (let [all-childs (mapcat #(collection-tree persistence %) children)]
-      (cons root all-childs))
-    [root]))
-
-(defn path [persistence collection id]
-  "Returns sequence of [collection id field child-id] tuples. Parents first. Root only means empty sequence"
-  (when (and collection id)
-    (if-let [[parent-collection parent-id parent-field] (parent persistence collection id)]
-      (loop [path (list [parent-collection parent-id parent-field id])
-             pc  parent-collection
-             pid parent-id]
-        (if-let [[new-pc new-pid new-pf] (parent persistence pc pid)]
-          (recur (conj path [new-pc new-pid new-pf pid]) new-pc new-pid)
-          path))
-      (list))))
-
-(defn root [persistence collection id]
-  "Return [collection id] tuple with self if no other root"
-  (let [path (path persistence collection id)]
-    (if (empty? path)
-      [collection id]
-      (take 2 (first path)))))
-
-(defn collection-exists?
-  ([persistence collection]
-    (let [collections (collections persistence)]
-      (seq (filter #(= (:name %) collection) collections))))
-  ([persistence collection parent-collection]
-   ((collections persistence) {:name collection :parent-collection parent-collection})))
+(defn collection-exists? [persistence collection]
+  (let [collections (collections persistence)]
+    (seq (filter #(= (:name %) collection) collections))))
 
 (defn schema [dataset]
   (str (name dc/*persistence-schema-prefix*) "_" dataset))
@@ -98,12 +60,8 @@ If n nil => no limit, if collections nil => all collections")
       (checked (do (pg/create-table db dc/*persistence-schema* dc/*persistence-features*
                                     [:id "bigserial" :primary :key]
                                     [:collection "varchar(100)"]
-                                    [:feature_id "varchar(50)"]
-                                    [:parent_collection "varchar(255)"]
-                                    [:parent_id "varchar(50)"]
-                                    [:parent_field "varchar(255)"])
+                                    [:feature_id "varchar(50)"])
                    (pg/create-index db dc/*persistence-schema* dc/*persistence-features* :collection :feature_id)
-                   (pg/create-index db dc/*persistence-schema* dc/*persistence-features* :parent_collection :parent_id)
                    (pg/configure-auto-vacuum db dc/*persistence-schema* dc/*persistence-features* 0 10000 0))
                (pg/table-exists? db dc/*persistence-schema* dc/*persistence-features*)))
 
@@ -124,30 +82,19 @@ If n nil => no limit, if collections nil => all collections")
     (when-not (pg/table-exists? db dc/*persistence-schema* dc/*persistence-collections*)
       (checked (do (pg/create-table db dc/*persistence-schema* dc/*persistence-collections*
                                     [:id "bigserial" :primary :key]
-                                    [:collection "varchar(255)"]
-                                    [:parent_collection "varchar(100)"])
-                   (pg/create-index db dc/*persistence-schema* dc/*persistence-collections*
-                                    :collection :parent_collection))
+                                    [:collection "varchar(255)"])
+                   (pg/create-index db dc/*persistence-schema* dc/*persistence-collections* :collection))
                (pg/table-exists? db dc/*persistence-schema* dc/*persistence-collections*)))))
 
-(defn jdbc-create-collection [{:keys [db dataset]} collection parent-collection]
-  (let [sql (str "INSERT INTO " (qualified-persistence-collections dataset)
-                 " (collection, parent_collection) VALUES (?, ?)")]
-    (j/execute! db (list sql collection parent-collection))))
+(defn jdbc-create-collection [{:keys [db dataset]} collection]
+  (let [sql (str "INSERT INTO " (qualified-persistence-collections dataset) " (collection) VALUES (?)")]
+    (j/execute! db (list sql collection))))
 
 (defn jdbc-all-collections [{:keys [db dataset]}]
   (j/with-db-connection [c db]
-    (let [query (str "SELECT collection AS name, parent_collection AS \"parent-collection\" FROM "
-                     (qualified-persistence-collections dataset))
+    (let [query (str "SELECT collection AS name FROM " (qualified-persistence-collections dataset))
           results (j/query c [query])]
       results)))
-
-(defn jdbc-child-collections [{:keys [db dataset]} parent-collection]
-  (j/with-db-connection [c db]
-    (let [query (str "SELECT collection FROM " (qualified-persistence-collections dataset)
-                     " WHERE parent_collection = ?")
-          results (j/query c [query parent-collection])]
-      (map :collection results))))
 
 (defn record->feature [c record]
   (let [f (transient {})
@@ -210,74 +157,15 @@ If n nil => no limit, if collections nil => all collections")
              (throw e))))
     result-chan))
 
-(defn enrich-query [dataset n-features]
-  (str "SELECT feature_id, parent_collection, parent_id FROM "
-       (qualified-features dataset) " WHERE collection = ? AND feature_id in ("
-       (clojure.string/join "," (repeat n-features "?")) ")"))
-
-(defn jdbc-enrich-with-parent-info [{:keys [db dataset]} features]
-  (let [enrich-data (volatile! {})
-        per-collection (group-by :collection features)]
-    (doseq [[collection grouped-features] per-collection]
-      (j/with-db-connection [c db]
-        (let [result (j/query c (concat [(enrich-query dataset (count grouped-features)) collection] (map :id grouped-features)))]
-          (vswap! enrich-data merge (reduce (fn [acc val] (assoc acc [collection (:feature_id val)] val)) {} result)))))
-    (map (fn [feature]
-           (let [{:keys [parent_collection parent_id]} (get @enrich-data [(:collection feature) (:id feature)])]
-             (if (and parent_collection parent_id)
-               (-> feature
-                   (assoc :parent-collection parent_collection)
-                   (assoc :parent-id parent_id))
-               feature)))
-         features)))
-
 (defn- jdbc-create-stream [{:keys [db dataset]} entries]
   (with-bench t (log/debug "Created streams in" t "ms")
     (try (j/with-db-connection [c db]
            (apply (partial j/insert! c (qualified-features dataset) :transaction? (:transaction? db)
-                           [:collection :feature_id :parent_collection :parent_id :parent_field])
+                           [:collection :feature_id])
                   entries))
          (catch SQLException e
            (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
            (throw e)))))
-
-(defn- jdbc-load-childs-cache [{:keys [db dataset]} parent-collection parent-ids]
-  (partitioned
-    (fn [ids]
-      (try (j/with-db-connection [c db]
-                                 (let [results
-                                       (j/query c (apply vector (str "SELECT parent_id, collection, feature_id FROM " (qualified-features dataset)
-                                                                     " WHERE parent_collection = ? AND parent_id in ("
-                                                                     (clojure.string/join "," (repeat (count ids) "?")) ")")
-                                                         parent-collection ids))
-                                       per-id (group-by :parent_id results)
-                                       for-cache (map (fn [[parent-id values]]
-                                                        [[parent-collection parent-id]
-                                                         (map (juxt :collection :feature_id) values)]) per-id)]
-                                   for-cache))
-           (catch SQLException e
-             (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
-             (throw e))))
-    jdbc-collection-partition-size parent-ids))
-
-(defn- jdbc-load-parent-cache [{:keys [db dataset]} collection ids]
-  (partitioned
-    (fn [ids-part]
-      (try (j/with-db-connection [c db]
-                                 (let [results
-                                       (j/query c (apply vector (str "SELECT feature_id, parent_collection, parent_id, parent_field FROM "
-                                                                     (qualified-features dataset)
-                                                                     " WHERE collection = ? AND feature_id in ("
-                                                                     (clojure.string/join "," (repeat (count ids-part) "?")) ")")
-                                                         collection ids-part) :as-arrays? true)
-                                       for-cache (map (fn [[feature-id parent-collection parent-id parent-field]]
-                                                        [[collection feature-id] [parent-collection parent-id parent-field]])
-                                                      (drop 1 results))]
-                                   for-cache))
-           (catch SQLException e
-             (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
-             (throw e))))
-    jdbc-collection-partition-size ids))
 
 (defn- jdbc-insert [{:keys [db dataset]} entries]
   (let [entries (map (fn [entry] (-> entry vec (update 6 transit/to-json))) entries)]
@@ -311,63 +199,23 @@ If n nil => no limit, if collections nil => all collections")
                (throw e)))))
     jdbc-collection-partition-size ids))
 
-(defn filter-deleted [persistence childs]
-  (filter (fn [[col id]] (not= :delete (last-action persistence col id)))
-          childs))
-
-(defn- append-cached-child [acc collection id _ _ _]
-  (let [acc (if acc acc [])]
-    (conj acc [collection id])))
-
 (defn- current-state [persistence collection id]
   (let [key-fn (fn [collection id] [collection id])
         cached (use-cache (:stream-cache persistence) key-fn)]
       (cached collection id)))
 
-(defn prepare-childs-cache [{:keys [db dataset] :as persistence} collection ids recur?]
-  ;(log/trace "Preparing child cache")
-  (when (and (not (nil? collection)) (seq ids))
-    (when-let [not-nil-ids (seq (filter (complement nil?) ids))]
-      (let [{:keys [db stream-cache childs-cache]} persistence
-            for-childs-cache (jdbc-load-childs-cache persistence collection not-nil-ids)
-            as-parents (group-by first (mapcat second for-childs-cache))]
-        (apply-to-cache childs-cache for-childs-cache)
-        (doseq [[collection grouped] as-parents]
-          (let [new-ids (map second grouped)]
-            (apply-to-cache stream-cache (jdbc-load-cache persistence collection new-ids))
-            (when recur?
-              (prepare-parent-cache persistence collection new-ids false)
-              (prepare-childs-cache persistence collection new-ids true))))))))
-
-(defn prepare-parent-cache [{:keys [db dataset] :as persistence} collection ids recur?]
-  ;(log/trace "Preparing parent cache")
-  (when (and (not (nil? dataset)) (not (nil? collection)) (seq ids))
-    (when-let [not-nil-ids (seq (filter (complement nil?) ids))]
-      (let [{:keys [db stream-cache parent-cache]} persistence
-            for-parents-cache (jdbc-load-parent-cache persistence collection not-nil-ids)
-            as-childs (group-by first (map second for-parents-cache))]
-        (apply-to-cache parent-cache for-parents-cache)
-        (doseq [[collection grouped] as-childs]
-          (let [new-ids (map second grouped)]
-            (apply-to-cache stream-cache (jdbc-load-cache persistence collection new-ids))
-            (when recur?
-              (prepare-childs-cache persistence collection new-ids false)
-              (prepare-parent-cache persistence collection new-ids true))))))))
-
 (defn prepare-caches [persistence collection-id]
   ;(log/trace "Start prepare caches")
-  (let [{:keys [db stream-cache childs-cache parent-cache]} persistence
+  (let [{:keys [stream-cache]} persistence
         per-collection (group-by #(subvec % 0 1) collection-id)]
     (doseq [[[collection] grouped] per-collection]
       ;(log/trace "Prepare cache for" collection)
       (let [ids (filter (complement nil?) (map #(nth % 1) grouped))]
         ;(log/trace "Load cache")
-        (apply-to-cache stream-cache (jdbc-load-cache persistence collection ids))
-        (prepare-childs-cache persistence collection ids true)
-        (prepare-parent-cache persistence collection ids true)))))
+        (apply-to-cache stream-cache (jdbc-load-cache persistence collection ids))))))
 
 (defrecord CachedJdbcProcessorPersistence [db dataset collections-cache stream-batch stream-batch-size stream-cache
-                                           link-batch link-batch-size childs-cache parent-cache]
+                                           link-batch link-batch-size]
   ProcessorPersistence
   (init [this for-dataset]
     (let [inited (assoc this :dataset for-dataset)
@@ -376,40 +224,26 @@ If n nil => no limit, if collections nil => all collections")
       inited))
   (prepare [this features]
     (with-bench t (log/debug "Prepared cache in" t "ms")
-      (prepare-caches this (map (juxt :collection :id) features))
-      (prepare-caches this (map (juxt :parent-collection :parent-id)
-                                (filter #(and (:parent-collection %1) (:parent-id %1)) features))))
+      (prepare-caches this (map (juxt :collection :id) features)))
     this)
   (flush [this]
     (flush-batch stream-batch (partial jdbc-insert this))
     (flush-batch link-batch (partial jdbc-create-stream this))
     (dosync
-     (vreset! stream-cache (cache/basic-cache-factory {}))
-     (vreset! childs-cache (cache/basic-cache-factory {}))
-     (vreset! parent-cache (cache/basic-cache-factory {})))
+     (vreset! stream-cache (cache/basic-cache-factory {})))
     this)
   (collections [_]
     @collections-cache)
-  (create-collection [this collection parent-collection]
-    (jdbc-create-collection this collection parent-collection)
-    (vswap! collections-cache conj {:name collection :parent-collection parent-collection}))
-  (child-collections [this parent-collection]
-    (jdbc-child-collections this parent-collection))
+  (create-collection [this collection]
+    (jdbc-create-collection this collection)
+    (vswap! collections-cache conj {:name collection}))
   (stream-exists? [this collection id]
     (not (nil? (last-action this collection id))))
   (create-stream [this collection id]
-    (create-stream this collection id nil nil nil))
-  (create-stream [this collection id parent-collection parent-id parent-field]
-    (let [childs-key-fn (fn [_ _ p-col p-id _] [p-col p-id])
-          childs-value-fn append-cached-child
-          parent-key-fn (fn [collection id _ _ _] [collection id])
-          parent-value-fn (fn [_ _ _ pc pid pf] [pc pid pf])
-          batched-create (batched link-batch link-batch-size :batch-fn (partial jdbc-create-stream this))
-          cache-batched-create (with-cache childs-cache batched-create childs-key-fn childs-value-fn)
-          double-cache-batched (with-cache parent-cache cache-batched-create parent-key-fn parent-value-fn)]
-      (when-not (collection-exists? this collection parent-collection)
-        (create-collection this collection parent-collection))
-      (double-cache-batched collection id parent-collection parent-id parent-field)))
+    (let [batched-create (batched link-batch link-batch-size :batch-fn (partial jdbc-create-stream this))]
+      (when-not (collection-exists? this collection)
+        (create-collection this collection))
+      (batched-create collection id)))
   (append-to-stream [this version action collection id validity attributes]
     (let [key-fn   (fn [_ _ _ collection id _ _] [collection id])
           value-fn (fn [_ version _ action _ _ validity _] [validity action version])
@@ -423,29 +257,8 @@ If n nil => no limit, if collections nil => all collections")
     (get (current-state this collection id) 1))
   (current-version [this collection id]
     (get (current-state this collection id) 2))
-  (childs [this parent-collection parent-id child-collection]
-    (let [key-fn (fn [parent-collection parent-id _]
-                   [parent-collection parent-id])
-          cached (use-cache childs-cache key-fn)]
-      (filter-deleted this
-                      (->> (cached parent-collection parent-id child-collection)
-                           (filter #(= (first %)))))))
-  (childs [this parent-collection parent-id]
-    (let [key-fn (fn [parent-collection parent-id]
-                   [parent-collection parent-id])
-          cached (use-cache childs-cache key-fn)]
-      (filter-deleted this (cached parent-collection parent-id))))
-  (parent [_ collection id]
-    (let [key-fn (fn [collection id] [collection id])
-          cached (use-cache parent-cache key-fn)
-          q-result (cached collection id)]
-      (if (some #(= nil %) q-result)
-        nil
-        q-result)))
   (get-last-n [this n collections]
     (jdbc-get-last-n this n collections))
-  (enrich-with-parent-info [this features]
-    (jdbc-enrich-with-parent-info this features))
   (streams [this collection]
     (jdbc-streams this collection))
   (close [this]
@@ -458,11 +271,9 @@ If n nil => no limit, if collections nil => all collections")
         stream-batch (volatile! (PersistentQueue/EMPTY))
         stream-cache (volatile! (cache/basic-cache-factory {}))
         link-batch-size (or (:link-batch-size config) (:batch-size config) 10000)
-        link-batch (volatile! (PersistentQueue/EMPTY))
-        childs-cache (volatile! (cache/basic-cache-factory {}))
-        parent-cache (volatile! (cache/basic-cache-factory {}))]
+        link-batch (volatile! (PersistentQueue/EMPTY))]
     (CachedJdbcProcessorPersistence. db "unknown-dataset" collections-cache stream-batch stream-batch-size stream-cache
-                                     link-batch link-batch-size childs-cache parent-cache)))
+                                     link-batch link-batch-size)))
 
 (defrecord NoStatePersistence []
     ProcessorPersistence
@@ -474,15 +285,11 @@ If n nil => no limit, if collections nil => all collections")
     this)
   (collections [persistence]
     #{})
-  (create-collection [persistence collection parent-collection]
-    nil)
-  (child-collections [persistence parent-collection]
+  (create-collection [persistence collection]
     nil)
   (stream-exists? [persistence collection id]
     false)
   (create-stream [persistence collection id]
-    nil)
-  (create-stream [persistence collection id parent-collection parent-id parent-field]
     nil)
   (append-to-stream [persistence version action collection id validity attributes]
     nil)
@@ -491,12 +298,6 @@ If n nil => no limit, if collections nil => all collections")
   (last-action [persistence collection id]
     nil)
   (current-version [persistence collection id]
-    nil)
-  (childs [persistence parent-collection parent-id child-collection]
-    nil)
-  (childs [persistence parent-collection parent-id]
-    nil)
-  (parent [persistence collection id]
     nil)
   (close [this]
     this))

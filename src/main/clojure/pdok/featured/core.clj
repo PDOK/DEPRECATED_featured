@@ -2,7 +2,6 @@
   (:require [pdok.featured
              [config :as config]
              [json-reader :refer [features-from-stream file-stream]]
-             [data-fixes :as fixes]
              [processor :as processor :refer [consume shutdown]]
              [persistence :as pers]
              [generator :refer [random-json-feature-stream]]]
@@ -72,9 +71,7 @@
   (let [perform? (:perform options)
         dataset (:dataset options)
         fix (:fix options)
-        fix-fn (condp = fix
-                 "close-childs" fixes/close-childs
-                 (fn [_ _] (println fix "not found")))]
+        fix-fn (fn [_ _] (println fix "not found"))] ;; To implement a fix, map fix names to functions here.
     (if perform? (log/warn "PERFORMING FIX") (log/info "TEST RUN"))
     (let [processor (processor/create dataset (config/persistence))]
       (fix-fn processor perform?)
