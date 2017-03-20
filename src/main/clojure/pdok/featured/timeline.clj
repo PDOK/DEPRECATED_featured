@@ -4,7 +4,6 @@
             [pdok.postgres :as pg]
             [pdok.util :refer [with-bench checked] :as util]
             [pdok.featured.projectors :as proj]
-            [pdok.featured.persistence :as pers]
             [pdok.transit :as transit]
             [pdok.filestore :as fs]
             [clojure.java.jdbc :as j]
@@ -83,15 +82,15 @@
           :_all_versions (conj current-versions (:version feature))
           :_tiles (or (:_tiles target) (:tiles feature))})) ;; Current tiles for close, new tiles for new and change.
 
-(defn- build-new-entry [feature]
+(defn build-new-entry [feature]
   (-> (merge* (mustafy feature) (list) feature)
       (assoc :_valid_from (:validity feature))))
 
-(defn- build-change-entry [current feature]
+(defn build-change-entry [current feature]
   (-> (merge* (mustafy feature) (:_all_versions current) feature)
       (assoc :_valid_from (:validity feature))))
 
-(defn- build-close-entry [current feature]
+(defn build-close-entry [current feature]
   (-> (merge* current (:_all_versions current) feature)
       (assoc :_valid_to (:validity feature))))
 
@@ -299,7 +298,7 @@ VALUES (?, ?, ?, ?, ?, ?)"))
         (doseq [v (:_all_versions f)]
           (batched-delete [collection v]))))))
 
-(defrecord Timeline [dataset db collections root-fn path-fn
+(defrecord Timeline [dataset db collections
                      feature-cache
                      delete-for-update-batch
                      new-batch
@@ -374,9 +373,9 @@ VALUES (?, ?, ?, ?, ?, ?)"))
     (proj/flush this)
     this))
 
-(defn create-cache [db persistence dataset chunk]
-  (let [roots (map (fn [feature] (pers/root persistence (:collection feature) (:id feature))) chunk)
-        per-c (group-by first roots)
+(defn create-cache [db dataset chunk]
+  (let [pairs (map (fn [feature] [(:collection feature) (:id feature)]) chunk)
+        per-c (group-by first pairs)
         cache (volatile! (cache/basic-cache-factory {}))]
     (doseq [[collection roots-grouped-by] per-c]
       (apply-to-cache cache
@@ -384,7 +383,7 @@ VALUES (?, ?, ?, ?, ?, ?)"))
     cache))
 
 (defn process-chunk* [{:keys [config dataset collections changelogs filestore]} chunk]
-  (let [cache (create-cache (:db-config config) (:persistence config) dataset chunk)
+  (let [cache (create-cache (:db-config config) dataset chunk)
         timeline (proj/init (create config filestore cache dataset) dataset @collections)]
     (doseq [f chunk]
       (condp = (:action f)
@@ -429,7 +428,6 @@ VALUES (?, ?, ?, ?, ?, ?)"))
   ([config filestore] (create config filestore (volatile! (cache/basic-cache-factory {})) "unknow-dataset"))
   ([config filestore cache for-dataset]
    (let [db (:db-config config)
-         persistence (or (:persistence config) (pers/make-cached-jdbc-processor-persistence config))
          collections (volatile! #{})
          delete-for-update-batch (volatile! (PersistentQueue/EMPTY))
          new-batch (volatile! (PersistentQueue/EMPTY))
@@ -438,7 +436,6 @@ VALUES (?, ?, ?, ?, ?, ?)"))
          changelogs (atom [])
          make-flush-fn (make-flush-all new-batch delete-batch delete-for-update-batch changelog-batch)]
      (->Timeline for-dataset db collections
-                 (partial pers/root persistence) (partial pers/path persistence)
                  cache
                  delete-for-update-batch
                  new-batch

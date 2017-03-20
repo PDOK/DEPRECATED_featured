@@ -16,12 +16,9 @@
   (prepare [this features] this)
   (flush [this] this)
   (collections [persistence] @collections)
-  (create-collection [persistence collection parent-collection] (vswap! collections conj [collection parent-collection]))
-  (child-collections [persistence parent-collection] nil)
+  (create-collection [persistence collection] (vswap! collections conj [collection nil]))
   (stream-exists? [this collection id] (get @streams [collection id]))
   (create-stream [this collection id]
-    (pers/create-stream this collection id nil nil nil))
-  (create-stream [this collection id parent-collection parent-id parent-field]
     (swap! streams assoc [collection id] 1)
     (swap! streams-n inc))
   (append-to-stream [this version action collection id validity attributes]
@@ -32,10 +29,6 @@
   (last-action [this collection id]
     (first (get @state [collection id] nil)))
   (current-version [_ _ _]
-    nil)
-  (childs [_ _ _ _]
-    [])
-  (parent [_ _ _]
     nil)
   (close [this] (assoc this :closed true)))
 
@@ -210,7 +203,7 @@
     (let [[meta features] (reader/features-from-stream in)
           processor (create-processor)
           processed (into '() (consume processor features))]
-      (is (= 4 (count processed)))
+      (is (= 1 (count processed)))
       (is (= 0 (count (filter #(:invalid? %) processed)))))))
 
 (def feature-with-array-file (io/resource "processor/feature-with-array.json"))
@@ -222,7 +215,7 @@
           processed (into '() (consume processor features))]
       (is (= 1 (count processed)))
       (is (= 0 (count (filter #(:invalid? %) processed))))
-      (let [bronhouders (get (-> processed first :attributes ) "bronhouder")]
+      (let [bronhouders (get (-> processed first :attributes) "bronhouder")]
         (is (= 3 (count bronhouders)))
         (is (some #{"B0001"} bronhouders))
         (is (some #{"B0002"} bronhouders))
