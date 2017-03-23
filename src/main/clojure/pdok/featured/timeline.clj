@@ -367,8 +367,9 @@ VALUES (?, ?, ?, ?, ?, ?)"))
 
 (def o ^{:private true} (Object.))
 (defn unique-epoch []
-  (Thread/sleep 1)                                          ;; ugh, ugly
-  (locking o (System/currentTimeMillis)))
+  (locking o
+    (Thread/sleep 1) ;; ugh, ugly
+    (System/currentTimeMillis)))
 
 (defn ^{:dynamic true} *changelog-name* [dataset collection]
   (str (unique-epoch) "-" dataset "-" collection ".changelog"))
