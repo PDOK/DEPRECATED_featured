@@ -10,8 +10,7 @@ read release_version
 printf $release_version > VERSION
 git add VERSION
 git commit -q -m "Prepare release $release_version"
-
-git tag -a featured-$(cat VERSION) -m "Release $(cat VERSION)"
+git tag -a featured-$release_version -m "Release $release_version"
 
 printf "New development version? "
 read dev_version
