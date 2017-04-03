@@ -18,7 +18,6 @@
 (declare consume consume* process pre-process append-feature)
 
 (def ^{:dynamic true} *next-version* random/ordered-UUID)   ;; generates uuid
-(def ^{:dynamic true} *child-id* (fn [] (str (random/ordered-UUID)))) ;; generates string
 
 (defn make-seq [obj]
   (if (seq? obj) obj (list obj)))
@@ -127,10 +126,10 @@
     (action-fn p)))
 
 (defn- process-new-feature [{:keys [persistence] :as processor} feature]
-  (let [{:keys [collection id parent-collection]} feature]
+  (let [{:keys [collection id]} feature]
     (when-not (pers/collection-exists? persistence collection)
       (pers/create-collection persistence collection)
-      (project! processor proj/new-collection collection parent-collection))
+      (project! processor proj/new-collection collection))
     (when-not (pers/stream-exists? persistence collection id)
       (pers/create-stream persistence collection id))
     (append-feature persistence feature)

@@ -312,10 +312,9 @@ VALUES (?, ?, ?, ?, ?, ?)"))
           flush-fn (make-flush-fn inited)
           inited (assoc inited :flush-fn flush-fn)]
       inited))
-  (proj/new-collection [this collection parent-collection]
+  (proj/new-collection [this collection]
     (vswap! collections conj collection)
-    (when-not parent-collection
-      (init-collection db dataset collection)))
+    (init-collection db dataset collection))
   (proj/flush [this]
     (flush-fn)
     this)
@@ -406,13 +405,12 @@ VALUES (?, ?, ?, ?, ?, ?)"))
           inited (assoc inited :process-fn (make-process-fn inited))
           _ (init db for-dataset)
           _ (vreset! collections current-collections)]
-      (doseq [collection (filter #(nil? (:parent-collection %)) current-collections)]
+      (doseq [collection current-collections]
         (init-collection db for-dataset (:name collection)))
       inited))
-  (proj/new-collection [this collection parent-collection]
+  (proj/new-collection [this collection]
     (vswap! collections conj collection)
-    (when-not parent-collection
-      (init-collection db dataset collection)))
+    (init-collection db dataset collection))
   (proj/flush [this]
     (process-chunk this)
     this)
