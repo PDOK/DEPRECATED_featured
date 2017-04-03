@@ -38,7 +38,6 @@
     (pg/create-table db dataset table
                      [:gid "serial" :primary :key]
                      [:_id "text"]
-                     [:_parent_id "text"]
                      [:_version "uuid"])
     (pg/create-index db dataset table "_id")))
 
@@ -47,7 +46,6 @@
         columns (pg/table-columns db dataset table)
         no-defaults (filter #(not (some #{(:column_name %)} ["gid"
                                                              "_id"
-                                                             "_parent_id"
                                                              "_version"])) columns)
         attributes (reduce (fn [acc c] (conj acc c)) #{} (map #(:column_name %) no-defaults))]
     attributes))
@@ -71,14 +69,9 @@
 
 (defn- feature-to-sparse-record [proj-fn feature all-fields-constructor import-nil-geometry?]
   (let [id (:id feature)
-        parent-id (:parent-id feature)
         version (:version feature)
         sparse-attributes (all-fields-constructor (all-feature-attributes (:attributes feature)))]
-    (concat [id
-                parent-id
-                version]
-               sparse-attributes
-               [id])))
+    (concat [id version] sparse-attributes [id])))
 
 (defn- feature-keys [feature]
   (let [attributes (:attributes feature)]
@@ -115,7 +108,7 @@
                                (map #(feature-to-sparse-record proj-fn % (all-fields-constructor all-attributes) import-nil-geometry?)
                                     grouped-features))]
            (if (not (empty? records))
-             (let [fields (concat [:_id :_parent_id :_version]
+             (let [fields (concat [:_id :_version]
                                   all-attributes)
                    sql (gs-insert-sql dataset collection fields)]
                (j/execute! db (cons sql records) :multi? true :transaction? (:transaction? db)))))))
@@ -206,7 +199,7 @@
         (checked (gs-create-dataset ready)
                  (gs-dataset-exists? ready)))
       ready))
-  (proj/new-collection [this collection parent-collection])
+  (proj/new-collection [this collection])
   (proj/flush [this]
     (flush-fn)
     this)

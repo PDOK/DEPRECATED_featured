@@ -8,9 +8,7 @@
            (org.joda.time DateTimeZone)))
 
 (def ^:private pdok-field-replacements
-  {"_action" :action "_collection" :collection "_id" :id "_validity" :validity
-   "_current_validity" :current-validity "_parent_id" :parent-id
-   "_parent_collection" :parent-collection "_parent_field" :parent-field})
+  {"_action" :action "_collection" :collection "_id" :id "_validity" :validity "_current_validity" :current-validity})
 
 (declare parse-time
          parse-date

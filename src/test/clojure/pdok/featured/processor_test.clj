@@ -11,12 +11,12 @@
 (defrecord MockedPersistence [streams streams-n state events-n collections]
   pers/ProcessorPersistence
   (init [this for-dataset]
-    (vswap! collections conj [:col1 :parent1])
+    (vswap! collections conj {:name :col1})
     (assoc this :initialized true))
   (prepare [this features] this)
   (flush [this] this)
   (collections [persistence] @collections)
-  (create-collection [persistence collection] (vswap! collections conj [collection nil]))
+  (create-collection [persistence collection] (vswap! collections conj {:name collection}))
   (stream-exists? [this collection id] (get @streams [collection id]))
   (create-stream [this collection id]
     (swap! streams assoc [collection id] 1)
@@ -37,7 +37,7 @@
   (init [this for-dataset current-collections]
     (vreset! collections current-collections)
     (-> this (assoc :initialized true)))
-  (new-collection [this collection parent-collection] (vswap! collections conj [collection parent-collection]))
+  (new-collection [this collection] (vswap! collections conj {:name collection}))
   (flush [this] this)
   (new-feature [_ feature]
     (swap! features-n inc))
@@ -87,14 +87,15 @@
   (pers/create-stream persistence collection id)
   (pers/append-to-stream persistence nil action collection id validity nil))
 
-(deftest inititialized-processor
+(deftest initialized-processor
   (let [processor (processor/create "know-dataset" (create-persistence) (create-projectors 2))]
     (testing "Initialized persistence?"
       (is (-> processor :persistence :initialized)))
     (testing "Initialized projectors?"
+      (is (= (pers/collections (:persistence processor)) #{{:name :col1}}))
       (doseq [p (:projectors processor)]
         (is (-> p :initialized))
-        (is (= @(:collections p) #{[:col1 :parent1]}))))))
+        (is (= @(:collections p) #{{:name :col1}}))))))
 
 (deftest shutdown-processor
   (let [processor (shutdown (create-processor 2))]
@@ -116,9 +117,9 @@
         processed (consume* processor [valid-new-feature])]
     (new-should-be-ok processor processed)
     (testing "Emitted collections"
-      (is (= (pers/collections (:persistence processor)) #{[:col1 :parent1] ["collection-1" nil]}))
+      (is (= (pers/collections (:persistence processor)) #{{:name :col1} {:name "collection-1"}}))
       (doseq [p (:projectors processor)]
-        (is (= @(:collections p) #{[:col1 :parent1] ["collection-1" nil]}))
+        (is (= @(:collections p) #{{:name :col1} {:name "collection-1"}}))
         ))))
 
 (def still-valid-new-transformations

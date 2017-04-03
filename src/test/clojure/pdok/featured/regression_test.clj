@@ -27,13 +27,6 @@
         (swap! i inc)
         result))))
 
-(defn sequential-child-id-generator []
-  (let [i (atom 0)]
-    (fn []
-      (let [result (format "%04d" @i)]
-        (swap! i inc)
-        result))))
-
 (defn with-drops [col]
   (drop 1 (reductions (fn [[d t] v] [(+ d t) v]) [0 0] col)))
 
@@ -74,8 +67,7 @@
   (println "  " (map #(into [] (map :action %1)) feature-permutation))
   (let []
     (with-bindings
-      {#'processor/*next-version* (sequential-version-generator)
-       #'processor/*child-id* (sequential-child-id-generator)}
+      {#'processor/*next-version* (sequential-version-generator)}
       (merge (apply merge-with (fn [a b] (if (set? a) (merge a b) (if (sequential? a) (concat a b) (+ a b))))
                     (map (fn [features]
                            (let [persistence (config/persistence)
