@@ -42,7 +42,7 @@
                  [prismatic/schema "0.4.3"]
                  [ring/ring-defaults "0.1.5"]
                  [ring/ring-json "0.3.1"]
-                 [nl.pdok/featured-shared "1.1.1"]]
+                 [nl.pdok/featured-shared "1.1.2"]]
   :plugins [[lein-ring "0.9.6" ]
             [pdok/lein-filegen "0.1.0"]]
   :ring {:handler pdok.featured.api/app
