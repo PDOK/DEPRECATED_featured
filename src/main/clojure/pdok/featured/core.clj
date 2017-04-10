@@ -12,19 +12,16 @@
 (declare cli-options features-from-files)
 
 (defn setup-processor [{:keys [dataset
-                               no-projectors
                                no-timeline
                                no-state
                                projection] :as meta}]
   (log/info (str "Configuring:" (when dataset (str " - dataset: " dataset))
-                 (when no-projectors " without projectors")
                  (when no-state " without state")
                  (when projection (str " as " projection))))
   (let [changelog-dir (if (:changelog-dir meta) (:changelog-dir meta) (str (System/getProperty "user.dir") "/changelog"))
         filestore (config/filestore changelog-dir)
         persistence (if no-state (pers/make-no-state) (config/persistence))
-        projectors (cond-> [] (not no-projectors) (conj (config/projectors persistence :projection projection))
-                           (not no-timeline) (conj (config/timeline persistence filestore)))
+        projectors (if no-timeline [] (config/timeline persistence filestore))
         processor (processor/create meta dataset persistence projectors)]
     processor))
 
@@ -105,9 +102,8 @@
   [[nil "--std-in" "Read from std-in"]
    ["-d" "--dataset DATASET" "dataset"]
    [nil "--changelog-dir DIRECTORY" "Changelogs directory, defaults to [execution-dir/user.dir]/changelogs"]
-   [nil "--no-projectors"]
    [nil "--no-timeline"]
-   [nil "--no-state" "Use only with no nesting and action :new"]
+   [nil "--no-state" "Use only when action is always :new (attention: also disables validation!)"]
    [nil "--disable-validation"]
    [nil "--projection PROJ" "RD / ETRS89 / SOURCE"]
    ["-r" "--replay [N/root-collection]" "Replay last N events or all events from root-collection tree from persistence to projectors"]

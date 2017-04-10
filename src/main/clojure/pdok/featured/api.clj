@@ -90,10 +90,7 @@
   (let [dataset (:dataset request)
         filestore (config/filestore)
         persistence (if (:no-state request) (persistence/make-no-state) (config/persistence))
-        projectors (cond-> [(config/projectors persistence
-                                               :projection (:projection request)
-                                               :no-visualization (collections-with-option "no-visualization" (:processingOptions request)))]
-                    (not (:no-timeline request)) (conj (config/timeline persistence filestore)))
+        projectors (if (:no-timeline request) [] [(config/timeline persistence filestore)])
         processor (processor/create dataset persistence projectors)
         zipped? (= (:format request) "zip")
         [file err] (download-file (:file request) zipped?)]

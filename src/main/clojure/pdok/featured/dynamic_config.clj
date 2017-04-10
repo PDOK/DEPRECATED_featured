@@ -9,4 +9,3 @@
 (def ^:dynamic *timeline-schema-prefix* :featured)
 (def ^:dynamic *timeline-schema* "for init only")
 (def ^:dynamic *timeline-table* :timeline)
-(def ^:dynamic *timeline-changelog* :timeline_changelog)
