@@ -103,18 +103,6 @@
     (catch Exception e
       [nil (:cause e)])))
 
-(defn zip-changelog [filestore changelog]
-  "Zip changelogs, returns new filenames"
-  (let [zipname (str changelog ".zip")
-        ^File uncompressed-file (fs/get-file filestore changelog)
-        compressed-file (io/file (.getParent uncompressed-file) zipname)]
-    (log/debug "Compressing file" (.getName uncompressed-file))
-    (with-open [zip (ZipOutputStream. (io/output-stream compressed-file))]
-      (.putNextEntry zip (ZipEntry. (.getName uncompressed-file)))
-      (io/copy uncompressed-file zip)
-      (.closeEntry zip)
-      zipname)))
-
 (defn- process* [worker-id stats callback-chan request]
   (log/info "Processsing: " request)
   (swap! stats assoc-in [:processing worker-id] request)
@@ -145,10 +133,8 @@
                 processor (shutdown processor)
                 statistics (:statistics processor)
                 changelogs (:changelogs statistics)
-                zipped-changelogs (doall (map (partial zip-changelog filestore) changelogs))
-                _ (dorun (map #(fs/safe-delete (fs/get-file filestore %)) changelogs))
                 statistics (assoc-in statistics [:changelogs]
-                                     (map #(config/create-url (str "api/changelogs/" %)) zipped-changelogs))
+                                     (map #(config/create-url (str "api/changelogs/" %)) changelogs))
                 run-stats (assoc statistics :request request)]
             (swap! stats assoc-in [:processing worker-id] nil)
             (stats-on-callback callback-chan request run-stats)))

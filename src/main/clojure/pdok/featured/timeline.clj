@@ -19,8 +19,9 @@
             [clojure.java.io :as io]
             [clojure.string :as str])
   (:import [clojure.lang MapEntry PersistentQueue]
+           (java.io OutputStream)
            (java.sql SQLException)
-           (java.io File Writer)))
+           (java.util.zip ZipEntry ZipOutputStream)))
 
 (declare create)
 
@@ -374,25 +375,16 @@ VALUES (?, ?, ?, ?, ?, ?)"))
 (defn ^{:dynamic true} *changelog-name* [dataset collection]
   (str (unique-epoch) "-" dataset "-" collection ".changelog"))
 
-(defn- init-changelog [{:keys [filestore]} dataset collection]
-  (let [^String changelog (*changelog-name* dataset collection)
-        ^File file (fs/create-target-file filestore changelog)]
-    (when-not (.exists file)
-      (.createNewFile file)
-      (with-open [^Writer out (io/writer file)]
-        (.write out (str "v1\n" dataset "," collection "\n"))))
-    changelog))
-
-;; [collection] action id version json
 (defn changelog-new-entry [new-feature]
+  "[collection] action id version json"
   [(:_collection new-feature)
    "new"
    (:_id new-feature)
    (:_version new-feature)
    (transit/to-json new-feature)])
 
-;; [collection] action id old-version version json
 (defn changelog-change-entry [current-version new-feature]
+  "[collection] action id old-version version json"
   [(:_collection new-feature)
    "change"
    (:_id new-feature)
@@ -400,8 +392,8 @@ VALUES (?, ?, ?, ?, ?, ?)"))
    (:_version new-feature)
    (transit/to-json new-feature)])
 
-;; [collection] action id old-version version json
 (defn changelog-close-entry [old-version closed-feature]
+  "[collection] action id old-version version json"
   [(:_collection closed-feature)
    "close"
    (:_id closed-feature)
@@ -409,27 +401,35 @@ VALUES (?, ?, ?, ?, ?, ?)"))
    (:_version closed-feature)
    (transit/to-json closed-feature)])
 
-;; [collection] action id old-version
 (defn changelog-delete-entry [collection id version]
+  "[collection] action id old-version"
   [collection
    "delete"
    id
    version])
 
-(defn write-changelog-entry [writer entry]
-  (.write writer (str/join "," entry))
-  (.write writer "\n"))
+(defn- write-changelog-entries [^OutputStream stream, dataset, collection, entries]
+  "Write the contents of one changelog file to an arbitrary output stream"
+  (let [write-fn (fn [^String str] (.write stream (.getBytes str)))]
+    (write-fn (str "v1\n" dataset "," collection "\n"))
+    (doseq [entry entries]
+      ; pop collection from front
+      (write-fn (str/join "," (rest entry)))
+      (write-fn "\n"))))
 
-(defn- append-to-changelog [{:keys [dataset changelogs filestore] :as timeline} log-entries]
-  "([collection, feature_id,action,version,valid_from,version_old,valid_from_old,feature] .... )"
+(defn- append-to-changelog [{:keys [dataset changelogs filestore]} log-entries]
+  "Write a batch of changelog entries to separate zip files per collection"
   (let [per-collection (group-by first log-entries)]
     (doseq [[collection entries] per-collection]
-      (let [changelog (init-changelog timeline dataset collection)
+      (let [^String uncompressed-filename (*changelog-name* dataset collection)
+            changelog (str uncompressed-filename ".zip")
+            compressed-file (fs/create-target-file filestore changelog)
             _ (swap! changelogs conj changelog)]
-        (with-open [out (io/writer (fs/get-file filestore changelog) :append true)]
-          (doseq [entry entries]
-            ; pop collection from front
-            (write-changelog-entry out (rest entry))))))))
+        (with-open [output-stream (io/output-stream compressed-file)
+                    zip (ZipOutputStream. output-stream)]
+          (.putNextEntry zip (ZipEntry. uncompressed-filename))
+          (write-changelog-entries zip dataset collection entries)
+          (.closeEntry zip))))))
 
 (defn- feature-key [feature]
   [(:collection feature) (:id feature)])
