@@ -2,8 +2,6 @@
   (:require [pdok.featured
              [dynamic-config :as dc]
              [config :as config]
-             [persistence :as persistence]
-             [geoserver :as geoserver]
              [timeline :as timeline]
              [processor :as processor]
              [extracts :as e]
@@ -11,15 +9,15 @@
             [pdok.postgres :as pg]
             [pdok.transit :as t]
             [clojure.math.combinatorics :as combo]
-            [clojure.core.async :as a
-             :refer [>! <! >!! <!! go chan]]
+            [clojure.core.async :refer [>! <! >!! <!! go chan]]
             [clojure.java.jdbc :as j]
             [clojure.test :refer :all]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [pdok.filestore :as fs])
-  (:import (java.util UUID)
-           (java.io File)))
+  (:import (java.io File)
+           (java.util UUID)
+           (java.util.zip ZipInputStream)))
 
 (def test-db config/processor-db)
 (def changelog-dir (io/file (str (System/getProperty "java.io.tmpdir") "/featured-regression")))
@@ -59,7 +57,7 @@
         [meta features] (json-reader/features-from-stream stream)]
     [meta features]))
 
-(defn- inserted-features [extracts dataset extract-type collection features]
+(defn- inserted-features [extracts _ _ _ features]
   (let [new-extracts (map #(vector (:_version %) (:_valid_from %) (:_valid_to %) %) features)]
     (swap! extracts concat new-extracts)))
 
@@ -73,9 +71,9 @@
                           (= valid-from (nth %1 1))) extracts)
       (remove #(= version (nth % 0)) extracts))))
 
-(defn- deleted-versions [extracts dataset collection extract-type records]
-    (doseq [record records]
-      (swap! extracts remove-extract-record record)))
+(defn- deleted-versions [extracts _ _ _ records]
+  (doseq [record records]
+    (swap! extracts remove-extract-record record)))
 
 (defn- query [table selector]
   (when (pg/table-exists? test-db "featured_regression_regression-set" table)
@@ -242,8 +240,10 @@
   (let [[expected-dataset expected-collection expected-records]
         (with-open [in (io/reader expected-changelog)] (parse-changelog in))
         filestore (config/filestore changelog-dir)
-        parsed-changelogs (doall (map (fn [log] (with-open [in (io/input-stream (fs/get-file filestore log))]
-                                                  (parse-changelog in))) changelogs))
+        parsed-changelogs (doall (map (fn [log] (with-open [in (io/input-stream (fs/get-file filestore log))
+                                                            zip (ZipInputStream. in)]
+                                                  (.getNextEntry zip)
+                                                  (parse-changelog zip))) changelogs))
         all-records (mapcat (fn [[_ _ records]] records) parsed-changelogs)]
     (is (every? #(= [expected-dataset expected-collection] %) (->> parsed-changelogs (map (partial take 2)))))
     (is (every? #(not (nil? %)) (->> all-records (filter #(#{:new :change :close} (:action %))) (map :feature))))
