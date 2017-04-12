@@ -13,11 +13,9 @@
 
 (defn setup-processor [{:keys [dataset
                                no-timeline
-                               no-state
-                               projection] :as meta}]
+                               no-state] :as meta}]
   (log/info (str "Configuring:" (when dataset (str " - dataset: " dataset))
-                 (when no-state " without state")
-                 (when projection (str " as " projection))))
+                 (when no-state " without state")))
   (let [changelog-dir (if (:changelog-dir meta) (:changelog-dir meta) (str (System/getProperty "user.dir") "/changelog"))
         filestore (config/filestore changelog-dir)
         persistence (if no-state (pers/make-no-state) (config/persistence))
@@ -105,7 +103,6 @@
    [nil "--no-timeline"]
    [nil "--no-state" "Use only when action is always :new (attention: also disables validation!)"]
    [nil "--disable-validation"]
-   [nil "--projection PROJ" "RD / ETRS89 / SOURCE"]
    ["-r" "--replay [N/root-collection]" "Replay last N events or all events from root-collection tree from persistence to projectors"]
    [nil "--single-processor" "One processor for all files, reads meta data of first file only."]
    [nil "--fix FIXNAME" "Execute fix"]
