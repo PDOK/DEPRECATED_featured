@@ -26,9 +26,9 @@
 
 (deftest srid-geometry-atrribute
   (let [geometry-map {"srid" 28992 "wkt" wkt-multipolygon "type" "wkt"}
-        ga (create-geometry-atrribute geometry-map)]
+        ga (create-geometry-attribute geometry-map)]
     (is (= 28992 (.getSrid ga)))))
 
 (deftest invalid-srid-geometry-atrribute
   (let [geometry-map {"srid" "invalid srid" "wkt" wkt-multipolygon "type" "wkt"}]
-    (is (thrown? java.lang.NumberFormatException (create-geometry-atrribute geometry-map)))))
+    (is (thrown? java.lang.NumberFormatException (create-geometry-attribute geometry-map)))))

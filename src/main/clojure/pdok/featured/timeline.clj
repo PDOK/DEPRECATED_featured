@@ -6,7 +6,6 @@
             [pdok.util :refer [with-bench checked] :as util]
             [pdok.featured.projectors :as proj]
             [pdok.featured.persistence :as pers]
-            [pdok.featured.tiles :as tiles]
             [pdok.transit :as transit]
             [pdok.filestore :as fs]
             [clojure.java.jdbc :as j]
@@ -152,11 +151,12 @@
    {:_collection collection :_id id}))
 
 (defn- mustafy [feature]
-  (let [result (init-root feature)
-        geom (:geometry feature)
-        result (cond-> result geom (assoc :_geometry geom))
-        result (reduce (fn [acc [k v]] (assoc acc (keyword k) v)) result (:attributes feature))]
-    result))
+  (reduce 
+    (fn [acc [k v]] (if v 
+                      (assoc acc (keyword k) v) 
+                      acc)) 
+    (init-root feature) 
+    (:attributes feature)))
 
 (defn drop-nth [v n]
   (into [] (concat (subvec v 0 n) (subvec v (inc n) (count v)))))
@@ -247,7 +247,7 @@
          merged (merge* target (:action feature) keyworded-path mustafied)
          merged (assoc merged :_version (:version feature))
          merged (update-in merged [:_all_versions] (fnil conj '()) (:version feature))
-         merged (update merged :_tiles #((fnil clojure.set/union #{}) % (-> feature :geometry tiles/nl)))]
+         merged (update merged :_tiles #((fnil clojure.set/union #{}) % (:tiles feature)))]
      merged)))
 
 (defn- sync-valid-from [acc feature]

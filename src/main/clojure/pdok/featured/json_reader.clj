@@ -10,8 +10,8 @@
 
 (def ^:private pdok-field-replacements
   {"_action" :action "_collection" :collection "_id" :id "_validity" :validity
-   "_geometry" :geometry "_current_validity" :current-validity
-   "_parent_id" :parent-id "_parent_collection" :parent-collection "_parent_field" :parent-field})
+   "_current_validity" :current-validity "_parent_id" :parent-id 
+   "_parent_collection" :parent-collection "_parent_field" :parent-field})
 
 (declare parse-time
          parse-date
@@ -101,7 +101,7 @@
   (if-let [srid (get geometry "srid")]
     (Integer. srid)))
 
-(defn create-geometry-atrribute [geometry]
+(defn create-geometry-attribute [geometry]
   (if-let [type (get geometry "type")]
     (GeometryAttribute. type (get geometry type) (get-valid-srid geometry))))
 
@@ -113,7 +113,7 @@
       "~#int"     (if params (int (first params)) (nilled java.lang.Integer))
       "~#boolean" (if params (boolean (first params)) (nilled java.lang.Boolean))
       "~#double"  (if params (double (first params)) (nilled java.lang.Double))
-      "~#geometry" (if params (create-geometry-atrribute (first params)) (nilled pdok.featured.GeometryAttribute))
+      "~#geometry" (if params (create-geometry-attribute (first params)) (nilled pdok.featured.GeometryAttribute))
       element ; never fail just return element
       ))
   )
@@ -132,13 +132,11 @@
     element))
 
 (defn- upgrade-geometry [element]
-  (if (:geometry element)
-    (update element :geometry create-geometry-atrribute)
+  (if (get element "_geometry")
+    (update element "_geometry" create-geometry-attribute)
     element))
 
 (defn- upgrade-data [attributes]
   "Replaces functions with their parsed values"
   (let [attributes (postwalk replace-fn attributes)]
     (postwalk upgrade-geometry attributes)))
-
-;(with-open [s (file-stream ".test-files/new-features-single-collection-100000.json")] (time (last (features-from-package-stream s))))
