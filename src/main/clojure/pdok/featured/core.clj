@@ -1,15 +1,12 @@
 (ns pdok.featured.core
   (:require [pdok.featured
-             [api :as api]
              [config :as config]
              [json-reader :refer [features-from-stream file-stream]]
              [data-fixes :as fixes]
              [processor :as processor :refer [consume shutdown]]
              [persistence :as pers]
              [timeline :as tl]
-             [generator :refer [random-json-feature-stream]]
-             [extracts :as extracts]
-             [template :as template]]
+             [generator :refer [random-json-feature-stream]]]
             [clojure.tools.cli :refer [parse-opts]]
             [clojure.tools.logging :as log])
   (:gen-class))

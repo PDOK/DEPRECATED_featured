@@ -9,8 +9,7 @@
              [geoserver :as gs]
              [timeline :as timeline]]
             [environ.core :as environ]
-             [clojure.core.async :as a
-             :refer [<!!]]))
+             [clojure.core.async :refer [<!!]]))
 
 (Thread/setDefaultUncaughtExceptionHandler
  (reify Thread$UncaughtExceptionHandler
@@ -125,4 +124,3 @@
         port (or (env :port) "3000")
         context-root (or (env :context-root) nil)]
     (str "http://" fully-qualified-domain-name ":" port "/" context-root (when context-root "/") path)))
-

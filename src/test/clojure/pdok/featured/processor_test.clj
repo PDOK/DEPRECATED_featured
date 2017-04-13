@@ -61,10 +61,10 @@
   ([] (create-processor 1))
   ([n-projectors]
    (processor/create
-    {:batch-size 1}
-    "testset"
-    (create-persistence)
-    (create-projectors n-projectors))))
+     {:batch-size 1}
+     "testset"
+     (create-persistence)
+     (create-projectors n-projectors))))
 
 (defn consume-single [processor feature]
   (->> [feature] (consume* processor) (first)))

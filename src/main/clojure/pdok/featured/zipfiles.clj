@@ -1,5 +1,4 @@
 (ns pdok.featured.zipfiles
-  (:require  [clojure.tools.logging :as log])
   (:import [java.util.zip ZipFile ZipEntry]))
 
 (defn first-file-from-zip [^java.io.File zipped-file]

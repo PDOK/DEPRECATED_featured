@@ -6,23 +6,20 @@
   (:import (pdok.featured GeometryAttribute)))
 
 (def test-gml
-    "<gml:Surface srsName=\"urn:ogc:def:crs:EPSG::28992\" xmlns:gml=\"http://www.opengis.net/gml\"><gml:patches><gml:PolygonPatch><gml:exterior><gml:LinearRing><gml:posList srsDimension=\"2\" count=\"5\">172307.599 509279.740 172307.349 509280.920 172306.379 509280.670 171306.699 508279.490 172307.599 509279.740</gml:posList></gml:LinearRing></gml:exterior></gml:PolygonPatch></gml:patches></gml:Surface>"
- )
+  "<gml:Surface srsName=\"urn:ogc:def:crs:EPSG::28992\" xmlns:gml=\"http://www.opengis.net/gml\"><gml:patches><gml:PolygonPatch><gml:exterior><gml:LinearRing><gml:posList srsDimension=\"2\" count=\"5\">172307.599 509279.740 172307.349 509280.920 172306.379 509280.670 171306.699 508279.490 172307.599 509279.740</gml:posList></gml:LinearRing></gml:exterior></gml:PolygonPatch></gml:patches></gml:Surface>")
 
 (def test-geometry (GeometryAttribute. "gml" test-gml))
 
 (def test-feature-with-geometry
-       (merge
-         {"_action" "new"}
-         {:geometry test-geometry}
-         {:other "foo"})
-)
+  (merge
+    {"_action" "new"}
+    {:geometry test-geometry}
+    {:other "foo"}))
 
 (def test-feature-without-geometry
-       (merge
-         {"_action" "new"}
-         {:other "foo"})
-)
+  (merge
+    {"_action" "new"}
+    {:other "foo"}))
 
 (deftest test-nl-tiles-with-geometry
   (is (= #{49821 49864} (-> test-feature-with-geometry :geometry tiles/nl))))

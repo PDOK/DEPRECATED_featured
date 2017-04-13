@@ -2,9 +2,7 @@
   (:require [pdok.featured.json-reader :refer [features-from-stream file-stream]]
             [pdok.featured.extracts :refer :all]
             [pdok.featured.template :as template]
-            [pdok.featured.feature :as f]
             [pdok.featured.config :as config]
-            [pdok.featured.projectors :as p]
             [clojure.test :refer :all]
             [clojure.java.io :as io])
   (:import (pdok.featured GeometryAttribute)))

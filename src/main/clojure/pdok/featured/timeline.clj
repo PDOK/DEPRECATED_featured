@@ -489,11 +489,7 @@ VALUES (?, ?, ?, ?, ?, ?)"))
   (proj/init [this for-dataset current-collections]
     (let [inited (assoc this :dataset for-dataset)
           flush-fn (make-flush-fn inited)
-          inited (assoc inited :flush-fn flush-fn)
-          ;;_ (init db for-dataset) not needed if we only go through chunked-timeline
-          ]
-      ;(doseq [collection (filter #(nil? (:parent-collection %)) current-collections)]
-      ;  (init-collection db for-dataset (:name collection))) not needed if we go through chunked-timeline
+          inited (assoc inited :flush-fn flush-fn)]
       inited))
   (proj/new-collection [this collection parent-collection]
     (vswap! collections conj collection)
@@ -588,7 +584,7 @@ VALUES (?, ?, ?, ?, ?, ?)"))
         cache (volatile! (cache/basic-cache-factory {}))]
     (doseq [[collection roots-grouped-by] per-c]
       (apply-to-cache cache
-          (load-current-feature-cache db dataset collection (map second roots-grouped-by))))
+                      (load-current-feature-cache db dataset collection (map second roots-grouped-by))))
     cache))
 
 (defn process-chunk* [{:keys [config dataset collections changelogs filestore]} chunk]
@@ -657,7 +653,6 @@ VALUES (?, ?, ?, ?, ?, ?)"))
                  changelog-batch changelogs
                  make-flush-fn (fn [])
                  filestore))))
-
 
 (defn create-chunked [config filestore]
   (let [chunk-size (or (:chunk-size config) 10000)

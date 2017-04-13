@@ -2,13 +2,12 @@
   (:refer-clojure :exclude [flatten])
   (:require [pdok.random :as random]
             [pdok.util :refer [with-bench]]
-            [pdok.featured.feature :as feature]
             [pdok.featured.persistence :as pers]
             [pdok.featured.json-reader :refer :all]
             [pdok.featured.projectors :as proj]
             [pdok.featured.config :as config]
             [clojure.core.async :as a]
-            [clj-time [core :as t] [local :as tl] [coerce :as tc]]
+            [clj-time [core :as t]]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [pdok.featured.tiles :as tiles])
@@ -57,8 +56,7 @@
     (if (and (not (:invalid? feature))
              (stream-exists? persistence feature))
       (make-invalid feature (str "Stream already exists: " collection ", " id))
-      feature))
-  )
+      feature)))
 
 (defn- apply-non-new-feature-requires-existing-stream-validation [persistence feature]
   (let [{:keys [collection id]} feature]
@@ -88,8 +86,7 @@
         last-action (pers/last-action persistence collection id)]
     (if (= :close last-action)
       (make-invalid feature "Closed features cannot be altered")
-      feature))
-  )
+      feature)))
 
 (defn- validate [{:keys [persistence invalids] :as processor} feature]
   "Validates features. Nested actions are validated against new checks, because we always close the old nested features."
@@ -107,8 +104,7 @@
                (apply-non-new-feature-current-validity-validation persistence))
           #{:new|change}
           (->> feature
-               (apply-all-features-validation persistence processor)
-               )
+               (apply-all-features-validation persistence processor))
           #{:close}
           (->> feature
                (apply-all-features-validation persistence processor)
@@ -122,8 +118,7 @@
             (apply-non-new-feature-requires-existing-stream-validation persistence)
             (:check-validity-on-delete processor)
             (apply-non-new-feature-current-validity-validation persistence))
-          feature
-          )]
+          feature)]
     (when (:invalid? validated)
       (vswap! invalids conj [(:collection validated) (:id validated)]))
     validated))
@@ -158,8 +153,7 @@
   (process-new-feature processor (assoc feature :action :new)))
 
 (defn- process-change-feature [{:keys [persistence] :as processor} feature]
-  (let [enriched-feature (->> feature
-                                  (with-current-version persistence))]
+  (let [enriched-feature (with-current-version persistence feature)]
     (append-feature persistence enriched-feature)
     (project! processor proj/change-feature enriched-feature)
     enriched-feature))
@@ -175,7 +169,7 @@
 
 (defn- process-close-feature [{:keys [persistence] :as processor} feature]
   (if (empty? (:attributes feature))
-    (let [enriched-feature (->> feature (with-current-version persistence))]
+    (let [enriched-feature (with-current-version persistence feature)]
       (append-feature persistence enriched-feature)
       (project! processor proj/close-feature enriched-feature)
       (list enriched-feature))
@@ -205,8 +199,7 @@
     (list nw (process-close-feature processor no-update-nw))))
 
 (defn- process-delete-feature [{:keys [persistence projectors] :as processor} feature]
-  (let [enriched-feature (->> feature
-                              (with-current-version persistence))]
+  (let [enriched-feature (with-current-version persistence feature)]
     (append-feature persistence enriched-feature)
     (project! processor proj/delete-feature enriched-feature)
     enriched-feature))
@@ -275,8 +268,7 @@
         (cons flat (concat meta-close-childs (mapcat (partial pre-process processor) linked-nested)))))))
 
 (defn- attributes [obj]
-  (apply dissoc obj pdok-fields)
-  )
+  (apply dissoc obj pdok-fields))
 
 (defn- collect-attributes [feature]
   "Returns a feature where the attributes are collected in :attributes"
@@ -349,7 +341,6 @@
               (make-invalid vf (str "Unknown action:" (:action vf))))]
         (make-seq processed)))))
 
-
 (defn rename-keys [src-map change-key]
   "Change keys in map with function change-key"
   (let [kmap (into {} (map #(vector %1 (change-key %1)) (keys src-map)))]
@@ -363,8 +354,7 @@
             (update-in [:collection] str/lower-case))))
 
 (defn pre-process [processor feature]
-  (let [prepped ((comp lower-case collect-attributes) feature)
-        ]
+  (let [prepped ((comp lower-case collect-attributes) feature)]
     (flatten processor prepped)))
 
 (defn- append-feature [persistence feature]
@@ -381,8 +371,7 @@
         (swap! statistics update :updated-tiles #(clojure.set/union % tiles))))
     (when (:invalid? feature)
       (swap! statistics update :n-errored inc)
-      (swap! statistics update :errored #(conj % (:id feature)))))
-  )
+      (swap! statistics update :errored #(conj % (:id feature))))))
 
 (defn consume* [processor features]
   (letfn [(consumer [feature]

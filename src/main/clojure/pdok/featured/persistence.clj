@@ -138,7 +138,7 @@ If n nil => no limit, if collections nil => all collections")
 
 (defn jdbc-all-collections [{:keys [db dataset]}]
   (j/with-db-connection [c db]
-    (let [query (str "SELECT collection as name, parent_collection as \"parent-collection\" FROM "
+    (let [query (str "SELECT collection AS name, parent_collection AS \"parent-collection\" FROM "
                      (qualified-persistence-collections dataset))
           results (j/query c [query])]
       results)))
@@ -164,9 +164,9 @@ If n nil => no limit, if collections nil => all collections")
     (>!! c (persistent! f))))
 
 (defn jdbc-count-records [{:keys [db dataset]} collections]
-  (let [query (str "SELECT count(*) as cnt FROM "
-                   (qualified-feature-stream dataset) " fs"
-                   (when (seq collections) (str " WHERE fs.collection in ("
+  (let [query (str "SELECT COUNT(*) AS cnt "
+                   "FROM " (qualified-feature-stream dataset) " fs "
+                   (when (seq collections) (str "WHERE fs.collection IN ("
                                                 (clojure.string/join "," (repeat (count collections) "?"))
                                                 ")")))
         result (j/with-db-connection [c db]
@@ -178,21 +178,14 @@ If n nil => no limit, if collections nil => all collections")
                           (jdbc-count-records pers collections))
         offset (when n (if (> n n-records) 0 (- n-records n)))
         _ (when offset (log/debug "using offset" offset))
-        query (str "SELECT fs.id,
-       fs.collection,
-       fs.feature_id,
-       fs.action,
-       fs.version,
-       fs.previous_version,
-       fs.validity,
-       fs.attributes,
-       fs.geometry
-  FROM " (qualified-feature-stream dataset) " fs "
-  (when (seq collections) (str " WHERE fs.collection in ("
-                               (clojure.string/join "," (repeat (count collections) "?"))
-                               ")"))
-  " ORDER BY id ASC"
-  (when n (str " OFFSET " offset)))
+        query (str "SELECT fs.id, fs.collection, fs.feature_id, fs.action, fs.version, fs.previous_version,"
+                   "fs.validity, fs.attributes, fs.geometry "
+                   "FROM " (qualified-feature-stream dataset) " fs "
+                   (when (seq collections) (str "WHERE fs.collection IN ("
+                                                (clojure.string/join "," (repeat (count collections) "?"))
+                                                ")"))
+                   "ORDER BY id ASC "
+                   (when n (str "OFFSET " offset)))
         result-chan (chan)]
     (a/thread
       (j/with-db-connection [c db]
@@ -205,20 +198,18 @@ If n nil => no limit, if collections nil => all collections")
     result-chan))
 
 (defn jdbc-streams [{:keys [db dataset]} collection]
-  (let [query (str "SELECT feature_id FROM " (qualified-features dataset)
-                   " WHERE collection = ? ORDER by id ASC")
+  (let [query (str "SELECT feature_id FROM " (qualified-features dataset) " WHERE collection = ? ORDER BY id ASC")
         result-chan (chan)]
     (a/thread
-      (try
-        (j/with-db-connection [c db]
-                              (let [statement (j/prepare-statement
-                                                (doto (j/get-connection c) (.setAutoCommit false))
-                                                query :fetch-size 10000)]
-                                (j/query c [statement collection] :row-fn #(>!! result-chan (:feature_id %)))
-                                (close! result-chan)))
-        (catch SQLException e
-          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
-          (throw e))))
+      (try (j/with-db-connection [c db]
+             (let [statement (j/prepare-statement
+                               (doto (j/get-connection c) (.setAutoCommit false))
+                               query :fetch-size 10000)]
+               (j/query c [statement collection] :row-fn #(>!! result-chan (:feature_id %)))
+               (close! result-chan)))
+           (catch SQLException e
+             (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+             (throw e))))
     result-chan))
 
 (defn enrich-query [dataset n-features]
@@ -242,16 +233,15 @@ If n nil => no limit, if collections nil => all collections")
                feature)))
          features)))
 
-(defn- jdbc-create-stream
-  ([{:keys [db dataset]} entries]
-   (with-bench t (log/debug "Created streams in" t "ms")
-     (try (j/with-db-connection [c db]
-            (apply ( partial j/insert! c (qualified-features dataset) :transaction? (:transaction? db)
-                             [:collection :feature_id :parent_collection :parent_id :parent_field])
-                   entries))
-          (catch SQLException e
-            (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
-            (throw e))))))
+(defn- jdbc-create-stream [{:keys [db dataset]} entries]
+  (with-bench t (log/debug "Created streams in" t "ms")
+    (try (j/with-db-connection [c db]
+           (apply (partial j/insert! c (qualified-features dataset) :transaction? (:transaction? db)
+                           [:collection :feature_id :parent_collection :parent_id :parent_field])
+                  entries))
+         (catch SQLException e
+           (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+           (throw e)))))
 
 (defn- jdbc-load-childs-cache [{:keys [db dataset]} parent-collection parent-ids]
   (partitioned
@@ -291,18 +281,16 @@ If n nil => no limit, if collections nil => all collections")
              (throw e))))
     jdbc-collection-partition-size ids))
 
-(defn- jdbc-insert
-  ([{:keys [db dataset]} entries]
-   (let [ entries (map (fn [entry] (-> entry vec (update 6 transit/to-json))) entries)]
-     (with-bench t (log/debug "Inserted" (count entries) "events in" t "ms")
-                 (try (j/with-db-connection [c db]
-                                            (apply
-                                              (partial j/insert! c (qualified-feature-stream dataset) :transaction? (:transaction? db)
-                                                       [:version :previous_version :action :collection :feature_id :validity :geometry :attributes])
-                                              entries))
-                      (catch SQLException e
-                        (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
-                        (throw e)))))))
+(defn- jdbc-insert [{:keys [db dataset]} entries]
+  (let [entries (map (fn [entry] (-> entry vec (update 6 transit/to-json))) entries)]
+    (with-bench t (log/debug "Inserted" (count entries) "events in" t "ms")
+      (try (j/with-db-connection [c db]
+             (apply (partial j/insert! c (qualified-feature-stream dataset) :transaction? (:transaction? db)
+                             [:version :previous_version :action :collection :feature_id :validity :geometry :attributes])
+                    entries))
+           (catch SQLException e
+             (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+             (throw e))))))
 
 (defn- jdbc-load-cache [{:keys [db dataset]} collection ids]
   (partitioned
@@ -310,11 +298,13 @@ If n nil => no limit, if collections nil => all collections")
       (when (seq ids)
         (try (let [results
                    (j/with-db-connection [c db]
-                                         (j/query c (apply vector (str "SELECT DISTINCT ON (feature_id)
- collection, feature_id, validity, action, version FROM " (qualified-feature-stream dataset)
-                                                                       " WHERE collection = ? and feature_id in (" (clojure.string/join "," (repeat (count ids-part) "?")) ")
-   ORDER BY feature_id ASC, id DESC")
-                                                           collection ids-part) :as-arrays? true))]
+                     (j/query c (apply vector (str "SELECT DISTINCT ON (feature_id) "
+                                                   "collection, feature_id, validity, action, version "
+                                                   "FROM " (qualified-feature-stream dataset) " "
+                                                   "WHERE collection = ? AND feature_id IN ("
+                                                   (clojure.string/join "," (repeat (count ids-part) "?")) ")"
+                                                   "ORDER BY feature_id ASC, id DESC")
+                                       collection ids-part) :as-arrays? true))]
                (map (fn [[collection id validity action version]] [[collection id]
                                                                    [validity (keyword action) version]])
                     (drop 1 results)))
@@ -379,7 +369,7 @@ If n nil => no limit, if collections nil => all collections")
         (prepare-parent-cache persistence collection ids true)))))
 
 (defrecord CachedJdbcProcessorPersistence [db dataset collections-cache stream-batch stream-batch-size stream-cache
-                                         link-batch link-batch-size childs-cache parent-cache]
+                                           link-batch link-batch-size childs-cache parent-cache]
   ProcessorPersistence
   (init [this for-dataset]
     (let [inited (assoc this :dataset for-dataset)

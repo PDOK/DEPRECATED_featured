@@ -7,7 +7,6 @@
   (:import [com.vividsolutions.jts.io WKTWriter]
            [java.util Calendar TimeZone]
            [org.joda.time DateTimeZone LocalDate LocalDateTime]
-           (pdok.featured NilAttribute)
            (java.sql Types)))
 
 (defn dbspec->url [{:keys [subprotocol subname user password]}]

@@ -1,6 +1,5 @@
 (ns pdok.util
-  (:import [pdok.featured GeometryAttribute]
-           [com.fasterxml.uuid UUIDComparator]))
+  (:import [com.fasterxml.uuid UUIDComparator]))
 
 (def ^:private uuid-comparator (UUIDComparator.))
 

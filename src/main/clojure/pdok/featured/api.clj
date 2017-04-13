@@ -26,8 +26,7 @@
            (clojure.lang PersistentQueue)
            (org.joda.time DateTime)
            (schema.utils ValidationError)
-           (java.io File)
-           (java.util.zip ZipOutputStream ZipEntry)))
+           (java.io File)))
 
 (extend-protocol cheshire.generate/JSONable
   DateTime

@@ -1,8 +1,7 @@
 (ns pdok.featured.mustache
   (:require [stencil.core :as stencil]
             [stencil.loader :as loader]
-            [pdok.featured.mustache-functions]
-            [clojure.tools.logging :as log])
+            [pdok.featured.mustache-functions])
   (:gen-class))
 
 (defn resolve-as-function [namespace function]

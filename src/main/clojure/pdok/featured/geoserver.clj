@@ -6,8 +6,7 @@
             [pdok.postgres :as pg]
             [clojure.java.jdbc :as j]
             [clojure.string :as str]
-            [clojure.tools.logging :as log]
-            [pdok.util :as util])
+            [clojure.tools.logging :as log])
   (:import (clojure.lang PersistentQueue)
            (java.sql SQLException)))
 

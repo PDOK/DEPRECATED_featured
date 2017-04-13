@@ -1,10 +1,9 @@
 (ns pdok.featured.json-reader
   (:require [pdok.featured.feature :refer [nilled as-jts]]
-            [cheshire [core :as json] [factory :as jfac] [parse :as jparse]]
+            [cheshire [factory :as jfac] [parse :as jparse]]
             [clj-time [format :as tf] [coerce :as tc]]
             [clojure.walk :refer [postwalk]])
-  (:import (com.fasterxml.jackson.core JsonFactory JsonFactory$Feature
-                                       JsonParser$Feature JsonParser JsonToken)
+  (:import (com.fasterxml.jackson.core JsonParser JsonToken)
            (pdok.featured GeometryAttribute)
            (org.joda.time DateTimeZone)))
 
@@ -62,14 +61,12 @@
       state
       (let [obj (do (.nextToken jp) (parse-object jp))
             newName (-> (doto jp .nextToken) .getCurrentName .toLowerCase)]
-        (recur (merge state {(clojurify currentName) obj}) newName)))
-    ))
+        (recur (merge state {(clojurify currentName) obj}) newName)))))
 
 (defn- read-features [^JsonParser jp]
   (if (and (.nextToken jp) (not= (.getCurrentToken jp) JsonToken/END_ARRAY))
     (lazy-seq (cons (assoc (parse-object jp) :src :json) (read-features jp)))
-    [])
-  )
+    []))
 
 (defn- features-from-stream* [^JsonParser jp & overrides]
   (.nextToken jp)
@@ -77,8 +74,7 @@
     (let [meta (read-meta-data jp)]
       ;; features should be array
       (when (= JsonToken/START_ARRAY (.nextToken jp))
-        [meta (map map-to-feature (read-features jp))])
-        )))
+        [meta (map map-to-feature (read-features jp))]))))
 
 (defn features-from-stream [input-stream & args]
   "Parses until 'features' for state. Then returns vector [meta <lazy sequence of features>]."
@@ -98,10 +94,10 @@
        (-> element first (clojure.string/starts-with? "~#"))))
 
 (defn- get-valid-srid [geometry]
-  (if-let [srid (get geometry "srid")]
+  (if-let [^String srid (get geometry "srid")]
     (Integer. srid)))
 
-(defn create-geometry-atrribute [geometry]
+(defn create-geometry-attribute [geometry]
   (if-let [type (get geometry "type")]
     (GeometryAttribute. type (get geometry type) (get-valid-srid geometry))))
 
@@ -113,10 +109,8 @@
       "~#int"     (if params (int (first params)) (nilled java.lang.Integer))
       "~#boolean" (if params (boolean (first params)) (nilled java.lang.Boolean))
       "~#double"  (if params (double (first params)) (nilled java.lang.Double))
-      "~#geometry" (if params (create-geometry-atrribute (first params)) (nilled pdok.featured.GeometryAttribute))
-      element ; never fail just return element
-      ))
-  )
+      "~#geometry" (if params (create-geometry-attribute (first params)) (nilled pdok.featured.GeometryAttribute))
+      element))) ; never fail just return element
 
 (defn- element-is-pdok-field? [element]
   (contains? pdok-field-replacements element))
@@ -133,7 +127,7 @@
 
 (defn- upgrade-geometry [element]
   (if (:geometry element)
-    (update element :geometry create-geometry-atrribute)
+    (update element :geometry create-geometry-attribute)
     element))
 
 (defn- upgrade-data [attributes]

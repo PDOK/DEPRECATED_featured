@@ -1,17 +1,13 @@
 (ns ^:performance pdok.featured.performance-test
-    (:require [pdok.featured
-               [dynamic-config :as dc]
-               [config :as config]
-               [persistence :as persistence]
-               [geoserver :as geoserver]
-               [timeline :as timeline]
-               [processor :as processor]
-               [generator :as generator]
-               [json-reader :as jr]]
-              [pdok.postgres :as pg]
-              [clojure.java.jdbc :as j]
-              [clojure.test :refer :all])
-    (:import [java.io ByteArrayInputStream]))
+  (:require [pdok.featured
+             [dynamic-config :as dc]
+             [config :as config]
+             [processor :as processor]
+             [generator :as generator]
+             [json-reader :as jr]]
+            [clojure.java.jdbc :as j]
+            [clojure.test :refer :all])
+  (:import [java.io ByteArrayInputStream]))
 
 (def test-db config/processor-db)
 
@@ -48,8 +44,8 @@
           persistence (config/persistence)
           projectors (conj (config/projectors persistence) (config/timeline persistence))
           processor (processor/create
-                     (merge {:check-validity-on-delete false} cfg)
-                     "performance-set" persistence projectors)]
+                      (merge {:check-validity-on-delete false} cfg)
+                      "performance-set" persistence projectors)]
       (dorun (processor/consume processor features))
       (:statistics (processor/shutdown processor)))))
 
@@ -62,7 +58,7 @@
           stream-2 (.getBytes (slurp (generate-delete-new-change-close-features ids true)))]
       (println "Run" i)
       (time (do (run {} (ByteArrayInputStream. stream-1))
-                (run {}  (ByteArrayInputStream. stream-2)))))))
+                (run {} (ByteArrayInputStream. stream-2)))))))
 
 (deftest only-new-test
   (clean-db)
