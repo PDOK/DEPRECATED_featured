@@ -15,7 +15,7 @@
 (def wkt-writer (WKTWriter.))
 
 (def utcCal (Calendar/getInstance (TimeZone/getTimeZone "UTC")))
-(def nlZone (DateTimeZone/forID "Europe/Amsterdam")) ;; used for reading datetimes, because postgres returns Z values
+(def nlZone (DateTimeZone/getDefault)) ;; used for reading datetimes, because postgres returns Z values
 
 (extend-protocol j/ISQLValue
   org.joda.time.DateTime
