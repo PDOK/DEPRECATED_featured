@@ -94,7 +94,7 @@
        (-> element first (clojure.string/starts-with? "~#"))))
 
 (defn- get-valid-srid [geometry]
-  (if-let [^String srid (get geometry "srid")]
+  (if-let [srid (get geometry "srid")]
     (Integer. srid)))
 
 (defn create-geometry-attribute [geometry]
