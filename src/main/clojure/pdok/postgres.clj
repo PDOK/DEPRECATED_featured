@@ -15,7 +15,10 @@
 (def wkt-writer (WKTWriter.))
 
 (def utcCal (Calendar/getInstance (TimeZone/getTimeZone "UTC")))
-(def nlZone (DateTimeZone/getDefault)) ;; used for reading datetimes, because postgres returns Z values
+
+;; The server's time zone, not necessarily Europe/Amsterdam.
+;; Used for reading DateTimes, because PostgreSQL returns Z values and we want local ones without time zone.
+(def serverTimeZone (DateTimeZone/getDefault))
 
 (extend-protocol j/ISQLValue
   org.joda.time.DateTime
@@ -116,9 +119,9 @@
 
 (extend-protocol j/IResultSetReadColumn
   java.sql.Date
-  (result-set-read-column [v _ _] (LocalDate. ^java.sql.Date v ^DateTimeZone nlZone))
+  (result-set-read-column [v _ _] (LocalDate. ^java.sql.Date v ^DateTimeZone serverTimeZone))
   java.sql.Timestamp
-  (result-set-read-column [v _ _] (LocalDateTime. ^java.sql.Timestamp v  ^DateTimeZone nlZone))
+  (result-set-read-column [v _ _] (LocalDateTime. ^java.sql.Timestamp v ^DateTimeZone serverTimeZone))
   java.sql.Array
   (result-set-read-column [v _ _]
     (into [] (.getArray v))))
