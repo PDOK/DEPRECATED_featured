@@ -4,8 +4,7 @@ sudo: required
 branches:
   only:
     - master
-    - /^release-.*$/
-    - docker_image
+    - /^featured-.*$/
 
 addons:
   postgresql: "9.5"
@@ -25,11 +24,11 @@ install:
   - sudo service postgresql restart
 
 before_script:
-  - psql -c 'create database pdok;' -U postgres
+  - psql -U postgres -c "create database pdok"
   - psql -U postgres -d pdok -c "create extension postgis"
-  - psql -U postgres -d pdok -c "CREATE EXTENSION postgis_topology;"
-  - psql -U postgres -d pdok  -c "CREATE EXTENSION fuzzystrmatch"
-  - psql -U postgres -d pdok -c "CREATE EXTENSION postgis_tiger_geocoder;"
+  - psql -U postgres -d pdok -c "create extension postgis_topology"
+  - psql -U postgres -d pdok -c "create extension fuzzystrmatch"
+  - psql -U postgres -d pdok -c "create extension postgis_tiger_geocoder"
   - export PROCESSOR_DATABASE_PASSWORD=
   - export DATA_DATABASE_PASSWORD=
   - export EXTRACTS_DATABASE_PASSWORD=
