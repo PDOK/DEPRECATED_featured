@@ -42,10 +42,10 @@
      #'dc/*timeline-schema-prefix* :featured_performance}
     (let [[meta features] (jr/features-from-stream (clojure.java.io/reader feature-stream))
           persistence (config/persistence)
-          projectors (conj (config/projectors persistence) (config/timeline persistence))
+          timeline (config/timeline persistence)
           processor (processor/create
                       (merge {:check-validity-on-delete false} cfg)
-                      "performance-set" persistence projectors)]
+                      "performance-set" persistence [timeline])]
       (dorun (processor/consume processor features))
       (:statistics (processor/shutdown processor)))))
 
