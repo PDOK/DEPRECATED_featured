@@ -45,7 +45,8 @@
                  [nl.pdok/featured-shared "1.1.2"]]
   :plugins [[lein-ring "0.9.6" ]
             [pdok/lein-filegen "0.1.0"]]
-  :ring {:handler pdok.featured.api/app
+  :ring {:port 8000
+         :handler pdok.featured.api/app
          :init pdok.featured.api/init!
          :uberwar-name ~uberwar-name}
   :main ^:skip-aot pdok.featured.core
