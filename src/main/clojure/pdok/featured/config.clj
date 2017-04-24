@@ -80,6 +80,6 @@
 
 (defn create-url [path]
   (let [fully-qualified-domain-name (or (env :fully-qualified-domain-name) "localhost")
-        port (or (env :port) "3000")
+        port (or (env :port) "8000")
         context-root (or (env :context-root) nil)]
     (str "http://" fully-qualified-domain-name ":" port "/" context-root (when context-root "/") path)))
