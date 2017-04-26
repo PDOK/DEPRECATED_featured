@@ -111,6 +111,9 @@
       (vswap! invalids conj [(:collection validated) (:id validated)]))
     validated))
 
+(defn- current-validity [persistence feature]
+  (pers/current-validity persistence (:collection feature) (:id feature)))
+
 (defn- with-current-version [persistence feature]
   (if-not (:invalid? feature)
     (let [{:keys [collection id]} feature]
@@ -138,7 +141,7 @@
 
 (defn- process-change-feature [{:keys [persistence] :as processor} feature]
   (let [enriched-feature (with-current-version persistence feature)
-        current-validity (pers/current-validity persistence (:collection feature) (:id feature))]
+        current-validity (current-validity persistence feature)]
     (append-feature persistence enriched-feature)
     (if (t/before? current-validity (:validity feature))
       (let [close-feature (-> feature
@@ -164,15 +167,17 @@
       (append-feature persistence enriched-feature)
       (project! processor proj/close-feature enriched-feature)
       (list enriched-feature))
-    (let [change-feature (-> feature
+    (let [current-validity (current-validity persistence feature)
+          change-feature (-> feature
                              (assoc :action :change)
+                             (assoc :validity current-validity)
                              (dissoc :src))
-          changed-feature (process-change-feature processor change-feature)
           close-feature (-> feature
                             (assoc :attributes {})
-                            (assoc :version (*next-version*)))
-          closed-feature (process-close-feature processor close-feature)]
-      (list changed-feature closed-feature))))
+                            (assoc :version (*next-version*)))]
+      (list
+        (process-change-feature processor change-feature)
+        (process-close-feature processor close-feature)))))
 
 (defn- process-delete-feature [{:keys [persistence] :as processor} feature]
   (let [enriched-feature (with-current-version persistence feature)]

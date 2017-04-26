@@ -209,7 +209,7 @@
                    (is (= 4 (:n-processed results)))
                    (is (= 0 (:n-errored results)))
                    (test-persistence {:events 4 :features 1})
-                   (test-timeline {:timeline {:n 3}} results))
+                   (test-timeline {:timeline {:n 2}} results))
 
 (defpermutatedtest new-change-change-delete results
                    (is (= 4 (:n-processed results)))
