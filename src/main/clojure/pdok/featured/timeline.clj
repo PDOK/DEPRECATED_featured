@@ -324,30 +324,26 @@ VALUES (?, ?, ?, ?, ?, ?)"))
           cached-get-current (use-cache feature-cache cache-use-key)
           batched-append-changelog (batched changelog-batch flush-fn)
           current (cached-get-current (:collection feature) (:id feature))]
-      (when (not current) ;; Check idempotency
+      (if (not current)
+        ;; "Real" new
         (let [new-entry (build-new-entry feature)]
           (cache-batched-new new-entry)
-          (batched-append-changelog (changelog-new-entry new-entry))))))
+          (batched-append-changelog (changelog-new-entry new-entry)))
+        ;; new after close
+        (when (and current (util/uuid> (:version feature) (:_version current))) ;; Check idempotency
+          (let [new-entry (build-change-entry current feature)]
+            (cache-batched-new new-entry)
+            (batched-append-changelog (changelog-new-entry new-entry)))))))
   (proj/change-feature [this feature]
-    (let [batched-new (batched new-batch flush-fn)
-          cache-batched-new (with-cache feature-cache batched-new cache-store-key cache-value)
-          cache-batched-update (batched-updater this)
+    (let [cache-batched-update (batched-updater this)
           cached-get-current (use-cache feature-cache cache-use-key)
           batched-append-changelog (batched changelog-batch flush-fn)
           current (cached-get-current (:collection feature) (:id feature))]
       (when (and current (util/uuid> (:version feature) (:_version current))) ;; Check idempotency
-        (if (t/before? (:_valid_from current) (:validity feature)) ;; New version or rewrite of existing version?
-          (let [close-entry (assoc current :_valid_to (:validity feature))
-                new-entry (build-change-entry current feature)]
-            (cache-batched-update (:_version current) (:_valid_from current)
-                                  (:_valid_to current) close-entry)
-            (cache-batched-new new-entry)
-            (batched-append-changelog (changelog-close-entry (:_version current) close-entry))
-            (batched-append-changelog (changelog-new-entry new-entry)))
-          (let [change-entry (build-change-entry current feature)]
-            (cache-batched-update (:_version current) (:_valid_from current)
-                                  (:_valid_to current) change-entry)
-            (batched-append-changelog (changelog-change-entry (:_version current) change-entry)))))))
+        (let [change-entry (build-change-entry current feature)]
+          (cache-batched-update (:_version current) (:_valid_from current)
+                                (:_valid_to current) change-entry)
+          (batched-append-changelog (changelog-change-entry (:_version current) change-entry))))))
   (proj/close-feature [this feature]
     (let [cache-batched-update (batched-updater this)
           cached-get-current (use-cache feature-cache cache-use-key)

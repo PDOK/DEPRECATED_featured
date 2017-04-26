@@ -137,9 +137,20 @@
   feature)
 
 (defn- process-change-feature [{:keys [persistence] :as processor} feature]
-  (let [enriched-feature (with-current-version persistence feature)]
+  (let [enriched-feature (with-current-version persistence feature)
+        current-validity (pers/current-validity persistence (:collection feature) (:id feature))]
     (append-feature persistence enriched-feature)
-    (project! processor proj/change-feature enriched-feature)
+    (if (t/before? current-validity (:validity feature))
+      (let [close-feature (-> feature
+                              (assoc :action :close)
+                              (assoc :attributes {})
+                              (dissoc :src))
+            new-feature (-> feature
+                            (assoc :action :new)
+                            (assoc :version (*next-version*)))]
+        (project! processor proj/close-feature close-feature)
+        (project! processor proj/new-feature new-feature))
+      (project! processor proj/change-feature enriched-feature))
     enriched-feature))
 
 (defn- process-new|change-feature [{:keys [persistence] :as processor} feature]
@@ -154,19 +165,16 @@
       (project! processor proj/close-feature enriched-feature)
       (list enriched-feature))
     (let [change-feature (-> feature
-                             (transient)
-                             (assoc! :action :change)
-                             (dissoc! :src)
-                             (assoc! :version (:version feature))
-                             (persistent!))
+                             (assoc :action :change)
+                             (dissoc :src))
+          changed-feature (process-change-feature processor change-feature)
           close-feature (-> feature
                             (assoc :attributes {})
-                            (assoc :version (*next-version*)))]
-      (list
-        (process-change-feature processor change-feature)
-        (process-close-feature processor close-feature)))))
+                            (assoc :version (*next-version*)))
+          closed-feature (process-close-feature processor close-feature)]
+      (list changed-feature closed-feature))))
 
-(defn- process-delete-feature [{:keys [persistence projectors] :as processor} feature]
+(defn- process-delete-feature [{:keys [persistence] :as processor} feature]
   (let [enriched-feature (with-current-version persistence feature)]
     (append-feature persistence enriched-feature)
     (project! processor proj/delete-feature enriched-feature)
