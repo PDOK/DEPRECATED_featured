@@ -51,22 +51,22 @@ If n nil => no limit, if collections nil => all collections")
 (defn- qualified-persistence-collections [dataset]
   (str (pg/quoted (schema dataset)) "." (name dc/*persistence-collections*)))
 
-(defn- jdbc-init [db dataset]
-  (when-not (pg/schema-exists? db (schema dataset))
-    (checked (pg/create-schema db (schema dataset))
-             (pg/schema-exists? db (schema dataset))))
+(defn- jdbc-init [tx dataset]
+  (when-not (pg/schema-exists? tx (schema dataset))
+    (checked (pg/create-schema tx (schema dataset))
+             (pg/schema-exists? tx (schema dataset))))
   (with-bindings {#'dc/*persistence-schema* (schema dataset)}
-    (when-not (pg/table-exists? db dc/*persistence-schema* dc/*persistence-features*)
-      (checked (do (pg/create-table db dc/*persistence-schema* dc/*persistence-features*
+    (when-not (pg/table-exists? tx dc/*persistence-schema* dc/*persistence-features*)
+      (checked (do (pg/create-table tx dc/*persistence-schema* dc/*persistence-features*
                                     [:id "bigserial" :primary :key]
                                     [:collection "varchar(100)"]
                                     [:feature_id "varchar(50)"])
-                   (pg/create-index db dc/*persistence-schema* dc/*persistence-features* :collection :feature_id)
-                   (pg/configure-auto-vacuum db dc/*persistence-schema* dc/*persistence-features* 0 10000 0))
-               (pg/table-exists? db dc/*persistence-schema* dc/*persistence-features*)))
+                   (pg/create-index tx dc/*persistence-schema* dc/*persistence-features* :collection :feature_id)
+                   (pg/configure-auto-vacuum tx dc/*persistence-schema* dc/*persistence-features* 0 10000 0))
+               (pg/table-exists? tx dc/*persistence-schema* dc/*persistence-features*)))
 
-    (when-not (pg/table-exists? db dc/*persistence-schema* dc/*persistence-feature-stream*)
-      (checked (do (pg/create-table db dc/*persistence-schema* dc/*persistence-feature-stream*
+    (when-not (pg/table-exists? tx dc/*persistence-schema* dc/*persistence-feature-stream*)
+      (checked (do (pg/create-table tx dc/*persistence-schema* dc/*persistence-feature-stream*
                                     [:id "bigserial" :primary :key]
                                     [:version "uuid"]
                                     [:previous_version "uuid"]
@@ -75,26 +75,24 @@ If n nil => no limit, if collections nil => all collections")
                                     [:feature_id "varchar(50)"]
                                     [:validity "timestamp without time zone"]
                                     [:attributes "text"])
-                   (pg/create-index db dc/*persistence-schema* dc/*persistence-feature-stream* :collection :feature_id)
-                   (pg/configure-auto-vacuum db dc/*persistence-schema* dc/*persistence-feature-stream* 0 10000 0))
-               (pg/table-exists? db dc/*persistence-schema* dc/*persistence-feature-stream*)))
+                   (pg/create-index tx dc/*persistence-schema* dc/*persistence-feature-stream* :collection :feature_id)
+                   (pg/configure-auto-vacuum tx dc/*persistence-schema* dc/*persistence-feature-stream* 0 10000 0))
+               (pg/table-exists? tx dc/*persistence-schema* dc/*persistence-feature-stream*)))
 
-    (when-not (pg/table-exists? db dc/*persistence-schema* dc/*persistence-collections*)
-      (checked (do (pg/create-table db dc/*persistence-schema* dc/*persistence-collections*
+    (when-not (pg/table-exists? tx dc/*persistence-schema* dc/*persistence-collections*)
+      (checked (do (pg/create-table tx dc/*persistence-schema* dc/*persistence-collections*
                                     [:id "bigserial" :primary :key]
                                     [:collection "varchar(255)"])
-                   (pg/create-index db dc/*persistence-schema* dc/*persistence-collections* :collection))
-               (pg/table-exists? db dc/*persistence-schema* dc/*persistence-collections*)))))
+                   (pg/create-index tx dc/*persistence-schema* dc/*persistence-collections* :collection))
+               (pg/table-exists? tx dc/*persistence-schema* dc/*persistence-collections*)))))
 
-(defn jdbc-create-collection [{:keys [db dataset]} collection]
-  (let [sql (str "INSERT INTO " (qualified-persistence-collections dataset) " (collection) VALUES (?)")]
-    (j/execute! db (list sql collection))))
+(defn jdbc-create-collection [tx dataset collection]
+  (let [query (str "INSERT INTO " (qualified-persistence-collections dataset) " (collection) VALUES (?)")]
+    (j/execute! tx [query collection])))
 
-(defn jdbc-all-collections [{:keys [db dataset]}]
-  (j/with-db-connection [c db]
-    (let [query (str "SELECT collection AS name FROM " (qualified-persistence-collections dataset))
-          results (j/query c [query])]
-      results)))
+(defn jdbc-all-collections [tx dataset]
+  (let [query (str "SELECT collection AS name FROM " (qualified-persistence-collections dataset))]
+    (j/query tx [query])))
 
 (defn record->feature [c record]
   (let [f (transient {})
@@ -108,19 +106,18 @@ If n nil => no limit, if collections nil => all collections")
                  :attributes (transit/from-json (:attributes record)))]
     (>!! c (persistent! f))))
 
-(defn jdbc-count-records [{:keys [db dataset]} collections]
+(defn jdbc-count-records [tx dataset collections]
   (let [query (str "SELECT COUNT(*) AS cnt "
                    "FROM " (qualified-feature-stream dataset) " fs "
                    (when (seq collections) (str "WHERE fs.collection IN ("
                                                 (clojure.string/join "," (repeat (count collections) "?"))
                                                 ")")))
-        result (j/with-db-connection [c db]
-                                  (j/query c (if-not collections [query] (concat [query] collections))))]
+        result (j/query tx (cons query collections))]
     (:cnt (first result))))
 
-(defn jdbc-get-last-n [{:keys [db dataset] :as pers} n collections]
+(defn jdbc-get-last-n [db tx dataset n collections]
   (let [n-records (when n (log/debug "Counting rows for" dataset collections)
-                          (jdbc-count-records pers collections))
+                          (jdbc-count-records tx dataset collections))
         offset (when n (if (> n n-records) 0 (- n-records n)))
         _ (when offset (log/debug "using offset" offset))
         query (str "SELECT fs.id, fs.collection, fs.feature_id, fs.action, fs.version, fs.previous_version,"
@@ -133,20 +130,19 @@ If n nil => no limit, if collections nil => all collections")
                    (when n (str "OFFSET " offset)))
         result-chan (chan)]
     (a/thread
-      (j/with-db-connection [c db]
+      (j/with-db-connection [c db] ;; Cannot use tx from a different thread
         (let [statement (j/prepare-statement
                          (doto (j/get-connection c) (.setAutoCommit false))
                          query :fetch-size 10000)]
-          (j/query c (if-not collections [statement] (concat [statement] collections))
-                   :row-fn (partial record->feature result-chan))
+          (j/query c (cons statement collections) :row-fn (partial record->feature result-chan))
           (close! result-chan))))
     result-chan))
 
-(defn jdbc-streams [{:keys [db dataset]} collection]
+(defn jdbc-streams [db dataset collection]
   (let [query (str "SELECT feature_id FROM " (qualified-features dataset) " WHERE collection = ? ORDER BY id ASC")
         result-chan (chan)]
     (a/thread
-      (try (j/with-db-connection [c db]
+      (try (j/with-db-connection [c db] ;; Cannot use tx from a different thread
              (let [statement (j/prepare-statement
                                (doto (j/get-connection c) (.setAutoCommit false))
                                query :fetch-size 10000)]
@@ -157,46 +153,42 @@ If n nil => no limit, if collections nil => all collections")
              (throw e))))
     result-chan))
 
-(defn- jdbc-create-stream [{:keys [db dataset]} entries]
+(defn- jdbc-create-stream [tx dataset entries]
   (with-bench t (log/debug "Created streams in" t "ms")
-    (try (j/with-db-connection [c db]
-           (apply (partial j/insert! c (qualified-features dataset) :transaction? (:transaction? db)
-                           [:collection :feature_id])
-                  entries))
-         (catch SQLException e
-           (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
-           (throw e)))))
+    (try
+      (apply (partial j/insert! tx (qualified-features dataset) [:collection :feature_id]) entries)
+      (catch SQLException e
+        (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+        (throw e)))))
 
-(defn- jdbc-insert [{:keys [db dataset]} entries]
+(defn- jdbc-insert [tx dataset entries]
   (let [entries (map (fn [entry] (-> entry vec (update 6 transit/to-json))) entries)]
     (with-bench t (log/debug "Inserted" (count entries) "events in" t "ms")
-      (try (j/with-db-connection [c db]
-             (apply (partial j/insert! c (qualified-feature-stream dataset) :transaction? (:transaction? db)
-                             [:version :previous_version :action :collection :feature_id :validity :attributes])
-                    entries))
-           (catch SQLException e
-             (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
-             (throw e))))))
+      (try
+        (apply (partial j/insert! tx (qualified-feature-stream dataset)
+                        [:version :previous_version :action :collection :feature_id :validity :attributes])
+               entries)
+        (catch SQLException e
+          (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+          (throw e))))))
 
-(defn- jdbc-load-cache [{:keys [db dataset]} collection ids]
+(defn- jdbc-load-cache [tx dataset collection ids]
   (partitioned
     (fn [ids-part]
       (when (seq ids)
-        (try (let [results
-                   (j/with-db-connection [c db]
-                     (j/query c (apply vector (str "SELECT DISTINCT ON (feature_id) "
-                                                   "collection, feature_id, validity, action, version "
-                                                   "FROM " (qualified-feature-stream dataset) " "
-                                                   "WHERE collection = ? AND feature_id IN ("
-                                                   (clojure.string/join "," (repeat (count ids-part) "?")) ")"
-                                                   "ORDER BY feature_id ASC, id DESC")
-                                       collection ids-part) :as-arrays? true))]
-               (map (fn [[collection id validity action version]] [[collection id]
-                                                                   [validity (keyword action) version]])
-                    (drop 1 results)))
-             (catch SQLException e
-               (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
-               (throw e)))))
+        (try
+          (let [results (j/query tx (apply vector (str "SELECT DISTINCT ON (feature_id) "
+                                                       "collection, feature_id, validity, action, version "
+                                                       "FROM " (qualified-feature-stream dataset) " "
+                                                       "WHERE collection = ? AND feature_id IN ("
+                                                       (clojure.string/join "," (repeat (count ids-part) "?")) ")"
+                                                       "ORDER BY feature_id ASC, id DESC")
+                                           collection ids-part) :as-arrays? true)]
+            (map (fn [[collection id validity action version]] [[collection id] [validity (keyword action) version]])
+                 (drop 1 results)))
+          (catch SQLException e
+            (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
+            (throw e)))))
     jdbc-collection-partition-size ids))
 
 (defn- current-state [persistence collection id]
@@ -206,41 +198,42 @@ If n nil => no limit, if collections nil => all collections")
 
 (defn prepare-caches [persistence collection-id]
   ;(log/trace "Start prepare caches")
-  (let [{:keys [stream-cache]} persistence
+  (let [{:keys [stream-cache tx dataset]} persistence
         per-collection (group-by #(subvec % 0 1) collection-id)]
     (doseq [[[collection] grouped] per-collection]
       ;(log/trace "Prepare cache for" collection)
       (let [ids (filter (complement nil?) (map #(nth % 1) grouped))]
         ;(log/trace "Load cache")
-        (apply-to-cache stream-cache (jdbc-load-cache persistence collection ids))))))
+        (apply-to-cache stream-cache (jdbc-load-cache tx dataset collection ids))))))
 
-(defrecord CachedJdbcProcessorPersistence [db dataset collections-cache stream-batch stream-batch-size stream-cache
+(defrecord CachedJdbcProcessorPersistence [db tx dataset collections-cache stream-batch stream-batch-size stream-cache
                                            link-batch link-batch-size]
   ProcessorPersistence
   (init [this for-dataset]
-    (let [inited (assoc this :dataset for-dataset)
-          _ (jdbc-init db for-dataset)
-          _ (vreset! collections-cache (into #{} (jdbc-all-collections inited)))]
+    (let [transaction (pg/begin-transaction db)
+          inited (-> this (assoc :dataset for-dataset) (assoc :tx transaction))
+          _ (jdbc-init transaction for-dataset)
+          _ (vreset! collections-cache (into #{} (jdbc-all-collections transaction for-dataset)))]
       inited))
   (prepare [this features]
     (with-bench t (log/debug "Prepared cache in" t "ms")
       (prepare-caches this (map (juxt :collection :id) features)))
     this)
   (flush [this]
-    (flush-batch stream-batch (partial jdbc-insert this))
-    (flush-batch link-batch (partial jdbc-create-stream this))
+    (flush-batch stream-batch (partial jdbc-insert tx dataset))
+    (flush-batch link-batch (partial jdbc-create-stream tx dataset))
     (dosync
      (vreset! stream-cache (cache/basic-cache-factory {})))
     this)
   (collections [_]
     @collections-cache)
   (create-collection [this collection]
-    (jdbc-create-collection this collection)
+    (jdbc-create-collection tx dataset collection)
     (vswap! collections-cache conj {:name collection}))
   (stream-exists? [this collection id]
     (not (nil? (last-action this collection id))))
   (create-stream [this collection id]
-    (let [batched-create (batched link-batch link-batch-size :batch-fn (partial jdbc-create-stream this))]
+    (let [batched-create (batched link-batch link-batch-size :batch-fn (partial jdbc-create-stream tx dataset))]
       (when-not (collection-exists? this collection)
         (create-collection this collection))
       (batched-create collection id)))
@@ -248,7 +241,7 @@ If n nil => no limit, if collections nil => all collections")
     (let [key-fn   (fn [_ _ _ collection id _ _] [collection id])
           value-fn (fn [_ version _ action _ _ validity _] [validity action version])
           previous-version (current-version this collection id)
-          batched-insert (batched stream-batch stream-batch-size :batch-fn (partial jdbc-insert this))
+          batched-insert (batched stream-batch stream-batch-size :batch-fn (partial jdbc-insert tx dataset))
           cache-batched-insert (with-cache stream-cache batched-insert key-fn value-fn)]
       (cache-batched-insert version previous-version action collection id validity attributes)))
   (current-validity [this collection id]
@@ -258,11 +251,12 @@ If n nil => no limit, if collections nil => all collections")
   (current-version [this collection id]
     (get (current-state this collection id) 2))
   (get-last-n [this n collections]
-    (jdbc-get-last-n this n collections))
+    (jdbc-get-last-n db tx dataset n collections))
   (streams [this collection]
-    (jdbc-streams this collection))
+    (jdbc-streams db dataset collection))
   (close [this]
-    (flush this)))
+    (flush this)
+    (pg/commit-transaction tx)))
 
 (defn make-cached-jdbc-processor-persistence [config]
   (let [db (:db-config config)
@@ -272,8 +266,8 @@ If n nil => no limit, if collections nil => all collections")
         stream-cache (volatile! (cache/basic-cache-factory {}))
         link-batch-size (or (:link-batch-size config) (:batch-size config) 10000)
         link-batch (volatile! (PersistentQueue/EMPTY))]
-    (CachedJdbcProcessorPersistence. db "unknown-dataset" collections-cache stream-batch stream-batch-size stream-cache
-                                     link-batch link-batch-size)))
+    (CachedJdbcProcessorPersistence. db nil "unknown-dataset" collections-cache stream-batch stream-batch-size
+                                     stream-cache link-batch link-batch-size)))
 
 (defrecord NoStatePersistence []
     ProcessorPersistence

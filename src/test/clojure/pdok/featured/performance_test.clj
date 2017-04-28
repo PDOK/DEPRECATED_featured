@@ -42,7 +42,7 @@
      #'dc/*timeline-schema-prefix* :featured_performance}
     (let [[meta features] (jr/features-from-stream (clojure.java.io/reader feature-stream))
           persistence (config/persistence)
-          timeline (config/timeline persistence)
+          timeline (config/timeline)
           processor (processor/create
                       (merge {:check-validity-on-delete false} cfg)
                       "performance-set" persistence [timeline])]

@@ -61,14 +61,9 @@
 
 (defn timeline
   ([]
-   (timeline (persistence)))
-  ([persistence]
-   (timeline persistence (filestore (str (System/getProperty "java.io.tmpdir") "/featured"))))
-  ([persistence filestore]
-   (timeline/create-chunked {:chunk-size  (read-string (or (env :processor-batch-size) "10000"))
-                             :db-config   processor-db
-                             :persistence persistence}
-                            filestore)))
+   (timeline (filestore (str (System/getProperty "java.io.tmpdir") "/featured"))))
+  ([filestore]
+   (timeline/create-chunked {:chunk-size (read-string (or (env :processor-batch-size) "10000"))} filestore)))
 
 (defn create-workers [factory-f]
   (let [n-workers (read-string (or (env :n-workers) "2"))]

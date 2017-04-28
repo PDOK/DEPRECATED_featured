@@ -19,7 +19,7 @@
   (let [changelog-dir (if (:changelog-dir meta) (:changelog-dir meta) (str (System/getProperty "user.dir") "/changelog"))
         filestore (config/filestore changelog-dir)
         persistence (if no-state (pers/make-no-state) (config/persistence))
-        projectors (if no-timeline [] [(config/timeline persistence filestore)])
+        projectors (if no-timeline [] [(config/timeline filestore)])
         processor (processor/create meta dataset persistence projectors)]
     processor))
 
