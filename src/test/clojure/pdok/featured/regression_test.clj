@@ -72,7 +72,7 @@
                     (map (fn [features]
                            (let [persistence (config/persistence)
                                  filestore (config/filestore changelog-dir)
-                                 timeline (config/timeline persistence filestore)
+                                 timeline (config/timeline filestore)
                                  processor (processor/create meta "regression-set" persistence [timeline])]
                              (dorun (processor/consume processor features))
                              (:statistics (processor/shutdown processor))))
@@ -83,7 +83,7 @@
   (println "  Replaying")
   (let [persistence (config/persistence)
         filestore (config/filestore changelog-dir)
-        timeline (config/timeline persistence filestore)
+        timeline (config/timeline filestore)
         processor (processor/create {} "regression-set" persistence [timeline])]
     (processor/replay processor 1000 nil)
     {:stats (:statistics (processor/shutdown processor)) :extracts nil}))

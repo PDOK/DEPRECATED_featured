@@ -289,8 +289,8 @@
         _ (when statistics (log/info @statistics))]
     info))
 
-(defn add-projector [processor projector]
-  (let [initialized-projector (proj/init projector (:dataset processor) (pers/collections (:persistence processor)))]
+(defn add-projector [processor projector tx]
+  (let [initialized-projector (proj/init projector tx (:dataset processor) (pers/collections (:persistence processor)))]
     (update-in processor [:projectors] conj initialized-projector)))
 
 (defn create
@@ -299,7 +299,8 @@
   ([options dataset persistence projectors]
    {:pre [(map? options) (string? dataset)]}
    (let [initialized-persistence (pers/init persistence dataset)
-         initialized-projectors (doall (map #(proj/init % dataset (pers/collections initialized-persistence))
+         tx (:tx initialized-persistence)
+         initialized-projectors (doall (map #(proj/init % tx dataset (pers/collections initialized-persistence))
                                             (clojure.core/flatten projectors)))
          batch-size (or (config/env :processor-batch-size) 10000)]
      (merge {:dataset dataset

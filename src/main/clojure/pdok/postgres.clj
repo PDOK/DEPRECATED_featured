@@ -9,9 +9,6 @@
            [org.joda.time DateTimeZone LocalDate LocalDateTime]
            (java.sql Types)))
 
-(defn dbspec->url [{:keys [subprotocol subname user password]}]
-  (str "jdbc:" subprotocol ":" subname "?user=" user "&password=" password))
-
 (def wkt-writer (WKTWriter.))
 
 (def utcCal (Calendar/getInstance (TimeZone/getTimeZone "UTC")))
@@ -155,76 +152,52 @@
 
 (def quoted (j/quoted \"))
 
-(defn schema-exists? [db schema]
-  (j/with-db-connection [c db]
-    (let [results
-          (j/query c ["SELECT 1 FROM information_schema.schemata WHERE schema_name = ?" schema])]
-      (not (nil? (first results)))))
-  )
+(defn begin-transaction [db]
+  (let [connection (j/get-connection db)
+        _ (.setAutoCommit connection false)]
+    (j/add-connection db connection)))
 
-(defn create-schema [db schema]
+(defn commit-transaction [tx]
+  (with-open [connection (j/get-connection tx)]
+    (.commit connection)))
+
+(defn schema-exists? [tx schema]
+  (let [query "SELECT 1 FROM information_schema.schemata WHERE schema_name = ?"
+        results (j/query tx [query schema])]
+    (not (nil? (first results)))))
+
+(defn create-schema [tx schema]
   "Create schema"
-  (j/db-do-commands db (str "CREATE SCHEMA " (-> schema name quoted))))
+  (j/execute! tx [(str "CREATE SCHEMA " (-> schema name quoted))]))
 
+(defn table-exists? [tx schema table]
+  (let [query "SELECT 1 FROM information_schema.tables WHERE table_schema = ? AND table_name = ?"
+        results (j/query tx [query schema table])]
+    (not (nil? (first results)))))
 
-(defn table-exists? [db schema table]
-  (j/with-db-connection [c db]
-    (let [results
-          (j/query c ["SELECT 1 FROM information_schema.tables WHERE  table_schema = ? AND table_name = ?"
-                      schema table])]
-      (not (nil? (first results)))))
-  )
-
-(defn create-table [db schema table & fields]
-  (j/db-do-commands db
-                    (apply j/create-table-ddl (str (-> schema name quoted) "." (-> table name quoted)) fields)))
+(defn create-table [tx schema table & fields]
+  (j/execute! tx [(apply j/create-table-ddl (str (-> schema name quoted) "." (-> table name quoted)) fields)]))
 
 (defn- remove-underscores [name]
   (if (= (first name) \_)
     (recur (next name))
     (apply str name)))
 
-(defn- create-index* [db schema table index-type & columns]
+(defn- create-index* [tx schema table index-type & columns]
   (let [column-names (map name columns)
         quoted-columns (clojure.string/join "," (map quoted column-names))
-        index-name (str (name table) "_" (clojure.string/join "_" (map remove-underscores column-names)) (or (index-type {:gist "_sidx"}) "_idx"))]
+        index-name (str (name table) "_" (clojure.string/join "_" (map remove-underscores column-names))
+                        (or (index-type {:gist "_sidx"}) "_idx"))]
     (try
-      (j/db-do-commands db (str "CREATE INDEX " (quoted index-name)
-                                " ON "  (-> schema name quoted) "." (-> table name quoted)
-                                " USING " (name index-type) " (" quoted-columns ")" ))
+      (j/execute! tx [(str "CREATE INDEX " (quoted index-name)
+                           " ON " (-> schema name quoted) "." (-> table name quoted)
+                           " USING " (name index-type) " (" quoted-columns ")")])
       (catch java.sql.SQLException e
         (log/with-logs ['pdok.postgres :error :error] (j/print-sql-exception-chain e))
-        (throw e))))
-  )
+        (throw e)))))
 
-(defn create-index [db schema table & columns]
-  (apply create-index* db schema table :btree columns))
-
-(defn create-geo-index [db schema table & columns]
-  (apply create-index* db schema table :gist columns))
-
-(defn table-columns [db schema table]
-  "Get table columns"
-  (j/with-db-connection [c db]
-    (let [results
-          (j/query c ["SELECT column_name
-FROM information_schema.columns
-  WHERE table_schema = ?
-  AND table_name   = ?" schema table])]
-      results)))
-
-(defn- execute-checked-sql [db cmd]
-  (try
-    (j/db-do-commands db cmd)
-    (catch java.sql.SQLException e
-      (log/with-logs ['pdok.postgres :error :error] (j/print-sql-exception-chain e))
-      (throw e))))
-
-(defn create-column [db schema table column-name type ndims srid]
-  (let [cmd (condp = type
-              geometry-type (str "SELECT public.AddGeometryColumn ('" schema "', '" table "', '" (-> column-name name) "', " srid ", 'GEOMETRY', " ndims ")")
-              (format "ALTER TABLE %s.%s ADD %s %s NULL;" (-> schema name quoted) (-> table name quoted) (-> column-name name quoted) type))]
-    (execute-checked-sql db cmd)))
+(defn create-index [tx schema table & columns]
+  (apply create-index* tx schema table :btree columns))
 
 (defn kv->clause [[k v]]
   (if v
@@ -235,15 +208,15 @@ FROM information_schema.columns
   ([clauses] (clojure.string/join " AND " (map kv->clause clauses)))
   ([clauses table] (clojure.string/join " AND " (map #(str table "." (kv->clause %)) clauses))))
 
-(defn configure-auto-vacuum [db schema table vacuum-scale-factor vacuum-threshold analyze-scale-factor]
+(defn configure-auto-vacuum [tx schema table vacuum-scale-factor vacuum-threshold analyze-scale-factor]
   (try
-    (j/db-do-commands db
-                      (str "ALTER TABLE " (-> schema name quoted) "." (-> table name quoted)
-                           " SET (autovacuum_vacuum_scale_factor = " vacuum-scale-factor ")")
-                      (str "ALTER TABLE " (-> schema name quoted) "." (-> table name quoted)
-                           " SET (autovacuum_vacuum_threshold = " vacuum-threshold ")")
-                      (str "ALTER TABLE " (-> schema name quoted) "." (-> table name quoted)
-                           " SET (autovacuum_analyze_scale_factor = " analyze-scale-factor ")"))
+    (do
+      (j/execute! tx [(str "ALTER TABLE " (-> schema name quoted) "." (-> table name quoted)
+                           " SET (autovacuum_vacuum_scale_factor = " vacuum-scale-factor ")")])
+      (j/execute! tx [(str "ALTER TABLE " (-> schema name quoted) "." (-> table name quoted)
+                           " SET (autovacuum_vacuum_threshold = " vacuum-threshold ")")])
+      (j/execute! tx [(str "ALTER TABLE " (-> schema name quoted) "." (-> table name quoted)
+                           " SET (autovacuum_analyze_scale_factor = " analyze-scale-factor ")")]))
     (catch java.sql.SQLException e
       (log/with-logs ['pdok.postgres :error :error] (j/print-sql-exception-chain e))
       (throw e))))

@@ -27,16 +27,16 @@
 (defn- qualified-timeline [dataset collection]
   (str (pg/quoted (schema dataset)) "." (pg/quoted (str (name dc/*timeline-table*) "_" collection))))
 
-(defn- init [db dataset]
-  (when-not (pg/schema-exists? db (schema dataset))
-    (checked (pg/create-schema db (schema dataset))
-             (pg/schema-exists? db (schema dataset)))))
+(defn- init [tx dataset]
+  (when-not (pg/schema-exists? tx (schema dataset))
+    (checked (pg/create-schema tx (schema dataset))
+             (pg/schema-exists? tx (schema dataset)))))
 
-(defn- init-collection [db dataset collection]
+(defn- init-collection [tx dataset collection]
   (let [table-name (str (name dc/*timeline-table*) "_" collection)]
     (with-bindings {#'dc/*timeline-schema* (schema dataset)}
-      (when-not (pg/table-exists? db dc/*timeline-schema* table-name)
-        (checked (do (pg/create-table db dc/*timeline-schema* table-name
+      (when-not (pg/table-exists? tx dc/*timeline-schema* table-name)
+        (checked (do (pg/create-table tx dc/*timeline-schema* table-name
                                       [:id "serial" :primary :key]
                                       [:feature_id "varchar(100)"]
                                       [:version "uuid"]
@@ -44,28 +44,21 @@
                                       [:valid_to "timestamp without time zone"]
                                       [:feature "text"]
                                       [:tiles "integer[]"])
-                     (pg/create-index db dc/*timeline-schema* table-name :feature_id)
-                     (pg/create-index db dc/*timeline-schema* table-name :version))
-                 (pg/table-exists? db dc/*timeline-schema* table-name))))))
+                     (pg/create-index tx dc/*timeline-schema* table-name :feature_id)
+                     (pg/create-index tx dc/*timeline-schema* table-name :version))
+                 (pg/table-exists? tx dc/*timeline-schema* table-name))))))
 
-(defn- execute-query [timeline query]
-  (try (j/with-db-connection [c (:db timeline)]
-         (let [results (j/query c [query] :as-arrays? true)
-               results (map (fn [[f]] (transit/from-json f)) (drop 1 results))]
-           results))
-       (catch SQLException e
-         (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
-         (throw e))))
+(defn current [tx dataset collection]
+  (let [query (str "SELECT feature FROM " (qualified-timeline dataset collection) " WHERE valid_to IS NULL")]
+    (try
+      (let [results (j/query tx [query] :as-arrays? true)]
+        (map (fn [[f]] (transit/from-json f)) (drop 1 results)))
+      (catch SQLException e
+        (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
+        (throw e)))))
 
-(defn current
-  ([{:keys [dataset] :as timeline} collection]
-   (let [query (str "SELECT feature FROM " (qualified-timeline dataset collection) " "
-                    "WHERE valid_to is null")]
-     (execute-query timeline query))))
-
-(defn keywordize-keys-and-remove-nils
+(defn keywordize-keys-and-remove-nils [m]
   "Recursively transforms all map keys from strings to keywords and removes all pairs with nil values."
-  [m]
   (let [f (fn [[k v]] (when (not (nil? v)) (if (string? k) [(keyword k) v] [k v])))]
     (walk/postwalk (fn [x] (if (map? x) (into {} (map f x)) x)) m)))
 
@@ -101,19 +94,17 @@ VALUES (?, ?, ?, ?, ?, ?)"))
 
 ;;(def feature-info (juxt :_collection :_id #(.toString (:_valid_from %)) #(when (:_valid_to %1) (.toString (:_valid_to %1))) :_version))
 
-(defn- new-current
-  ([{:keys [db dataset]} features]
-    ;(println "NEW-CURRENT" (map feature-info features))
-   (try
-     (let [per-collection (group-by :_collection features)]
-       (doseq [[collection collection-features] per-collection]
-         (let [transform-fn (juxt :_id :_version
-                                  :_valid_from :_valid_to transit/to-json :_tiles)
-               records (map transform-fn collection-features)]
-           (j/execute! db (cons (new-current-sql dataset collection) records) :multi? true :transaction? (:transaction? db)))))
-     (catch SQLException e
-       (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
-       (throw e)))))
+(defn- new-current [{:keys [tx dataset]} features]
+  ;(println "NEW-CURRENT" (map feature-info features))
+  (try
+    (let [per-collection (group-by :_collection features)]
+      (doseq [[collection collection-features] per-collection]
+        (let [transform-fn (juxt :_id :_version :_valid_from :_valid_to transit/to-json :_tiles)
+              records (map transform-fn collection-features)]
+          (j/execute! tx (cons (new-current-sql dataset collection) records) :multi? true))))
+    (catch SQLException e
+      (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
+      (throw e))))
 
 (defn- load-current-feature-cache-sql [dataset collection n]
   (str "SELECT DISTINCT ON (feature_id)
@@ -123,17 +114,14 @@ VALUES (?, ?, ?, ?, ?, ?)"))
        (clojure.string/join "," (repeat n "?")) ")
       ORDER BY feature_id ASC, version DESC, valid_from DESC"))
 
-(defn- load-current-feature-cache [db dataset collection ids]
-  (try (j/with-db-connection [c db]
-         (let [results
-               (j/query c (apply vector (load-current-feature-cache-sql dataset collection (count ids))
-                                  ids) :as-arrays? true)
-               for-cache
-               (map (fn [[fid f]] [[collection fid] (transit/from-json f)] ) (drop 1 results))]
-           for-cache))
-       (catch SQLException e
-         (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
-         (throw e))))
+(defn- load-current-feature-cache [tx dataset collection ids]
+  (try
+    (let [results (j/query tx (apply vector (load-current-feature-cache-sql dataset collection (count ids)) ids)
+                           :as-arrays? true)]
+      (map (fn [[fid f]] [[collection fid] (transit/from-json f)]) (drop 1 results)))
+    (catch SQLException e
+      (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
+      (throw e))))
 
 (defn- delete-version-sql [dataset collection]
   (str "DELETE FROM " (qualified-timeline dataset collection)
@@ -147,32 +135,34 @@ VALUES (?, ?, ?, ?, ?, ?)"))
   (str "DELETE FROM " (qualified-timeline dataset collection)
        " WHERE version = ? AND valid_from = ? AND valid_to = ?"))
 
-(defn- delete-feature-with-version [{:keys [db dataset]} records]
+(defn- delete-feature-with-version [{:keys [tx dataset]} records]
   "([collection version] ... )"
   (let [per-collection (group-by first records)]
     (doseq [[collection collection-records] per-collection]
-      (let [versions (map #(vector (nth % 1))  collection-records)]
+      (let [versions (map #(vector (nth % 1)) collection-records)]
         (when (seq versions)
           (try
-            (j/execute! db (cons (delete-version-sql dataset collection) versions) :multi? true :transaction? (:transaction? db))
+            (j/execute! tx (cons (delete-version-sql dataset collection) versions) :multi? true)
             (catch SQLException e
               (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
               (throw e))))))))
 
-(defn- delete-feature-with-version-and-validity [{:keys [db dataset]} records]
+(defn- delete-feature-with-version-and-validity [{:keys [tx dataset]} records]
   "([collection version valid-from valid-to] ... )"
   (let [per-collection (group-by first records)]
     (doseq [[collection collection-records] per-collection]
-      (let [{open true closed false} (group-by (fn [[_ _ valid-to]] (nil? valid-to)) (map #(drop 1 %) collection-records))]
+      (let [{open true closed false} (group-by (fn [[_ _ valid-to]] (nil? valid-to)) (map rest collection-records))]
         (when (seq open)
           (try
-            (j/execute! db (cons (delete-version-with-valid-from-sql dataset collection) (map #(take 2 %) open)) :multi? true :transaction? (:transaction? db))
+            (j/execute! tx (cons (delete-version-with-valid-from-sql dataset collection) (map #(take 2 %) open))
+                        :multi? true)
             (catch SQLException e
               (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
               (throw e))))
         (when (seq closed)
           (try
-            (j/execute! db (cons (delete-version-with-valid-from-and-valid-to-sql dataset collection) closed) :multi? true :transaction? (:transaction? db))
+            (j/execute! tx (cons (delete-version-with-valid-from-and-valid-to-sql dataset collection) closed)
+                        :multi? true)
             (catch SQLException e
               (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
               (throw e))))))))
@@ -298,23 +288,17 @@ VALUES (?, ?, ?, ?, ?, ?)"))
         (doseq [v (:_all_versions f)]
           (batched-delete [collection v]))))))
 
-(defrecord Timeline [dataset db collections
-                     feature-cache
-                     delete-for-update-batch
-                     new-batch
-                     delete-batch
-                     changelog-batch changelogs
-                     make-flush-fn flush-fn
-                     filestore]
+(defrecord Timeline [dataset tx collections feature-cache delete-for-update-batch new-batch delete-batch changelog-batch
+                     changelogs make-flush-fn flush-fn filestore]
   proj/Projector
-  (proj/init [this for-dataset current-collections]
-    (let [inited (assoc this :dataset for-dataset)
+  (proj/init [this transaction for-dataset current-collections]
+    (let [inited (-> this (assoc :dataset for-dataset) (assoc :tx transaction))
           flush-fn (make-flush-fn inited)
           inited (assoc inited :flush-fn flush-fn)]
       inited))
   (proj/new-collection [this collection]
     (vswap! collections conj collection)
-    (init-collection db dataset collection))
+    (init-collection tx dataset collection))
   (proj/flush [this]
     (flush-fn)
     this)
@@ -368,18 +352,18 @@ VALUES (?, ?, ?, ?, ?, ?)"))
     (proj/flush this)
     this))
 
-(defn create-cache [db dataset chunk]
+(defn create-cache [tx dataset chunk]
   (let [pairs (map (fn [feature] [(:collection feature) (:id feature)]) chunk)
         per-c (group-by first pairs)
         cache (volatile! (cache/basic-cache-factory {}))]
     (doseq [[collection roots-grouped-by] per-c]
       (apply-to-cache cache
-                      (load-current-feature-cache db dataset collection (map second roots-grouped-by))))
+                      (load-current-feature-cache tx dataset collection (map second roots-grouped-by))))
     cache))
 
-(defn process-chunk* [{:keys [config dataset collections changelogs filestore]} chunk]
-  (let [cache (create-cache (:db-config config) dataset chunk)
-        timeline (proj/init (create config filestore cache dataset) dataset @collections)]
+(defn process-chunk* [{:keys [tx dataset collections changelogs filestore]} chunk]
+  (let [cache (create-cache tx dataset chunk)
+        timeline (proj/init (create filestore cache dataset) tx dataset @collections)]
     (doseq [f chunk]
       (condp = (:action f)
         :new (proj/new-feature timeline f)
@@ -393,20 +377,19 @@ VALUES (?, ?, ?, ?, ?, ?)"))
   (with-bench t (log/debug "Processed chunk in" t "ms")
     (flush-batch chunk (partial process-chunk* chunked-timeline))))
 
-(defrecord ChunkedTimeline [config dataset db collections chunk make-process-fn process-fn
-                            changelogs filestore]
+(defrecord ChunkedTimeline [config dataset tx collections chunk make-process-fn process-fn changelogs filestore]
   proj/Projector
-  (proj/init [this for-dataset current-collections]
-    (let [inited (assoc this :dataset for-dataset)
+  (proj/init [this transaction for-dataset current-collections]
+    (let [inited (-> this (assoc :dataset for-dataset) (assoc :tx transaction))
           inited (assoc inited :process-fn (make-process-fn inited))
-          _ (init db for-dataset)
+          _ (init transaction for-dataset)
           _ (vreset! collections current-collections)]
       (doseq [collection current-collections]
-        (init-collection db for-dataset (:name collection)))
+        (init-collection transaction for-dataset (:name collection)))
       inited))
   (proj/new-collection [this collection]
     (vswap! collections conj collection)
-    (init-collection db dataset collection))
+    (init-collection tx dataset collection))
   (proj/flush [this]
     (process-chunk this)
     this)
@@ -419,31 +402,22 @@ VALUES (?, ?, ?, ?, ?, ?)"))
     this))
 
 (defn create
-  ([config filestore] (create config filestore (volatile! (cache/basic-cache-factory {})) "unknow-dataset"))
-  ([config filestore cache for-dataset]
-   (let [db (:db-config config)
-         collections (volatile! #{})
+  ([filestore] (create filestore (volatile! (cache/basic-cache-factory {})) "unknown-dataset"))
+  ([filestore cache for-dataset]
+   (let [collections (volatile! #{})
          delete-for-update-batch (volatile! (PersistentQueue/EMPTY))
          new-batch (volatile! (PersistentQueue/EMPTY))
          delete-batch (volatile! (PersistentQueue/EMPTY))
          changelog-batch (volatile! (PersistentQueue/EMPTY))
          changelogs (atom [])
          make-flush-fn (make-flush-all new-batch delete-batch delete-for-update-batch changelog-batch)]
-     (->Timeline for-dataset db collections
-                 cache
-                 delete-for-update-batch
-                 new-batch
-                 delete-batch
-                 changelog-batch changelogs
-                 make-flush-fn (fn [])
-                 filestore))))
+     (->Timeline for-dataset nil collections cache delete-for-update-batch new-batch delete-batch changelog-batch
+                 changelogs make-flush-fn (fn []) filestore))))
 
 (defn create-chunked [config filestore]
   (let [chunk-size (or (:chunk-size config) 10000)
         chunk (volatile! (PersistentQueue/EMPTY))
         make-process-fn (fn [tl] (batched chunk chunk-size #(process-chunk tl)))
-        db (:db-config config)
         collections (volatile! #{})
         changelogs (atom [])]
-    (->ChunkedTimeline config "unknown-dataset" db collections chunk make-process-fn (fn [])
-                       changelogs filestore)))
+    (->ChunkedTimeline config "unknown-dataset" nil collections chunk make-process-fn (fn []) changelogs filestore)))
