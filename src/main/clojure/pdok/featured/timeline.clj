@@ -9,10 +9,8 @@
             [clojure.java.jdbc :as j]
             [clojure.core.cache :as cache]
             [clojure.tools.logging :as log]
-            [clj-time.core :as t]
             [clojure.core.async :refer [>!! close! chan]]
             [clojure.java.io :as io]
-            [clojure.string :as str]
             [clojure.walk :as walk])
   (:import [clojure.lang PersistentQueue]
            (java.io OutputStream)
@@ -87,11 +85,6 @@
   (-> (merge* current (:_all_versions current) feature)
       (assoc :_valid_to (:validity feature))))
 
-(defn- new-current-sql [dataset collection]
-  (str "INSERT INTO " (qualified-timeline dataset collection)
-       " (feature_id, version, valid_from, valid_to, feature, tiles)
-VALUES (?, ?, ?, ?, ?, ?)"))
-
 ;;(def feature-info (juxt :_collection :_id #(.toString (:_valid_from %)) #(when (:_valid_to %1) (.toString (:_valid_to %1))) :_version))
 
 (defn- new-current [{:keys [tx dataset]} features]
@@ -101,18 +94,17 @@ VALUES (?, ?, ?, ?, ?, ?)"))
       (doseq [[collection collection-features] per-collection]
         (let [transform-fn (juxt :_id :_version :_valid_from :_valid_to transit/to-json :_tiles)
               records (map transform-fn collection-features)]
-          (j/execute! tx (cons (new-current-sql dataset collection) records) :multi? true))))
+          (pg/batch-insert tx (qualified-timeline dataset collection)
+                           [:feature_id, :version, :valid_from, :valid_to, :feature, :tiles] records))))
     (catch SQLException e
       (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
       (throw e))))
 
 (defn- load-current-feature-cache-sql [dataset collection n]
-  (str "SELECT DISTINCT ON (feature_id)
-    feature_id, feature
-    FROM " (qualified-timeline dataset collection)
-    " WHERE feature_id in ("
-       (clojure.string/join "," (repeat n "?")) ")
-      ORDER BY feature_id ASC, version DESC, valid_from DESC"))
+  (str "SELECT DISTINCT ON (feature_id) feature_id, feature"
+       " FROM " (qualified-timeline dataset collection)
+       " WHERE feature_id in (" (clojure.string/join "," (repeat n "?")) ")"
+       " ORDER BY feature_id ASC, version DESC, valid_from DESC"))
 
 (defn- load-current-feature-cache [tx dataset collection ids]
   (try
@@ -123,17 +115,9 @@ VALUES (?, ?, ?, ?, ?, ?)"))
       (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
       (throw e))))
 
-(defn- delete-version-sql [dataset collection]
-  (str "DELETE FROM " (qualified-timeline dataset collection)
-       " WHERE version = ?"))
-
 (defn- delete-version-with-valid-from-sql [dataset collection]
   (str "DELETE FROM " (qualified-timeline dataset collection)
-       " WHERE version = ? AND valid_from = ? AND valid_to is null"))
-
-(defn- delete-version-with-valid-from-and-valid-to-sql [dataset collection]
-  (str "DELETE FROM " (qualified-timeline dataset collection)
-       " WHERE version = ? AND valid_from = ? AND valid_to = ?"))
+       " WHERE version = ? AND valid_from = ? AND valid_to IS NULL"))
 
 (defn- delete-feature-with-version [{:keys [tx dataset]} records]
   "([collection version] ... )"
@@ -142,7 +126,7 @@ VALUES (?, ?, ?, ?, ?, ?)"))
       (let [versions (map #(vector (nth % 1)) collection-records)]
         (when (seq versions)
           (try
-            (j/execute! tx (cons (delete-version-sql dataset collection) versions) :multi? true)
+            (pg/batch-delete tx (qualified-timeline dataset collection) [:version] versions)
             (catch SQLException e
               (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
               (throw e))))))))
@@ -154,15 +138,14 @@ VALUES (?, ?, ?, ?, ?, ?)"))
       (let [{open true closed false} (group-by (fn [[_ _ valid-to]] (nil? valid-to)) (map rest collection-records))]
         (when (seq open)
           (try
-            (j/execute! tx (cons (delete-version-with-valid-from-sql dataset collection) (map #(take 2 %) open))
-                        :multi? true)
+            ;; Cannot use pg/batch-delete, because "valid_to = NULL" is not the same as "valid_to IS NULL".
+            (pg/execute-batch-query tx (delete-version-with-valid-from-sql dataset collection) (map #(take 2 %) open))
             (catch SQLException e
               (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
               (throw e))))
         (when (seq closed)
           (try
-            (j/execute! tx (cons (delete-version-with-valid-from-and-valid-to-sql dataset collection) closed)
-                        :multi? true)
+            (pg/batch-delete tx (qualified-timeline dataset collection) [:version :valid_from :valid_to] closed)
             (catch SQLException e
               (log/with-logs ['pdok.featured.timeline :error :error] (j/print-sql-exception-chain e))
               (throw e))))))))

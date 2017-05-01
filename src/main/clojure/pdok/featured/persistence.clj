@@ -87,8 +87,7 @@ If n nil => no limit, if collections nil => all collections")
                (pg/table-exists? tx dc/*persistence-schema* dc/*persistence-collections*)))))
 
 (defn jdbc-create-collection [tx dataset collection]
-  (let [query (str "INSERT INTO " (qualified-persistence-collections dataset) " (collection) VALUES (?)")]
-    (j/execute! tx [query collection])))
+  (pg/insert tx (qualified-persistence-collections dataset) [:collection] [collection]))
 
 (defn jdbc-all-collections [tx dataset]
   (let [query (str "SELECT collection AS name FROM " (qualified-persistence-collections dataset))]
@@ -156,7 +155,7 @@ If n nil => no limit, if collections nil => all collections")
 (defn- jdbc-create-stream [tx dataset entries]
   (with-bench t (log/debug "Created streams in" t "ms")
     (try
-      (apply (partial j/insert! tx (qualified-features dataset) [:collection :feature_id]) entries)
+      (pg/batch-insert tx (qualified-features dataset) [:collection :feature_id] entries)
       (catch SQLException e
         (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
         (throw e)))))
@@ -165,9 +164,8 @@ If n nil => no limit, if collections nil => all collections")
   (let [entries (map (fn [entry] (-> entry vec (update 6 transit/to-json))) entries)]
     (with-bench t (log/debug "Inserted" (count entries) "events in" t "ms")
       (try
-        (apply (partial j/insert! tx (qualified-feature-stream dataset)
-                        [:version :previous_version :action :collection :feature_id :validity :attributes])
-               entries)
+        (pg/batch-insert tx (qualified-feature-stream dataset)
+                         [:version :previous_version :action :collection :feature_id :validity :attributes] entries)
         (catch SQLException e
           (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
           (throw e))))))
