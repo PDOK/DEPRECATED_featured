@@ -35,7 +35,8 @@
          (load-props "plp.properties")))
 
 (def processor-db {:subprotocol "postgresql"
-                   :subname (or (env :processor-database-url) "//localhost:5432/pdok")
+                   :subname (str (or (env :processor-database-url) "//localhost:5432/pdok")
+                                 "?ApplicationName=pdok-featured")
                    :user (or (env :processor-database-user) "postgres")
                    :password (or (env :processor-database-password) "postgres")
                    :transaction? true})
