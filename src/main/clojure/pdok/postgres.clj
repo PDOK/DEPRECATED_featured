@@ -171,19 +171,16 @@
   (with-open [connection (j/get-connection tx)]
     (.commit connection)))
 
-(defn execute-batch-query
-  ([tx ^String query]
-   (execute-batch-query tx query []))
-  ([tx ^String query batch]
-   (with-open [stmt (let [^Connection c (:connection tx)] (.prepareStatement c query))]
-     (doseq [values batch]
-       (doseq [value (map-indexed vector values)]
-         (j/set-parameter
-           (second value)
-           ^PreparedStatement stmt
-           ^Integer (-> value first inc)))
-       (.addBatch ^PreparedStatement stmt))
-     (.executeBatch ^PreparedStatement stmt))))
+(defn execute-batch-query [tx ^String query batch]
+  (with-open [stmt (let [^Connection c (:connection tx)] (.prepareStatement c query))]
+    (doseq [values batch]
+      (doseq [value (map-indexed vector values)]
+        (j/set-parameter
+          (second value)
+          ^PreparedStatement stmt
+          ^Integer (-> value first inc)))
+      (.addBatch ^PreparedStatement stmt))
+    (.executeBatch ^PreparedStatement stmt)))
 
 (defn batch-insert [tx qualified-table columns batch]
   (let [query (str "INSERT INTO " qualified-table
