@@ -15,6 +15,11 @@
   (j/execute! test-db ["DROP SCHEMA IF EXISTS \"featured_performance_performance-set\" CASCADE"])
   (j/execute! test-db ["DROP SCHEMA IF EXISTS \"performance-set\" CASCADE"]))
 
+(defn vacuum-tables []
+  (j/execute! test-db ["VACUUM ANALYZE \"featured_performance_performance-set\".feature"] :transaction? false)
+  (j/execute! test-db ["VACUUM ANALYZE \"featured_performance_performance-set\".feature_stream"] :transaction? false)
+  (j/execute! test-db ["VACUUM ANALYZE \"featured_performance_performance-set\".timeline_col1"] :transaction? false))
+
 (defn generate-new-features [ids difficult?]
   (with-bindings {#'generator/*difficult-geometry?* difficult?}
     (generator/random-json-feature-stream "performance-set" "col1" (count ids)
@@ -47,7 +52,9 @@
                       (merge {:check-validity-on-delete false} cfg)
                       "performance-set" persistence [timeline])]
       (dorun (processor/consume processor features))
-      (:statistics (processor/shutdown processor)))))
+      (let [statistics (processor/shutdown processor)
+            _ (vacuum-tables)]
+      (:statistics statistics)))))
 
 (deftest double-file-test
   (clean-db)
