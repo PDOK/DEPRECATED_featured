@@ -15,11 +15,11 @@
          geometry-from-json
          upgrade-data)
 
-(defn map-to-feature [obj]
+(defn map-to-feature [obj args]
   (let [action (keyword (get obj "_action"))
-        validity (parse-time (obj "_validity"))
-        current-validity (parse-time (obj "_current_validity"))
-        feature (cond-> (upgrade-data obj)
+        validity (apply (partial parse-time (obj "_validity")) args)
+        current-validity (apply (partial parse-time (obj "_current_validity")) args)
+        feature (cond-> (apply (partial upgrade-data obj) args)
                     true (assoc :action action)
                     true (assoc :validity validity)
                     current-validity (assoc :current-validity current-validity))]
@@ -32,15 +32,15 @@
 
 (defn parse-time
   "Parses an ISO8601 date timestring to local date time"
-  [datetimestring]
+  [datetimestring & {local? :no-timezone}]
   (when-not (clojure.string/blank? datetimestring)
-    (tc/to-local-date-time (tf/parse date-time-formatter datetimestring))))
+    (tc/to-local-date-time ((if local? tf/parse-local tf/parse) date-time-formatter datetimestring))))
 
 (defn parse-date
   "Parses a date string to local date"
-  [datestring]
+  [datestring & {local? :no-timezone}]
   (when-not (clojure.string/blank? datestring)
-    (tc/to-local-date (tf/parse date-formatter datestring))))
+    (tc/to-local-date ((if local? tf/parse-local tf/parse) date-formatter datestring))))
 
 (defn clojurify [s]
   (keyword (cond->
@@ -66,13 +66,13 @@
     (lazy-seq (cons (assoc (parse-object jp) :src :json) (read-features jp)))
     []))
 
-(defn- features-from-stream* [^JsonParser jp & overrides]
+(defn- features-from-stream* [^JsonParser jp & args]
   (.nextToken jp)
   (when (= JsonToken/START_OBJECT (.getCurrentToken jp))
     (let [meta (read-meta-data jp)]
       ;; features should be array
       (when (= JsonToken/START_ARRAY (.nextToken jp))
-        [meta (map map-to-feature (read-features jp))]))))
+        [meta (map #(map-to-feature % args) (read-features jp))]))))
 
 (defn features-from-stream [input-stream & args]
   "Parses until 'features' for state. Then returns vector [meta <lazy sequence of features>]."
@@ -99,11 +99,11 @@
   (if-let [type (get geometry "type")]
     (GeometryAttribute. type (get geometry type) (get-valid-srid geometry))))
 
-(defn- evaluate-f [element]
+(defn- evaluate-f [element & args]
   (let [[function params] element]
     (case function
-      "~#moment"  (if params (apply parse-time params) (nilled org.joda.time.DateTime))
-      "~#date"    (if params (apply parse-date params) (nilled org.joda.time.LocalDate))
+      "~#moment"  (if params (apply parse-time (concat params args)) (nilled org.joda.time.DateTime))
+      "~#date"    (if params (apply parse-date (concat params args)) (nilled org.joda.time.LocalDate))
       "~#int"     (if params (int (first params)) (nilled java.lang.Integer))
       "~#boolean" (if params (boolean (first params)) (nilled java.lang.Boolean))
       "~#double"  (if params (double (first params)) (nilled java.lang.Double))
@@ -116,9 +116,9 @@
 (defn- pdok-field [element]
   (get pdok-field-replacements element))
 
-(defn- replace-fn [element]
+(defn- replace-fn [element & args]
   (condp #(%1 %2) element
-    element-is-function? (evaluate-f element)
+    element-is-function? (apply (partial evaluate-f element) args)
     element-is-pdok-field? (pdok-field element)
     ;; else just return element, replace nothing
     element))
@@ -128,7 +128,7 @@
     (update element "_geometry" create-geometry-attribute)
     element))
 
-(defn- upgrade-data [attributes]
+(defn- upgrade-data [attributes & args]
   "Replaces functions with their parsed values"
-  (let [attributes (postwalk replace-fn attributes)]
+  (let [attributes (postwalk #(apply (partial replace-fn %) args) attributes)]
     (postwalk upgrade-geometry attributes)))

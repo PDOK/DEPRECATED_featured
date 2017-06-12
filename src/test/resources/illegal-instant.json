@@ -1,0 +1,26 @@
+{
+	"dataset": "bag",
+	"features": [{
+			"_id": "0275010000007600",
+			"inOnderzoek": "N",
+			"hoofdadres": "0275200000099704",
+			"verblijfsobjectStatus": "Verblijfsobject in gebruik",
+			"oppervlakteVerblijfsobject": "162",
+			"documentdatum": "19370701",
+			"identificatie": "0275010000007600",
+			"_action": "new",
+			"begindatumTijdvakGeldigheid": ["~#moment", ["1937-07-01T00:00:00.010"]],
+			"_validity": "1937-07-01T00:00:00.010",
+			"verblijfsobjectGeometrie": ["~#geometry", [{
+						"type": "gml",
+						"gml": "<gml:Point xmlns:gml=\"http:\/\/www.opengis.net\/gml\" srsName=\"urn:ogc:def:crs:EPSG::28992\">\n  <gml:pos>203926.928 450851.578 0.0<\/gml:pos>\n<\/gml:Point>",
+						"srid": 28992
+					}
+				]],
+			"officieel": "N",
+			"_collection": "Verblijfsobject",
+			"gebruiksdoelVerblijfsobject": ["woonfunctie"],
+			"gerelateerdPand": ["0275100000026910"],
+			"documentnummer": "1-7-37\/ 1\/145"
+		}]
+}

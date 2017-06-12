@@ -50,7 +50,8 @@
    (s/optional-key :callback) URI
    (s/optional-key :no-timeline) boolean
    (s/optional-key :no-state) boolean
-   (s/optional-key :projection) s/Str})
+   (s/optional-key :projection) s/Str
+   (s/optional-key :no-timezone) boolean})
 
 (defn- callbacker [uri run-stats]
   (try
@@ -104,7 +105,9 @@
       (try
         (with-open [in (io/input-stream file)]
           (let [_ (log/info "processing file: " (:file request))
-                [meta features] (reader/features-from-stream in :dataset (:dataset request))
+                [meta features] (apply
+                                  (partial reader/features-from-stream in)
+                                  (-> (select-keys request [:dataset :no-timezone]) seq flatten))
                 processor (merge processor meta) ;; ugly, should move init here, but that doesnt work for the catch
                 _ (dorun (consume processor features))
                 processor (shutdown processor)
@@ -133,7 +136,9 @@
   (let [request (:body http-req)
         invalid (s/check schema request)]
     (if invalid
-      (r/status (r/response invalid) 400)
+      (do
+        (log/error "invalid request" invalid)
+        (r/status (r/response invalid) 400))
       (if (a/offer! request-chan request)
         (do (swap! stats update-in [queue-id] #(conj % request)) (r/response {:result :ok}))
         (r/status (r/response {:error "queue full"}) 429)))))
