@@ -1,8 +1,10 @@
 (ns pdok.featured.json-reader-test
   (:require [pdok.featured.json-reader :refer :all]
             [clj-time.core :as time]
+            [clojure.java.io :as io]
             [clojure.test :refer :all])
-  (:import (pdok.featured GeometryAttribute)))
+  (:import (pdok.featured GeometryAttribute)
+           (org.joda.time IllegalInstantException)))
 
 (deftest date-time-with-timezone-to-local
   (let [datetimestring "2016-01-01T12:00:00.000+01:00"
@@ -33,3 +35,41 @@
 (deftest invalid-srid-geometry-atrribute
   (let [geometry-map {"srid" "invalid srid" "wkt" wkt-multipolygon "type" "wkt"}]
     (is (thrown? NumberFormatException (create-geometry-attribute geometry-map)))))
+
+(deftest illegal-instant
+  (is (thrown? IllegalInstantException (parse-time "1937-07-01T00:00:00.010")))
+  (is (= (time/local-date-time 1937 7 1 0 0 0 10) (parse-time "1937-07-01T00:00:00.010" :no-timezone true)))
+  (is (thrown? 
+        IllegalInstantException 
+        (-> "illegal-instant.json" 
+          io/resource 
+          io/input-stream
+          features-from-stream
+          second
+          doall)))
+  (is
+    (let [[_ [feature & _]] (-> "illegal-instant.json"
+                              io/resource 
+                              io/input-stream
+                              (features-from-stream :no-timezone true))
+          date-time (time/local-date-time 1937 7 1 0 0 0 10)]
+      (and
+        (= 
+          date-time
+          (:validity feature))
+        (=
+          date-time
+          (get feature "begindatumTijdvakGeldigheid")))))
+  (is
+    (let [[_ [feature & _]] (-> "valid-instant.json" 
+                              io/resource 
+                              io/input-stream
+                              features-from-stream)
+          date-time (time/local-date-time 1938 7 1 0 0 0 10)]
+      (and
+        (= 
+          date-time
+          (:validity feature))
+        (=
+          date-time
+          (get feature "begindatumTijdvakGeldigheid"))))))
