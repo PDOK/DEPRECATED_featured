@@ -302,7 +302,10 @@
          tx (:tx initialized-persistence)
          initialized-projectors (doall (map #(proj/init % tx dataset (pers/collections initialized-persistence))
                                             (clojure.core/flatten projectors)))
-         batch-size (or (config/env :processor-batch-size) 10000)]
+         batch-size (or
+                      (when-let [processor-batch-size (config/env :processor-batch-size)]
+                        (Integer/parseInt processor-batch-size))
+                      10000)]
      (merge {:dataset dataset
              :check-validity-on-delete true
              :check-existence-on-delete true
