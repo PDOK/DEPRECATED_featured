@@ -293,7 +293,7 @@ VALUES (?, ?, ?, ?, ?, ?)"))
     FROM " (qualified-timeline dataset collection)
     " WHERE feature_id in ("
        (clojure.string/join "," (repeat n "?")) ")
-      ORDER BY feature_id ASC, version DESC, valid_from DESC"))
+      ORDER BY feature_id ASC, valid_from DESC"))
 
 (defn- load-current-feature-cache [db dataset collection ids]
   (try (j/with-db-connection [c db]
