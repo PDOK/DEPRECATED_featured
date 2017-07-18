@@ -59,8 +59,8 @@ If n nil => no limit, if collections nil => all collections")
     (when-not (pg/table-exists? tx dc/*persistence-schema* dc/*persistence-features*)
       (checked (do (pg/create-table tx dc/*persistence-schema* dc/*persistence-features*
                                     [:id "bigserial" :primary :key]
-                                    [:collection "varchar(100)"]
-                                    [:feature_id "varchar(50)"])
+                                    [:collection "varchar(255)"]
+                                    [:feature_id "varchar(255)"])
                    (pg/create-index tx dc/*persistence-schema* dc/*persistence-features* :collection :feature_id)
                    (pg/configure-auto-vacuum tx dc/*persistence-schema* dc/*persistence-features* 0 10000 0))
                (pg/table-exists? tx dc/*persistence-schema* dc/*persistence-features*)))
@@ -72,7 +72,7 @@ If n nil => no limit, if collections nil => all collections")
                                     [:previous_version "uuid"]
                                     [:action "varchar(12)"]
                                     [:collection "varchar(255)"]
-                                    [:feature_id "varchar(50)"]
+                                    [:feature_id "varchar(255)"]
                                     [:validity "timestamp without time zone"]
                                     [:attributes "text"])
                    (pg/create-index tx dc/*persistence-schema* dc/*persistence-feature-stream* :collection :feature_id)

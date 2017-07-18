@@ -36,7 +36,7 @@
       (when-not (pg/table-exists? tx dc/*timeline-schema* table-name)
         (checked (do (pg/create-table tx dc/*timeline-schema* table-name
                                       [:id "serial" :primary :key]
-                                      [:feature_id "varchar(100)"]
+                                      [:feature_id "varchar(255)"]
                                       [:version "uuid"]
                                       [:valid_from "timestamp without time zone"]
                                       [:valid_to "timestamp without time zone"]
