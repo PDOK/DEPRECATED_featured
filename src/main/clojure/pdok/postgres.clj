@@ -257,7 +257,7 @@
   ([clauses] (clojure.string/join " AND " (map kv->clause clauses)))
   ([clauses table] (clojure.string/join " AND " (map #(str table "." (kv->clause %)) clauses))))
 
-(defn configure-auto-vacuum [tx schema table vacuum-scale-factor vacuum-threshold analyze-scale-factor]
+(defn configure-auto-vacuum [tx schema table vacuum-scale-factor vacuum-threshold analyze-scale-factor analyze-threshold]
   (try
     (do
       (execute-query tx (str "ALTER TABLE " (qualified-table schema table)
@@ -265,7 +265,9 @@
       (execute-query tx (str "ALTER TABLE " (qualified-table schema table)
                              " SET (autovacuum_vacuum_threshold = " vacuum-threshold ")"))
       (execute-query tx (str "ALTER TABLE " (qualified-table schema table)
-                             " SET (autovacuum_analyze_scale_factor = " analyze-scale-factor ")")))
+                             " SET (autovacuum_analyze_scale_factor = " analyze-scale-factor ")"))
+      (execute-query tx (str "ALTER TABLE " (qualified-table schema table)
+                             " SET (autovacuum_analyze_threshold = " analyze-threshold ")")))
     (catch SQLException e
       (log/with-logs ['pdok.postgres :error :error] (j/print-sql-exception-chain e))
       (throw e))))
