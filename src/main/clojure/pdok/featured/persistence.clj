@@ -62,7 +62,7 @@ If n nil => no limit, if collections nil => all collections")
                                     [:collection "varchar(255)"]
                                     [:feature_id "varchar(255)"])
                    (pg/create-index tx dc/*persistence-schema* dc/*persistence-features* :collection :feature_id)
-                   (pg/configure-auto-vacuum tx dc/*persistence-schema* dc/*persistence-features* 0 10000 0))
+                   (pg/configure-auto-vacuum tx dc/*persistence-schema* dc/*persistence-features* 0 10000 0 5000))
                (pg/table-exists? tx dc/*persistence-schema* dc/*persistence-features*)))
 
     (when-not (pg/table-exists? tx dc/*persistence-schema* dc/*persistence-feature-stream*)
@@ -76,7 +76,7 @@ If n nil => no limit, if collections nil => all collections")
                                     [:validity "timestamp without time zone"]
                                     [:attributes "text"])
                    (pg/create-index tx dc/*persistence-schema* dc/*persistence-feature-stream* :collection :feature_id)
-                   (pg/configure-auto-vacuum tx dc/*persistence-schema* dc/*persistence-feature-stream* 0 10000 0))
+                   (pg/configure-auto-vacuum tx dc/*persistence-schema* dc/*persistence-feature-stream* 0 10000 0 5000))
                (pg/table-exists? tx dc/*persistence-schema* dc/*persistence-feature-stream*)))
 
     (when-not (pg/table-exists? tx dc/*persistence-schema* dc/*persistence-collections*)

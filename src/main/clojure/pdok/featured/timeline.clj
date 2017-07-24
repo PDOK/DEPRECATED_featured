@@ -43,7 +43,8 @@
                                       [:feature "text"]
                                       [:tiles "integer[]"])
                      (pg/create-index tx dc/*timeline-schema* table-name :feature_id)
-                     (pg/create-index tx dc/*timeline-schema* table-name :version))
+                     (pg/create-index tx dc/*timeline-schema* table-name :version)
+                     (pg/configure-auto-vacuum tx dc/*timeline-schema* table-name 0 10000 0 5000))
                  (pg/table-exists? tx dc/*timeline-schema* table-name))))))
 
 (defn current [tx dataset collection]
