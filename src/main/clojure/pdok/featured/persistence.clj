@@ -61,7 +61,7 @@ If n nil => no limit, if collections nil => all collections")
                                     [:id "bigserial" :primary :key]
                                     [:collection "varchar(255)"]
                                     [:feature_id "varchar(255)"])
-                   (pg/create-index tx dc/*persistence-schema* dc/*persistence-features* :collection :feature_id)
+                   (pg/create-index tx dc/*persistence-schema* dc/*persistence-features* :feature_id)
                    (pg/configure-auto-vacuum tx dc/*persistence-schema* dc/*persistence-features* 0 10000 0 5000))
                (pg/table-exists? tx dc/*persistence-schema* dc/*persistence-features*)))
 
@@ -75,7 +75,7 @@ If n nil => no limit, if collections nil => all collections")
                                     [:feature_id "varchar(255)"]
                                     [:validity "timestamp without time zone"]
                                     [:attributes "text"])
-                   (pg/create-index tx dc/*persistence-schema* dc/*persistence-feature-stream* :collection :feature_id)
+                   (pg/create-index tx dc/*persistence-schema* dc/*persistence-feature-stream* :feature_id)
                    (pg/configure-auto-vacuum tx dc/*persistence-schema* dc/*persistence-feature-stream* 0 10000 0 5000))
                (pg/table-exists? tx dc/*persistence-schema* dc/*persistence-feature-stream*)))
 
@@ -171,23 +171,23 @@ If n nil => no limit, if collections nil => all collections")
           (throw e))))))
 
 (defn- jdbc-load-cache [tx dataset collection ids]
-  (partitioned
-    (fn [ids-part]
-      (when (seq ids)
+  (when (seq ids)
+    (partitioned
+      (fn [ids-part]
         (try
           (let [results (j/query tx (apply vector (str "SELECT DISTINCT ON (feature_id) "
                                                        "collection, feature_id, validity, action, version "
                                                        "FROM " (qualified-feature-stream dataset) " "
                                                        "WHERE collection = ? AND feature_id IN ("
-                                                       (clojure.string/join "," (repeat (count ids-part) "?")) ")"
+                                                       (clojure.string/join ", " (repeat (count ids-part) "?")) ") "
                                                        "ORDER BY feature_id ASC, id DESC")
                                            collection ids-part) :as-arrays? true)]
             (map (fn [[collection id validity action version]] [[collection id] [validity (keyword action) version]])
                  (drop 1 results)))
           (catch SQLException e
             (log/with-logs ['pdok.featured.persistence :error :error] (j/print-sql-exception-chain e))
-            (throw e)))))
-    jdbc-collection-partition-size ids))
+            (throw e))))
+      jdbc-collection-partition-size ids)))
 
 (defn- current-state [persistence collection id]
   (let [key-fn (fn [collection id] [collection id])
