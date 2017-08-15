@@ -286,7 +286,7 @@
               :projectors  projectors
               :statistics  (cond-> (if statistics @statistics {})
                                    timeline (assoc :changelogs @(:changelogs timeline)))}
-        _ (when statistics (log/info @statistics))]
+        _ (when statistics (log/info (:statistics info)))]
     info))
 
 (defn add-projector [processor projector tx]

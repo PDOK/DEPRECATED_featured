@@ -84,7 +84,7 @@
       [nil (:cause e)])))
 
 (defn- process* [worker-id stats callback-chan request]
-  (log/info "Processsing: " request)
+  (log/info "Processing: " request)
   (swap! stats assoc-in [:processing worker-id] request)
   (swap! stats update-in [:queued] pop)
   (let [dataset (:dataset request)
@@ -103,7 +103,7 @@
                                   (if err err "Something went wrong downloading"))))
       (try
         (with-open [in (io/input-stream file)]
-          (let [_ (log/info "processing file: " (:file request))
+          (let [_ (log/info "Processing file: " (:file request))
                 [meta features] (reader/features-from-stream in :dataset (:dataset request))
                 processor (merge processor meta) ;; ugly, should move init here, but that doesnt work for the catch
                 _ (dorun (consume processor features))
