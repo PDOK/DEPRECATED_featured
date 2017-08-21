@@ -75,7 +75,7 @@ On the command line, the following parameters can be used apart from the environ
 ### REST API
 
 #### Process JSON file
-POST on `<featured-root>/api/process`. Parameters _format_, _callback_, _no-state_ and _no-timeline_ are optional.
+POST on `<context root>/api/process`. Parameters _format_, _callback_, _no-state_ and _no-timeline_ are optional.
 
     {
       "dataset": "<dataset>",
