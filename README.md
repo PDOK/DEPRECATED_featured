@@ -15,7 +15,7 @@ On this input data, Featured performs the following tasks:
 Featured supports a server mode and a command-line mode.
 To run it locally, the following command can be used to start it in server mode:
 
-    $ lein ring server
+    $ lein ring server-headless
 
 To use the command line locally, use:
 
