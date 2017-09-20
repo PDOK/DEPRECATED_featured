@@ -45,6 +45,7 @@
   {:dataset s/Str
    :file URI
    (s/optional-key :format) (s/enum "json" "zip")
+   (s/optional-key :delivery-info) s/Any
    (s/optional-key :processingOptions) [{:collection s/Str
                                          :options [(s/enum "no-visualization")]}]
    (s/optional-key :callback) URI
@@ -90,7 +91,7 @@
   (let [dataset (:dataset request)
         filestore (config/filestore)
         persistence (if (:no-state request) (persistence/make-no-state) (config/persistence))
-        projectors (if (:no-timeline request) [] [(config/timeline filestore)])
+        projectors (if (:no-timeline request) [] [(config/timeline filestore (select-keys request [:delivery-info]))])
         processor (processor/create dataset persistence projectors)
         zipped? (= (:format request) "zip")
         [file err] (download-file (:file request) zipped?)]

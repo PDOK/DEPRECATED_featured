@@ -62,9 +62,15 @@
 
 (defn timeline
   ([]
-   (timeline (filestore (str (System/getProperty "java.io.tmpdir") "/featured"))))
+    (timeline (filestore (str (System/getProperty "java.io.tmpdir") "/featured"))))
   ([filestore]
-   (timeline/create-chunked {:chunk-size (read-string (or (env :processor-batch-size) "10000"))} filestore)))
+    (timeline filestore {}))
+  ([filestore options]
+    (timeline/create-chunked
+      (merge
+        options
+        {:chunk-size (read-string (or (env :processor-batch-size) "10000"))})
+      filestore)))
 
 (defn create-workers [factory-f]
   (let [n-workers (read-string (or (env :n-workers) "2"))]
