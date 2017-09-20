@@ -211,16 +211,16 @@
                      :previous-version version
                      })])
 
-(defn- write-changelog-entries [^OutputStream stream, collection, entries]
+(defn- write-changelog-entries [^OutputStream stream, header, entries]
   "Write the contents of one changelog file to an arbitrary output stream"
   (let [write-fn (fn [^String str] (.write stream (.getBytes str)))]
     (write-fn "pdok-featured-changelog-v2\n")
-    (write-fn (str (transit/to-json {:collection collection}) "\n"))
+    (write-fn (str (transit/to-json header) "\n"))
     (doseq [entry entries]
       ; pop collection from front
       (write-fn (str (second entry) "\n")))))
 
-(defn- append-to-changelog [{:keys [dataset changelogs filestore]} log-entries]
+(defn- append-to-changelog [{:keys [delivery-info dataset changelogs filestore]} log-entries]
   "Write a batch of changelog entries to separate zip files per collection"
   (let [per-collection (group-by first log-entries)]
     (doseq [[collection entries] per-collection]
@@ -231,7 +231,13 @@
         (with-open [output-stream (io/output-stream compressed-file)
                     zip (ZipOutputStream. output-stream)]
           (.putNextEntry zip (ZipEntry. uncompressed-filename))
-          (write-changelog-entries zip collection entries)
+          (write-changelog-entries
+            zip
+            (merge
+              {:collection collection}
+              (when delivery-info
+                {:delivery-info delivery-info}))
+            entries)
           (.closeEntry zip))))))
 
 (defn- make-flush-all [new-batch delete-batch delete-for-update-batch changelog-batch]
@@ -272,7 +278,7 @@
         (doseq [v (:_all_versions f)]
           (batched-delete [collection v]))))))
 
-(defrecord Timeline [dataset tx collections feature-cache delete-for-update-batch new-batch delete-batch changelog-batch
+(defrecord Timeline [delivery-info dataset tx collections feature-cache delete-for-update-batch new-batch delete-batch changelog-batch
                      changelogs make-flush-fn flush-fn filestore]
   proj/Projector
   (proj/init [this transaction for-dataset current-collections]
@@ -345,9 +351,9 @@
                       (load-current-feature-cache tx dataset collection (map second roots-grouped-by))))
     cache))
 
-(defn process-chunk* [{:keys [tx dataset collections changelogs filestore]} chunk]
+(defn process-chunk* [{:keys [tx dataset collections changelogs filestore delivery-info]} chunk]
   (let [cache (create-cache tx dataset chunk)
-        timeline (proj/init (create filestore cache dataset) tx dataset @collections)]
+        timeline (proj/init (create filestore cache dataset delivery-info) tx dataset @collections)]
     (doseq [f chunk]
       (condp = (:action f)
         :new (proj/new-feature timeline f)
@@ -361,7 +367,7 @@
   (with-bench t (log/debug "Processed chunk in" t "ms")
     (flush-batch chunk (partial process-chunk* chunked-timeline))))
 
-(defrecord ChunkedTimeline [config dataset tx collections chunk make-process-fn process-fn changelogs filestore]
+(defrecord ChunkedTimeline [delivery-info dataset tx collections chunk make-process-fn process-fn changelogs filestore]
   proj/Projector
   (proj/init [this transaction for-dataset current-collections]
     (let [inited (-> this (assoc :dataset for-dataset) (assoc :tx transaction))
@@ -386,8 +392,9 @@
     this))
 
 (defn create
-  ([filestore] (create filestore (volatile! (cache/basic-cache-factory {})) "unknown-dataset"))
-  ([filestore cache for-dataset]
+  ([filestore] (create filestore (volatile! (cache/basic-cache-factory {})) "unknown-dataset" nil))
+  ([filestore cache for-dataset] (create filestore cache for-dataset nil))
+  ([filestore cache for-dataset delivery-info]
    (let [collections (volatile! #{})
          delete-for-update-batch (volatile! (PersistentQueue/EMPTY))
          new-batch (volatile! (PersistentQueue/EMPTY))
@@ -395,7 +402,7 @@
          changelog-batch (volatile! (PersistentQueue/EMPTY))
          changelogs (atom [])
          make-flush-fn (make-flush-all new-batch delete-batch delete-for-update-batch changelog-batch)]
-     (->Timeline for-dataset nil collections cache delete-for-update-batch new-batch delete-batch changelog-batch
+     (->Timeline delivery-info for-dataset nil collections cache delete-for-update-batch new-batch delete-batch changelog-batch
                  changelogs make-flush-fn (fn []) filestore))))
 
 (defn create-chunked [config filestore]
@@ -404,4 +411,4 @@
         make-process-fn (fn [tl] (batched chunk chunk-size #(process-chunk tl)))
         collections (volatile! #{})
         changelogs (atom [])]
-    (->ChunkedTimeline config "unknown-dataset" nil collections chunk make-process-fn (fn []) changelogs filestore)))
+    (->ChunkedTimeline (:delivery-info config) "unknown-dataset" nil collections chunk make-process-fn (fn []) changelogs filestore)))
