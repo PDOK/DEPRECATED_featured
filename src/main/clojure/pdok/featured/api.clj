@@ -158,8 +158,6 @@
              (POST "/ping" [] (fn [r] (log/info "!ping pong!" (:body r)) (r/response {:pong (tl/local-now)})))
              (GET "/stats" [] (r/response @stats))
              (POST "/process" [] (partial process-request stats ProcessRequest :queued process-chan))
-             (POST "/extract/flush-changelog" [] (r/response {:status 200, :body "Not implemented, but who cares"}))
-             (POST "/template" [] (r/response {:status 200, :body "Not implemented, but who cares"}))
              (GET "/changelogs/:changelog" [changelog] (serve-changelog (config/filestore) changelog)))
     (route/not-found "NOT FOUND")))
 
