@@ -195,6 +195,22 @@
         collected (assoc no-attributes :attributes collected)]
     collected))
 
+(defn- all-values [x]
+  (->> x
+    (vals)
+    (mapcat
+      #(if (map? %)
+         (all-values %)
+         (list %)))))
+
+(defn- calculate-tiles [feature]
+  (apply clojure.set/union
+         (->> feature
+           :attributes
+           (all-values)
+           (filter #(instance? pdok.featured.GeometryAttribute %))
+           (map tiles/nl))))
+
 (defn process [processor feature]
   "Processes feature events. Should return the feature, possibly with added data, returns sequence"
   (let [validated (if (:disable-validation processor) feature (validate processor feature))]
@@ -202,10 +218,7 @@
       (make-seq validated)
       (let [vf (assoc validated
                       :version (*next-version*)
-                      :tiles (apply clojure.set/union
-                                    (->> feature :attributes vals
-                                      (filter #(instance? pdok.featured.GeometryAttribute %))
-                                      (map tiles/nl))))
+                      :tiles (calculate-tiles feature))
             processed
             (condp = (:action vf)
               :new (process-new-feature processor vf)
