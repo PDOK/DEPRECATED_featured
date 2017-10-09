@@ -1,0 +1,3 @@
+{"Features": [
+{"_action":"new","_id":"id-a","_validity":"2016-01-11T14:00:00.000","_collection":"col-1","attr-a":"first", "nullfield": ["~#int", null], "child": {"_geometry": {"type":"gml","gml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><gml:Point xmlns:gml=\"http://www.opengis.net/gml\"><gml:pos>154742.108 464096.362</gml:pos></gml:Point>"}}}
+]}
