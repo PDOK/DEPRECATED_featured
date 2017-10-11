@@ -180,6 +180,12 @@
                    (test-persistence {:events 1 :features 1})
                    (test-timeline {:timeline {:n 1}} results))
 
+(defpermutatedtest new-with-child-geometry-in-array results
+                   (is (= 1 (:n-processed results)))
+                   (is (= 0 (:n-errored results)))
+                   (test-persistence {:events 1 :features 1})
+                   (test-timeline {:timeline {:n 1}} results))
+
 ;; Won't work anymore: adds child separately.
 ;(defpermutatedtest new-with-child results
 ;                   (is (= 2 (:n-processed results)))

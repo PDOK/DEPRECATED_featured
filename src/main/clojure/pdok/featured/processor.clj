@@ -1,5 +1,4 @@
 (ns pdok.featured.processor
-  (:refer-clojure :exclude [flatten])
   (:require [pdok.random :as random]
             [pdok.util :refer [with-bench]]
             [pdok.featured.persistence :as pers]
@@ -196,12 +195,14 @@
     collected))
 
 (defn- all-values [x]
-  (->> x
-    (vals)
-    (mapcat
-      #(if (map? %)
-         (all-values %)
-         (list %)))))
+  (cond
+    (map? x) (->> x 
+               (vals)
+               (all-values))
+    (coll? x) (->> x 
+                (map all-values)
+                (flatten))
+    :else x))
 
 (defn- calculate-tiles [feature]
   (apply clojure.set/union
@@ -314,7 +315,7 @@
    (let [initialized-persistence (pers/init persistence dataset)
          tx (:tx initialized-persistence)
          initialized-projectors (doall (map #(proj/init % tx dataset (pers/collections initialized-persistence))
-                                            (clojure.core/flatten projectors)))
+                                            (flatten projectors)))
          batch-size (or
                       (when-let [processor-batch-size (config/env :processor-batch-size)]
                         (Integer/parseInt processor-batch-size))

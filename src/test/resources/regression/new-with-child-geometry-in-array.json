@@ -1,0 +1,70 @@
+{
+	"Features": [
+		{
+			"_action": "new",
+			"_id": "id-a",
+			"_validity": "2014-10-24T16:21:15.349",
+			"_collection": "col-1",
+			"eindRegistratie": [
+				"~#moment",
+				[
+					"2015-01-27T15:11:35.000"
+				]
+			],
+			"terminationDate": [
+				"~#date",
+				null
+			],
+			"terminationDate_leeg": "geenWaarde",
+			"LV-publicatiedatum": [
+				"~#moment",
+				[
+					"2014-10-24T16:21:15.000"
+				]
+			],
+			"lokaalID": "G0753.4cdd76bb248f44bf9e7739c1dd6b2e69",
+			"creationDate": [
+				"~#date",
+				[
+					"2014-09-29"
+				]
+			],
+			"tijdstipRegistratie": [
+				"~#moment",
+				[
+					"2014-09-29T16:44:24.000"
+				]
+			],
+			"bronhouder": "G0753",
+			"relatieveHoogteligging": 0,
+			"inOnderzoek": null,
+			"inOnderzoek_leeg": "geenWaarde",
+			"status": "bestaand",
+			"status_codeSpace": "http://www.geostandaarden.nl/imgeo/def/2.1#Status",
+			"status_leeg": null,
+			"plus-status": null,
+			"plus-status_codeSpace": "http://www.geostandaarden.nl/imgeo/def/2.1#VoidReasonValue",
+			"plus-status_leeg": "geenWaarde",
+			"_geometry": {
+				"type": "gml",
+				"gml": null
+			},
+			"identificatieBAGOPR": "0753300000000248",
+			"openbareRuimteType": "Weg",
+			"openbareRuimteType_codeSpace": "http://www.geostandaarden.nl/imgeo/def/2.1#TypeOpenbareRuimte",
+			"openbareRuimteNaam": "Kapelweg",
+			"positie": [
+				{
+					"openbareRuimteType": "Weg",
+					"openbareRuimteType_codeSpace": "http://www.geostandaarden.nl/imgeo/def/2.1#TypeOpenbareRuimte",
+					"openbareRuimteNaam": "Kapelweg",
+					"hoek": -6.6,
+					"_geometry": {
+						"type": "gml",
+						"gml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><gml:Point xmlns:gml=\"http://www.opengis.net/gml\">\n            <gml:pos>153298.933 391293.154</gml:pos>\n          </gml:Point>"
+					}
+				}
+			]
+		}
+	]
+}
