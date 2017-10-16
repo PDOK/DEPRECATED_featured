@@ -1,5 +1,7 @@
 (ns pdok.util
-  (:import [com.fasterxml.uuid UUIDComparator]))
+  (:require [clj-time [format :as tf] [coerce :as tc]])
+  (:import [com.fasterxml.uuid UUIDComparator]
+           [org.joda.time DateTimeZone]))
 
 (def ^:private uuid-comparator (UUIDComparator.))
 
@@ -35,3 +37,20 @@
          ~t (/ (double (- (. System (nanoTime)) start#)) 1000000.0)]
      ~bench-out
      ret#))
+
+;; 2015-02-26T15:48:26.578Z
+(def ^{:private true} date-time-formatter (tf/with-zone (tf/formatters :date-time-parser) (DateTimeZone/forID "Europe/Amsterdam")))
+
+(def ^{:private true} date-formatter (tf/formatter "yyyy-MM-dd"))
+
+(defn parse-time
+  "Parses an ISO8601 date timestring to local date time"
+  [datetimestring]
+  (when-not (clojure.string/blank? datetimestring)
+    (tc/to-local-date-time (tf/parse date-time-formatter datetimestring))))
+
+(defn parse-date
+  "Parses a date string to local date"
+  [datestring]
+  (when-not (clojure.string/blank? datestring)
+    (tc/to-local-date (tf/parse date-formatter datestring))))
