@@ -1,46 +1,26 @@
 (ns pdok.featured.json-reader
   (:require [pdok.featured.feature :refer [nilled as-jts]]
             [cheshire [factory :as jfac] [parse :as jparse]]
-            [clj-time [format :as tf] [coerce :as tc]]
+            [pdok.util :as util]
             [clojure.walk :refer [postwalk]])
   (:import (com.fasterxml.jackson.core JsonParser JsonToken)
-           (pdok.featured GeometryAttribute)
-           (org.joda.time DateTimeZone)))
+           (pdok.featured GeometryAttribute)))
 
 (def ^:private pdok-field-replacements
   {"_action" :action "_collection" :collection "_id" :id "_validity" :validity "_current_validity" :current-validity})
 
-(declare parse-time
-         parse-date
-         geometry-from-json
+(declare geometry-from-json
          upgrade-data)
 
 (defn map-to-feature [obj]
   (let [action (keyword (get obj "_action"))
-        validity (parse-time (obj "_validity"))
-        current-validity (parse-time (obj "_current_validity"))
+        validity (util/parse-time (obj "_validity"))
+        current-validity (util/parse-time (obj "_current_validity"))
         feature (cond-> (upgrade-data obj)
                     true (assoc :action action)
                     true (assoc :validity validity)
                     current-validity (assoc :current-validity current-validity))]
     feature))
-
-;; 2015-02-26T15:48:26.578Z
-(def ^{:private true} date-time-formatter (tf/with-zone (tf/formatters :date-time-parser) (DateTimeZone/forID "Europe/Amsterdam")))
-
-(def ^{:private true} date-formatter (tf/formatter "yyyy-MM-dd"))
-
-(defn parse-time
-  "Parses an ISO8601 date timestring to local date time"
-  [datetimestring]
-  (when-not (clojure.string/blank? datetimestring)
-    (tc/to-local-date-time (tf/parse date-time-formatter datetimestring))))
-
-(defn parse-date
-  "Parses a date string to local date"
-  [datestring]
-  (when-not (clojure.string/blank? datestring)
-    (tc/to-local-date (tf/parse date-formatter datestring))))
 
 (defn clojurify [s]
   (keyword (cond->
@@ -102,8 +82,8 @@
 (defn- evaluate-f [element]
   (let [[function params] element]
     (case function
-      "~#moment"  (if params (apply parse-time params) (nilled org.joda.time.DateTime))
-      "~#date"    (if params (apply parse-date params) (nilled org.joda.time.LocalDate))
+      "~#moment"  (if params (apply util/parse-time params) (nilled org.joda.time.DateTime))
+      "~#date"    (if params (apply util/parse-date params) (nilled org.joda.time.LocalDate))
       "~#int"     (if params (int (first params)) (nilled java.lang.Integer))
       "~#boolean" (if params (boolean (first params)) (nilled java.lang.Boolean))
       "~#double"  (if params (double (first params)) (nilled java.lang.Double))
