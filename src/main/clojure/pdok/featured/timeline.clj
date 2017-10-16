@@ -2,7 +2,7 @@
   (:require [pdok.cache :refer :all]
             [pdok.featured.dynamic-config :as dc]
             [pdok.postgres :as pg]
-            [pdok.util :refer [with-bench checked] :as util]
+            [pdok.util :refer [with-bench checked parse-time] :as util]
             [pdok.featured.projectors :as proj]
             [pdok.transit :as transit]
             [pdok.filestore :as fs]
@@ -236,7 +236,9 @@
             (merge
               {:collection collection}
               (when delivery-info
-                {:delivery-info delivery-info}))
+                {:delivery-info (->> [:from-date :to-date]
+                                  (filter delivery-info)
+                                  (reduce #(update %1 %2 util/parse-time) delivery-info))}))
             entries)
           (.closeEntry zip))))))
 
