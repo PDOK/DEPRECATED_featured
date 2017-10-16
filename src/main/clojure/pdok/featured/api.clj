@@ -19,7 +19,8 @@
             [ring.middleware.json :refer :all]
             [ring.util.response :as r]
             [schema.core :as s]
-            [pdok.filestore :as fs])
+            [pdok.filestore :as fs]
+            [pdok.util :as util])
   (:import [com.fasterxml.jackson.core JsonGenerator]
            (clojure.lang PersistentQueue)
            (org.joda.time DateTime)
@@ -40,12 +41,17 @@
 
 (def URI (s/pred uri 'URI ))
 
+(def schemaDateTime (s/pred util/parse-time 'DateTime))
+
 (def ProcessRequest
   "A schema for a JSON process request"
   {:dataset s/Str
    :file URI
    (s/optional-key :format) (s/enum "json" "zip")
-   (s/optional-key :delivery-info) s/Any
+   (s/optional-key :delivery-info) {:id s/Int
+                                    :file URI
+                                    (s/optional-key :from-date) schemaDateTime
+                                    :to-date schemaDateTime}
    (s/optional-key :processingOptions) [{:collection s/Str
                                          :options [(s/enum "no-visualization")]}]
    (s/optional-key :callback) URI
