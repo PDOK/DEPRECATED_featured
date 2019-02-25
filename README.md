@@ -1,3 +1,5 @@
+# DEPRECATED
+
 # Featured [![Build Status](https://travis-ci.org/PDOK/featured.svg?branch=master)](https://travis-ci.org/PDOK/featured)
 
 Open-source transformation software for geodata, developed by Publieke Dienstverlening op de Kaart (PDOK).
